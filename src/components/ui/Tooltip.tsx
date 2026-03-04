@@ -2,11 +2,11 @@ import { useMapStore } from "../../lib/store";
 import { LAYER_CONFIGS } from "../../lib/types";
 
 export default function Tooltip() {
-    const { hoveredZCTA, hoveredValue, hoveredPoint, activeLayer } =
+    const { hoveredRegion, hoveredValue, hoveredPoint, activeLayer } =
         useMapStore();
     const cfg = LAYER_CONFIGS[activeLayer];
 
-    if (!hoveredZCTA || hoveredPoint === null) return null;
+    if (!hoveredRegion || hoveredPoint === null) return null;
 
     return (
         <div
@@ -26,10 +26,10 @@ export default function Tooltip() {
                 whiteSpace: "nowrap",
             }}
         >
-            <span style={{ fontWeight: 600 }}>ZCTA {hoveredZCTA}</span>
+            <span style={{ fontWeight: 600 }}>{hoveredRegion}</span>
             <span style={{ opacity: 0.5, margin: "0 6px" }}>·</span>
             <span>
-                {hoveredValue ?? "—"} {cfg.unit}
+                {hoveredValue != null ? hoveredValue.toLocaleString() : "—"} {cfg.unit}
             </span>
         </div>
     );

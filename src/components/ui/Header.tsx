@@ -49,24 +49,9 @@ export default function Header() {
                             letterSpacing: "0.02em",
                         }}
                     >
-                        Massachusetts · ZIP Code Areas
+                        United States · State & ZIP3 Areas
                     </span>
                 </div>
-                <span
-                    style={{
-                        fontSize: 10,
-                        fontWeight: 700,
-                        letterSpacing: "0.08em",
-                        textTransform: "uppercase",
-                        color: "var(--accent)",
-                        background: "var(--accent-light)",
-                        padding: "2px 8px",
-                        borderRadius: 2,
-                        border: "1px solid rgba(200,70,10,0.2)",
-                    }}
-                >
-                    Demo · Dummy Data
-                </span>
             </header>
 
             <LayerControl />

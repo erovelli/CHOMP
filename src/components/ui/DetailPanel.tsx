@@ -1,34 +1,31 @@
+import { useState, useCallback } from "react";
 import { useMapStore } from "../../lib/store";
-import { LAYER_CONFIGS } from "../../lib/types";
-import type { LayerKey, ZCTADetail } from "../../lib/types";
+import type { RegionDetail, DataRecord, MonthlyDataRecord } from "../../lib/types";
+import { loadMonthlyData, getMonthlyRecords } from "../map/MapContainer";
 
-const PROC_LAYERS: { key: LayerKey; color: string }[] = [
-    { key: "preventive", color: "#4a7fcb" },
-    { key: "restorative", color: "#c87d2a" },
-    { key: "extractions", color: "#b03a3a" },
-    { key: "ortho", color: "#7a5cb8" },
+const AVAILABLE_YEARS = ["2018", "2019", "2020", "2021", "2022", "2023", "2024"];
+
+const MONTH_NAMES = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
 ];
 
-const NATIONAL_AVG: Record<LayerKey, number> = {
-    all: 92,
-    preventive: 54,
-    restorative: 31,
-    extractions: 19,
-    ortho: 11,
-};
-
-const STATE_AVG: Record<LayerKey, number> = {
-    all: 88,
-    preventive: 51,
-    restorative: 29,
-    extractions: 21,
-    ortho: 10,
+const CATEGORY_COLORS: Record<string, string> = {
+    Diagnostic: "#4a7fcb",
+    Preventive: "#2ca58d",
+    Restorative: "#c87d2a",
+    "Oral Surgery": "#b03a3a",
+    Orthodontics: "#7a5cb8",
+    Endodontics: "#d4694a",
+    Periodontics: "#5c9e7a",
+    "Adjunctive General Services": "#8c7853",
+    "Prosthodontics (removable)": "#6b8cae",
+    "Prosthodontics (fixed)": "#6b8cae",
 };
 
 export default function DetailPanel() {
-    const { panelOpen, selectedDetail, setSelectedZCTA } = useMapStore();
-
-    const close = () => setSelectedZCTA(null, null);
+    const { panelOpen, selectedDetail, setSelectedRegion } = useMapStore();
+    const close = () => setSelectedRegion(null, null);
 
     return (
         <div
@@ -37,7 +34,7 @@ export default function DetailPanel() {
                 top: 52,
                 right: 0,
                 bottom: 0,
-                width: 340,
+                width: 360,
                 background: "var(--surface)",
                 borderLeft: "1px solid var(--border)",
                 zIndex: 60,
@@ -53,10 +50,68 @@ export default function DetailPanel() {
     );
 }
 
-function PanelContent({ detail, onClose }: { detail: ZCTADetail; onClose: () => void }) {
-    const maxProc = Math.max(...PROC_LAYERS.map((p) => detail[p.key]));
-    const nationalAll = NATIONAL_AVG.all;
-    const stateAll = STATE_AVG.all;
+function PanelContent({ detail, onClose }: { detail: RegionDetail; onClose: () => void }) {
+    const { selectedYear, setSelectedYear, monthlyDataLoaded, setMonthlyDataLoaded } = useMapStore();
+    const [monthSlider, setMonthSlider] = useState(0); // 0 = annual, 1-12 = month
+    const [loadingMonthly, setLoadingMonthly] = useState(false);
+    const [monthlyRecords, setMonthlyRecords] = useState<MonthlyDataRecord[]>([]);
+
+    const isMonthly = monthSlider > 0;
+    const yearMonth = isMonthly
+        ? `${selectedYear}-${String(monthSlider).padStart(2, "0")}`
+        : null;
+
+    const handleYearChange = useCallback((year: string) => {
+        setSelectedYear(year);
+        setMonthSlider(0);
+    }, [setSelectedYear]);
+
+    const handleSliderChange = useCallback(async (value: number) => {
+        setMonthSlider(value);
+        if (value === 0) return;
+
+        if (!monthlyDataLoaded) {
+            setLoadingMonthly(true);
+            await loadMonthlyData();
+            setMonthlyDataLoaded(true);
+            setLoadingMonthly(false);
+        }
+
+        const records = getMonthlyRecords(detail.id, detail.level);
+        setMonthlyRecords(records);
+    }, [monthlyDataLoaded, setMonthlyDataLoaded, detail.id, detail.level]);
+
+    // Compute display records
+    let displayRecords: { category: string; total_claims: number; total_beneficiaries_served: number; total_amount_paid: number }[];
+
+    if (isMonthly && !loadingMonthly) {
+        displayRecords = monthlyRecords
+            .filter((r) => r.year_month === yearMonth)
+            .map((r) => ({
+                category: r.category,
+                total_claims: r.total_claims,
+                total_beneficiaries_served: r.total_beneficiaries_served,
+                total_amount_paid: r.total_amount_paid,
+            }));
+    } else {
+        displayRecords = detail.records
+            .filter((r) => r.year === selectedYear)
+            .map((r) => ({
+                category: r.category,
+                total_claims: r.total_claims,
+                total_beneficiaries_served: r.total_beneficiaries_served,
+                total_amount_paid: r.total_amount_paid,
+            }));
+    }
+
+    const totalClaims = displayRecords.reduce((s, r) => s + r.total_claims, 0);
+    const totalBeneficiaries = displayRecords.reduce((s, r) => s + r.total_beneficiaries_served, 0);
+    const totalPaid = displayRecords.reduce((s, r) => s + r.total_amount_paid, 0);
+    const maxClaims = Math.max(...displayRecords.map((r) => r.total_claims), 1);
+
+    const periodLabel = isMonthly
+        ? `${MONTH_NAMES[monthSlider - 1]} ${selectedYear}`
+        : `${selectedYear} (Annual)`;
 
     return (
         <>
@@ -79,7 +134,7 @@ function PanelContent({ detail, onClose }: { detail: ZCTADetail; onClose: () => 
                         marginBottom: 4,
                     }}
                 >
-                    ZIP Code Area
+                    {detail.level === "state" ? "State" : "ZIP3 Area"}
                 </p>
                 <h2
                     style={{
@@ -91,11 +146,8 @@ function PanelContent({ detail, onClose }: { detail: ZCTADetail; onClose: () => 
                         marginBottom: 2,
                     }}
                 >
-                    ZCTA {detail.zcta}
+                    {detail.name}
                 </h2>
-                <p style={{ fontSize: 12, color: "var(--ink-mid)" }}>
-                    {detail.stateName} · {detail.beneficiaries.toLocaleString()} est. beneficiaries
-                </p>
                 <button
                     onClick={onClose}
                     style={{
@@ -120,254 +172,233 @@ function PanelContent({ detail, onClose }: { detail: ZCTADetail; onClose: () => 
             </div>
 
             {/* Body */}
-            <div
-                style={{
-                    flex: 1,
-                    overflowY: "auto",
-                    padding: 20,
-                }}
-            >
-                {/* Stat grid */}
-                <div
-                    style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 1fr",
-                        gap: 8,
-                        marginBottom: 24,
-                    }}
-                >
-                    <StatCard
-                        value={detail.all.toLocaleString()}
-                        label="Total Claims / 1k"
-                        delta={detail.all - nationalAll}
-                        deltaLabel="vs national avg"
-                    />
-                    <StatCard value={String(detail.providers)} label="Active Providers" note="Medicaid-enrolled" />
-                    <StatCard
-                        value={`$${detail.avgPaymentPerClaim.toLocaleString()}`}
-                        label="Avg Payment / Claim"
-                        note="2022 data"
-                    />
-                    <StatCard
-                        value={`$${(detail.totalPayment / 1000).toFixed(0)}k`}
-                        label="Total Payments"
-                        note="Annual"
-                    />
-                </div>
-
-                {/* Procedure breakdown */}
-                <p
-                    style={{
-                        fontSize: 10,
-                        fontWeight: 700,
-                        letterSpacing: "0.1em",
-                        textTransform: "uppercase",
-                        color: "var(--ink-dim)",
-                        marginBottom: 12,
-                    }}
-                >
-                    Breakdown by Procedure
-                </p>
-                <div style={{ marginBottom: 24 }}>
-                    {PROC_LAYERS.map(({ key, color }) => {
-                        const cfg = LAYER_CONFIGS[key];
-                        const val = detail[key];
-                        const pct = maxProc > 0 ? (val / maxProc) * 100 : 0;
-                        return (
-                            <div key={key} style={{ marginBottom: 10 }}>
-                                <div
-                                    style={{
-                                        display: "flex",
-                                        justifyContent: "space-between",
-                                        alignItems: "baseline",
-                                        marginBottom: 4,
-                                    }}
-                                >
-                                    <span
-                                        style={{
-                                            fontSize: 12,
-                                            fontWeight: 500,
-                                            color: "var(--ink)",
-                                        }}
-                                    >
-                                        {cfg.label}
-                                    </span>
-                                    <span
-                                        style={{
-                                            fontSize: 11,
-                                            fontFamily: "var(--ff-serif)",
-                                            color: "var(--ink-mid)",
-                                        }}
-                                    >
-                                        {val} / 1,000
-                                    </span>
-                                </div>
-                                <div
-                                    style={{
-                                        height: 4,
-                                        background: "var(--border)",
-                                        borderRadius: 2,
-                                        overflow: "hidden",
-                                    }}
-                                >
-                                    <div
-                                        style={{
-                                            height: "100%",
-                                            width: `${pct}%`,
-                                            background: color,
-                                            borderRadius: 2,
-                                            transition: "width 0.5s cubic-bezier(0.22,1,0.36,1)",
-                                        }}
-                                    />
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-
-                {/* Divider */}
-                <div
-                    style={{
-                        height: 1,
-                        background: "var(--border)",
-                        margin: "0 0 20px",
-                    }}
-                />
-
-                {/* Comparison */}
-                <p
-                    style={{
-                        fontSize: 10,
-                        fontWeight: 700,
-                        letterSpacing: "0.1em",
-                        textTransform: "uppercase",
-                        color: "var(--ink-dim)",
-                        marginBottom: 12,
-                    }}
-                >
-                    Compare · All Procedures
-                </p>
-                <div>
-                    {[
-                        {
-                            label: "This ZCTA",
-                            val: detail.all,
-                            color: "#1e8a7e",
-                        },
-                        {
-                            label: "State avg",
-                            val: stateAll,
-                            color: "#9a948d",
-                        },
-                        {
-                            label: "National",
-                            val: nationalAll,
-                            color: "#c4bfb8",
-                        },
-                    ].map(({ label, val, color }) => {
-                        const pct = (val / 200) * 100;
-                        const natPct = (nationalAll / 200) * 100;
-                        return (
-                            <div
-                                key={label}
+            <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
+                {/* Year selector */}
+                <div style={{ marginBottom: 16 }}>
+                    <p
+                        style={{
+                            fontSize: 10,
+                            fontWeight: 700,
+                            letterSpacing: "0.1em",
+                            textTransform: "uppercase",
+                            color: "var(--ink-dim)",
+                            marginBottom: 8,
+                        }}
+                    >
+                        Year
+                    </p>
+                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                        {AVAILABLE_YEARS.map((year) => (
+                            <button
+                                key={year}
+                                onClick={() => handleYearChange(year)}
                                 style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 10,
-                                    marginBottom: 8,
+                                    padding: "4px 10px",
+                                    fontSize: 12,
+                                    fontWeight: year === selectedYear ? 600 : 400,
+                                    background: year === selectedYear ? "var(--accent-light)" : "var(--surface2)",
+                                    color: year === selectedYear ? "var(--accent)" : "var(--ink-mid)",
+                                    border: `1px solid ${year === selectedYear ? "rgba(200,70,10,0.3)" : "var(--border)"}`,
+                                    borderRadius: 3,
+                                    cursor: "pointer",
                                 }}
                             >
-                                <span
-                                    style={{
-                                        fontSize: 11,
-                                        color: "var(--ink-mid)",
-                                        width: 72,
-                                        flexShrink: 0,
-                                    }}
-                                >
-                                    {label}
-                                </span>
-                                <div
-                                    style={{
-                                        flex: 1,
-                                        height: 6,
-                                        background: "var(--border)",
-                                        borderRadius: 3,
-                                        position: "relative",
-                                    }}
-                                >
-                                    <div
-                                        style={{
-                                            position: "absolute",
-                                            left: 0,
-                                            top: 0,
-                                            height: "100%",
-                                            width: `${pct}%`,
-                                            background: color,
-                                            borderRadius: 3,
-                                        }}
-                                    />
-                                    <div
-                                        style={{
-                                            position: "absolute",
-                                            top: -3,
-                                            left: `${natPct}%`,
-                                            width: 1,
-                                            height: 12,
-                                            background: "rgba(90,80,70,0.4)",
-                                            borderRadius: 1,
-                                        }}
-                                    />
-                                </div>
-                                <span
-                                    style={{
-                                        fontSize: 11,
-                                        fontFamily: "var(--ff-serif)",
-                                        fontWeight: 600,
-                                        color: "var(--ink)",
-                                        width: 32,
-                                        textAlign: "right",
-                                        flexShrink: 0,
-                                    }}
-                                >
-                                    {val}
-                                </span>
-                            </div>
-                        );
-                    })}
+                                {year}
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
-                <p
-                    style={{
-                        fontSize: 10,
-                        color: "var(--ink-dim)",
-                        lineHeight: 1.5,
-                        marginTop: 24,
-                        paddingTop: 16,
-                        borderTop: "1px solid var(--border)",
-                    }}
-                >
-                    Dummy data for demonstration. In production: HHS Medicaid claims joined to NPI registry, aggregated
-                    per ZCTA. CDT codes D0100–D9999. 2022 calendar year.
-                </p>
+                {/* Month slider */}
+                <div style={{ marginBottom: 20 }}>
+                    <div
+                        style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "baseline",
+                            marginBottom: 6,
+                        }}
+                    >
+                        <p
+                            style={{
+                                fontSize: 10,
+                                fontWeight: 700,
+                                letterSpacing: "0.1em",
+                                textTransform: "uppercase",
+                                color: "var(--ink-dim)",
+                            }}
+                        >
+                            Month
+                        </p>
+                        <span
+                            style={{
+                                fontSize: 11,
+                                fontWeight: 500,
+                                color: isMonthly ? "var(--accent)" : "var(--ink-mid)",
+                            }}
+                        >
+                            {isMonthly ? MONTH_NAMES[monthSlider - 1] : "Annual"}
+                        </span>
+                    </div>
+                    <input
+                        type="range"
+                        min={0}
+                        max={12}
+                        value={monthSlider}
+                        onChange={(e) => handleSliderChange(Number(e.target.value))}
+                        style={{
+                            width: "100%",
+                            accentColor: "var(--accent)",
+                            cursor: "pointer",
+                        }}
+                    />
+                    <div
+                        style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            fontSize: 9,
+                            color: "var(--ink-dim)",
+                            marginTop: 2,
+                        }}
+                    >
+                        <span>Annual</span>
+                        <span>Dec</span>
+                    </div>
+                </div>
+
+                {/* Loading indicator */}
+                {loadingMonthly && (
+                    <p
+                        style={{
+                            fontSize: 12,
+                            color: "var(--ink-mid)",
+                            textAlign: "center",
+                            padding: "12px 0",
+                        }}
+                    >
+                        Loading monthly data...
+                    </p>
+                )}
+
+                {/* Period label */}
+                {!loadingMonthly && (
+                    <>
+                        {/* Summary stats */}
+                        <div
+                            style={{
+                                display: "grid",
+                                gridTemplateColumns: "1fr 1fr",
+                                gap: 8,
+                                marginBottom: 24,
+                            }}
+                        >
+                            <StatCard value={totalClaims.toLocaleString()} label="Total Claims" />
+                            <StatCard
+                                value={totalBeneficiaries.toLocaleString()}
+                                label="Beneficiaries Served"
+                            />
+                            <StatCard
+                                value={totalPaid >= 1_000_000 ? `$${(totalPaid / 1_000_000).toFixed(1)}M` : `$${(totalPaid / 1_000).toFixed(0)}k`}
+                                label="Total Paid"
+                            />
+                            <StatCard
+                                value={totalClaims > 0 ? `$${(totalPaid / totalClaims).toFixed(0)}` : "—"}
+                                label="Avg Paid / Claim"
+                            />
+                        </div>
+
+                        {/* Category breakdown */}
+                        <p
+                            style={{
+                                fontSize: 10,
+                                fontWeight: 700,
+                                letterSpacing: "0.1em",
+                                textTransform: "uppercase",
+                                color: "var(--ink-dim)",
+                                marginBottom: 12,
+                            }}
+                        >
+                            Breakdown by Category — {periodLabel}
+                        </p>
+                        <div style={{ marginBottom: 24 }}>
+                            {displayRecords
+                                .sort((a, b) => b.total_claims - a.total_claims)
+                                .map((record) => {
+                                    const pct = (record.total_claims / maxClaims) * 100;
+                                    const color = CATEGORY_COLORS[record.category] ?? "#999";
+                                    return (
+                                        <div key={record.category} style={{ marginBottom: 10 }}>
+                                            <div
+                                                style={{
+                                                    display: "flex",
+                                                    justifyContent: "space-between",
+                                                    alignItems: "baseline",
+                                                    marginBottom: 4,
+                                                }}
+                                            >
+                                                <span style={{ fontSize: 12, fontWeight: 500, color: "var(--ink)" }}>
+                                                    {record.category}
+                                                </span>
+                                                <span
+                                                    style={{
+                                                        fontSize: 11,
+                                                        fontFamily: "var(--ff-serif)",
+                                                        color: "var(--ink-mid)",
+                                                    }}
+                                                >
+                                                    {record.total_claims.toLocaleString()}
+                                                </span>
+                                            </div>
+                                            <div
+                                                style={{
+                                                    height: 4,
+                                                    background: "var(--border)",
+                                                    borderRadius: 2,
+                                                    overflow: "hidden",
+                                                }}
+                                            >
+                                                <div
+                                                    style={{
+                                                        height: "100%",
+                                                        width: `${pct}%`,
+                                                        background: color,
+                                                        borderRadius: 2,
+                                                        transition: "width 0.5s cubic-bezier(0.22,1,0.36,1)",
+                                                    }}
+                                                />
+                                            </div>
+                                            <div
+                                                style={{
+                                                    display: "flex",
+                                                    justifyContent: "space-between",
+                                                    marginTop: 2,
+                                                }}
+                                            >
+                                                <span style={{ fontSize: 10, color: "var(--ink-dim)" }}>
+                                                    {record.total_beneficiaries_served.toLocaleString()} beneficiaries
+                                                </span>
+                                                <span style={{ fontSize: 10, color: "var(--ink-dim)" }}>
+                                                    ${(record.total_amount_paid / 1000).toFixed(0)}k paid
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                        </div>
+
+                        {displayRecords.length === 0 && (
+                            <p style={{ fontSize: 12, color: "var(--ink-dim)", textAlign: "center", padding: 20 }}>
+                                No data available for {periodLabel}
+                            </p>
+                        )}
+                    </>
+                )}
             </div>
         </>
     );
 }
 
-function StatCard({
-    value,
-    label,
-    delta,
-    deltaLabel,
-    note,
-}: {
-    value: string;
-    label: string;
-    delta?: number;
-    deltaLabel?: string;
-    note?: string;
-}) {
+function StatCard({ value, label }: { value: string; label: string }) {
     return (
         <div
             style={{
@@ -380,7 +411,7 @@ function StatCard({
             <div
                 style={{
                     fontFamily: "var(--ff-serif)",
-                    fontSize: 24,
+                    fontSize: 22,
                     fontWeight: 600,
                     letterSpacing: "-0.02em",
                     color: "var(--ink)",
@@ -401,29 +432,6 @@ function StatCard({
             >
                 {label}
             </div>
-            {delta !== undefined && (
-                <div
-                    style={{
-                        fontSize: 11,
-                        fontWeight: 500,
-                        marginTop: 4,
-                        color: delta > 0 ? "#16a34a" : "#dc2626",
-                    }}
-                >
-                    {delta > 0 ? "▲" : "▼"} {Math.abs(delta)} {deltaLabel}
-                </div>
-            )}
-            {note && (
-                <div
-                    style={{
-                        fontSize: 11,
-                        color: "var(--ink-dim)",
-                        marginTop: 4,
-                    }}
-                >
-                    {note}
-                </div>
-            )}
         </div>
     );
 }

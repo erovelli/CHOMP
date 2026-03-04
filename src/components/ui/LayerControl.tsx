@@ -4,10 +4,15 @@ import type { LayerKey } from "../../lib/types";
 
 const LAYER_ORDER: LayerKey[] = [
     "all",
+    "diagnostic",
     "preventive",
     "restorative",
-    "extractions",
-    "ortho",
+    "oral_surgery",
+    "orthodontics",
+    "endodontics",
+    "periodontics",
+    "adjunctive",
+    "prosthodontics",
 ];
 
 export default function LayerControl() {
@@ -26,6 +31,8 @@ export default function LayerControl() {
                 borderRadius: 4,
                 boxShadow: "0 2px 12px rgba(0,0,0,0.08)",
                 overflow: "hidden",
+                maxHeight: "calc(100vh - 120px)",
+                overflowY: "auto",
             }}
         >
             <div

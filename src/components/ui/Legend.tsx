@@ -2,6 +2,12 @@ import { useMapStore } from "../../lib/store";
 import { LAYER_CONFIGS } from "../../lib/types";
 import { CHOROPLETH_COLORS, CHOROPLETH_STOPS } from "../../lib/mapStyles";
 
+function formatStop(value: number): string {
+    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+    if (value >= 1_000) return `${(value / 1_000).toFixed(0)}k`;
+    return String(value);
+}
+
 export default function Legend() {
     const { activeLayer } = useMapStore();
     const cfg = LAYER_CONFIGS[activeLayer];
@@ -53,10 +59,10 @@ export default function Legend() {
                 }}
             >
                 <span style={{ fontSize: 10, color: "var(--ink-dim)" }}>
-                    {CHOROPLETH_STOPS[0]}
+                    {formatStop(CHOROPLETH_STOPS[0])}
                 </span>
                 <span style={{ fontSize: 10, color: "var(--ink-dim)" }}>
-                    {CHOROPLETH_STOPS[CHOROPLETH_STOPS.length - 1]}+
+                    {formatStop(CHOROPLETH_STOPS[CHOROPLETH_STOPS.length - 1])}+
                 </span>
             </div>
         </div>

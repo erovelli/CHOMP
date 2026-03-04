@@ -8,7 +8,7 @@ export const CHOROPLETH_COLORS = [
     "#084d44",
 ];
 
-export const CHOROPLETH_STOPS = [0, 30, 60, 90, 120, 150, 200];
+export const CHOROPLETH_STOPS = [0, 50_000, 150_000, 400_000, 800_000, 1_200_000, 2_000_000];
 
 export const HOVER_COLOR = "#c8f0ed";
 
@@ -17,25 +17,26 @@ export const colorExpression = [
     "interpolate",
     ["linear"],
     ["coalesce", ["feature-state", "value"], 0],
-    0,   "#f7f4ee",
-    30,  "#d4e8e4",
-    60,  "#93cec6",
-    90,  "#4aaca0",
-    120, "#1e8a7e",
-    150, "#0d6b60",
-    200, "#084d44",
+    0,         "#f7f4ee",
+    50_000,    "#d4e8e4",
+    150_000,   "#93cec6",
+    400_000,   "#4aaca0",
+    800_000,   "#1e8a7e",
+    1_200_000, "#0d6b60",
+    2_000_000, "#084d44",
 ];
 
 // Build paint expression with hover + selected highlights
 export function buildColorExpression(
-    hoveredZip: string | null,
-    selectedZip: string | null,
+    hoveredId: string | null,
+    selectedId: string | null,
+    idProperty: string,
 ) {
     return [
         "case",
-        ["==", ["get", "ZCTA5"], hoveredZip ?? ""],
+        ["==", ["get", idProperty], hoveredId ?? ""],
         HOVER_COLOR,
-        ["==", ["get", "ZCTA5"], selectedZip ?? ""],
+        ["==", ["get", idProperty], selectedId ?? ""],
         HOVER_COLOR,
         colorExpression,
     ];

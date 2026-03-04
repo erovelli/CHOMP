@@ -1,22 +1,34 @@
 import { create } from "zustand";
-import type { LayerKey, ZCTADetail } from "./types";
+import type { LayerKey, RegionDetail } from "./types";
 
 interface MapState {
     activeLayer: LayerKey;
     setActiveLayer: (layer: LayerKey) => void;
 
-    selectedZCTA: string | null;
-    selectedDetail: ZCTADetail | null;
-    setSelectedZCTA: (zcta: string | null, detail: ZCTADetail | null) => void;
+    selectedYear: string;
+    setSelectedYear: (year: string) => void;
+
+    selectedMonth: string | null;
+    setSelectedMonth: (month: string | null) => void;
+
+    monthlyDataLoaded: boolean;
+    setMonthlyDataLoaded: (loaded: boolean) => void;
+
+    selectedRegion: string | null;
+    selectedDetail: RegionDetail | null;
+    setSelectedRegion: (id: string | null, detail: RegionDetail | null) => void;
+
+    selectedState: string | null;
+    setSelectedState: (state: string | null) => void;
 
     panelOpen: boolean;
     setPanelOpen: (open: boolean) => void;
 
-    hoveredZCTA: string | null;
+    hoveredRegion: string | null;
     hoveredValue: number | null;
     hoveredPoint: { x: number; y: number } | null;
     setHovered: (
-        zcta: string | null,
+        region: string | null,
         value: number | null,
         point: { x: number; y: number } | null,
     ) => void;
@@ -29,23 +41,35 @@ export const useMapStore = create<MapState>((set) => ({
     activeLayer: "all",
     setActiveLayer: (layer) => set({ activeLayer: layer }),
 
-    selectedZCTA: null,
+    selectedYear: "2024",
+    setSelectedYear: (year) => set({ selectedYear: year, selectedMonth: null }),
+
+    selectedMonth: null,
+    setSelectedMonth: (month) => set({ selectedMonth: month }),
+
+    monthlyDataLoaded: false,
+    setMonthlyDataLoaded: (loaded) => set({ monthlyDataLoaded: loaded }),
+
+    selectedRegion: null,
     selectedDetail: null,
-    setSelectedZCTA: (zcta, detail) =>
+    setSelectedRegion: (id, detail) =>
         set({
-            selectedZCTA: zcta,
+            selectedRegion: id,
             selectedDetail: detail,
-            panelOpen: zcta !== null,
+            panelOpen: id !== null,
         }),
+
+    selectedState: null,
+    setSelectedState: (state) => set({ selectedState: state }),
 
     panelOpen: false,
     setPanelOpen: (open) => set({ panelOpen: open }),
 
-    hoveredZCTA: null,
+    hoveredRegion: null,
     hoveredValue: null,
     hoveredPoint: null,
-    setHovered: (zcta, value, point) =>
-        set({ hoveredZCTA: zcta, hoveredValue: value, hoveredPoint: point }),
+    setHovered: (region, value, point) =>
+        set({ hoveredRegion: region, hoveredValue: value, hoveredPoint: point }),
 
     hintVisible: true,
     dismissHint: () => set({ hintVisible: false }),
