@@ -1,5 +1,6 @@
 import { useMapStore } from "../../lib/store";
-import { LAYER_CONFIGS } from "../../lib/types";
+import { LAYER_CONFIGS } from "../../constants/map";
+import { Z_INDEX } from "../../constants/layout";
 
 export default function Tooltip() {
     const { hoveredRegion, hoveredValue, hoveredPoint, activeLayer } =
@@ -12,7 +13,7 @@ export default function Tooltip() {
         <div
             style={{
                 position: "absolute",
-                zIndex: 200,
+                zIndex: Z_INDEX.TOOLTIP,
                 left: hoveredPoint.x,
                 top: hoveredPoint.y,
                 transform: "translate(-50%, calc(-100% - 8px))",

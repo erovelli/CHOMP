@@ -1,19 +1,6 @@
 import { useMapStore } from "../../lib/store";
-import { LAYER_CONFIGS } from "../../lib/types";
-import type { LayerKey } from "../../lib/types";
-
-const LAYER_ORDER: LayerKey[] = [
-    "all",
-    "diagnostic",
-    "preventive",
-    "restorative",
-    "oral_surgery",
-    "orthodontics",
-    "endodontics",
-    "periodontics",
-    "adjunctive",
-    "prosthodontics",
-];
+import { LAYER_CONFIGS, LAYER_ORDER } from "../../constants/map";
+import { Z_INDEX, HEADER_HEIGHT, PANEL_SHADOW } from "../../constants/layout";
 
 export default function LayerControl() {
     const { activeLayer, setActiveLayer } = useMapStore();
@@ -22,14 +9,14 @@ export default function LayerControl() {
         <div
             style={{
                 position: "absolute",
-                top: 68,
+                top: HEADER_HEIGHT + 16,
                 left: 16,
-                zIndex: 50,
+                zIndex: Z_INDEX.HEADER,
                 width: 220,
                 background: "var(--surface)",
                 border: "1px solid var(--border)",
                 borderRadius: 4,
-                boxShadow: "0 2px 12px rgba(0,0,0,0.08)",
+                boxShadow: PANEL_SHADOW,
                 overflow: "hidden",
                 maxHeight: "calc(100vh - 120px)",
                 overflowY: "auto",

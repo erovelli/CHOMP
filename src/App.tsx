@@ -1,5 +1,6 @@
 import MapContainer from "./components/map/MapContainer";
 import Header from "./components/ui/Header";
+import { HEADER_HEIGHT } from "./constants/layout";
 
 export default function App() {
     return (
@@ -8,7 +9,7 @@ export default function App() {
             <div
                 style={{
                     position: "absolute",
-                    top: 52,
+                    top: HEADER_HEIGHT,
                     left: 0,
                     right: 0,
                     bottom: 0,

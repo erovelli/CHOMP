@@ -1,3 +1,5 @@
+import { PROTOMAPS_STYLE_URL } from "../constants/map";
+
 export const CHOROPLETH_COLORS = [
     "#f7f4ee",
     "#d4e8e4",
@@ -12,21 +14,14 @@ export const CHOROPLETH_STOPS = [0, 50_000, 150_000, 400_000, 800_000, 1_200_000
 
 export const HOVER_COLOR = "#c8f0ed";
 
-// The base color interpolation expression — reused in multiple places
+// Derive the interpolation expression from the arrays (DRY)
 export const colorExpression = [
     "interpolate",
     ["linear"],
     ["coalesce", ["feature-state", "value"], 0],
-    0,         "#f7f4ee",
-    50_000,    "#d4e8e4",
-    150_000,   "#93cec6",
-    400_000,   "#4aaca0",
-    800_000,   "#1e8a7e",
-    1_200_000, "#0d6b60",
-    2_000_000, "#084d44",
+    ...CHOROPLETH_STOPS.flatMap((stop, i) => [stop, CHOROPLETH_COLORS[i]]),
 ];
 
-// Build paint expression with hover + selected highlights
 export function buildColorExpression(
     hoveredId: string | null,
     selectedId: string | null,
@@ -43,9 +38,7 @@ export function buildColorExpression(
 }
 
 export async function fetchProtomapsStyle(apiKey: string) {
-    const res = await fetch(
-        `https://api.protomaps.com/styles/v2/white.json?key=${apiKey}`,
-    );
+    const res = await fetch(`${PROTOMAPS_STYLE_URL}?key=${apiKey}`);
     if (!res.ok) throw new Error(`Protomaps style fetch failed: ${res.status}`);
     return res.json();
 }

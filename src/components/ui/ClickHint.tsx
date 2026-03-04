@@ -1,4 +1,5 @@
 import { useMapStore } from "../../lib/store";
+import { DETAIL_PANEL_WIDTH, Z_INDEX } from "../../constants/layout";
 
 export default function ClickHint() {
     const { hintVisible, panelOpen } = useMapStore();
@@ -8,8 +9,8 @@ export default function ClickHint() {
             style={{
                 position: "absolute",
                 bottom: 36,
-                right: panelOpen ? 16 : 356,
-                zIndex: 50,
+                right: panelOpen ? 16 : DETAIL_PANEL_WIDTH - 4,
+                zIndex: Z_INDEX.HEADER,
                 background: "var(--ink)",
                 color: "#fff",
                 fontSize: 11,

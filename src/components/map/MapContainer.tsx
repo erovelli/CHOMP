@@ -3,94 +3,173 @@ import maplibregl from "maplibre-gl";
 import { Protocol } from "pmtiles";
 import { useMapStore } from "../../lib/store";
 import { fetchProtomapsStyle, buildColorExpression, colorExpression } from "../../lib/mapStyles";
-import type { LayerKey, DataRecord, MonthlyDataRecord, RegionDetail } from "../../lib/types";
-import { CATEGORY_TO_KEY } from "../../lib/types";
+import type { LayerKey, RegionDetail } from "../../lib/types";
+import {
+    loadAnnualData,
+    getStateAnnualData,
+    getZip3AnnualData,
+    getValueForRegion,
+} from "../../lib/dataService";
+import {
+    MAP_CENTER, MAP_ZOOM, MAP_MIN_ZOOM, MAP_MAX_ZOOM,
+    STATES_SOURCE, STATES_FILL, STATES_STROKE, STATES_LAYER, STATES_ID_PROP,
+    ZIP3_SOURCE, ZIP3_FILL, ZIP3_STROKE, ZIP3_LAYER, ZIP3_ID_PROP,
+    FALLBACK_BG_COLOR,
+    STROKE_COLOR_ACTIVE, STROKE_COLOR_DEFAULT_STATES, STROKE_COLOR_DEFAULT_ZIP3,
+    STATES_FILL_OPACITY, ZIP3_FILL_OPACITY,
+    STATES_LINE_WIDTH, ZIP3_LINE_WIDTH,
+    STATES_LINE_OPACITY, ZIP3_LINE_OPACITY,
+} from "../../constants/map";
 
-const STATES_SOURCE = "states-source";
-const STATES_FILL = "states-fill";
-const STATES_STROKE = "states-stroke";
-const STATES_LAYER = "states";
+// ── Layer helpers ────────────────────────────────────────────
 
-const ZIP3_SOURCE = "zip3-source";
-const ZIP3_FILL = "zip3-fill";
-const ZIP3_STROKE = "zip3-stroke";
-const ZIP3_LAYER = "zip3codes";
-
-// Module-level caches
-let stateDataCache: Record<string, DataRecord[]> = {};
-let zip3DataCache: Record<string, DataRecord[]> = {};
-let stateMonthlyCache: Record<string, MonthlyDataRecord[]> = {};
-let zip3MonthlyCache: Record<string, MonthlyDataRecord[]> = {};
-
-/** Parse NDJSON: one JSON object per line, each object is { key: records[] } */
-async function fetchNDJSON<T>(url: string): Promise<Record<string, T[]>> {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
-    const result: Record<string, T[]> = {};
-    for (const line of text.split("\n")) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        const obj = JSON.parse(trimmed) as Record<string, T[]>;
-        for (const [key, records] of Object.entries(obj)) {
-            if (key === "") continue; // skip empty key
-            result[key] = records;
-        }
-    }
-    return result;
-}
-
-/** Lazy-load monthly data files into caches */
-export async function loadMonthlyData(): Promise<void> {
-    if (Object.keys(stateMonthlyCache).length > 0) return; // already loaded
+function addStatesLayers(map: maplibregl.Map) {
     const BASE = import.meta.env.BASE_URL;
-    const [stateData, zip3Data] = await Promise.all([
-        fetchNDJSON<MonthlyDataRecord>(`${BASE}data/provider_procedure_category_aggregate_monthly_state.json`),
-        fetchNDJSON<MonthlyDataRecord>(`${BASE}data/provider_procedure_category_aggregate_monthly_zip3.json`),
-    ]);
-    stateMonthlyCache = stateData;
-    zip3MonthlyCache = zip3Data;
-    console.log(`Loaded monthly data: ${Object.keys(stateData).length} states, ${Object.keys(zip3Data).length} zip3`);
-}
 
-/** Get monthly records for a region from cache */
-export function getMonthlyRecords(id: string, level: "state" | "zip3"): MonthlyDataRecord[] {
-    const cache = level === "state" ? stateMonthlyCache : zip3MonthlyCache;
-    return cache[id] ?? [];
-}
-
-/** Get total_claims for a region, filtered by year and category */
-function getValueForRegion(
-    records: DataRecord[] | undefined,
-    year: string,
-    activeLayer: LayerKey,
-): number {
-    if (!records) return 0;
-    const yearRecords = records.filter((r) => r.year === year);
-    if (activeLayer === "all") {
-        return yearRecords.reduce((sum, r) => sum + r.total_claims, 0);
+    if (!map.getSource(STATES_SOURCE)) {
+        map.addSource(STATES_SOURCE, {
+            type: "vector",
+            url: `pmtiles://${BASE}states.pmtiles`,
+            promoteId: { [STATES_LAYER]: STATES_ID_PROP },
+        });
     }
-    return yearRecords
-        .filter((r) => CATEGORY_TO_KEY[r.category] === activeLayer)
-        .reduce((sum, r) => sum + r.total_claims, 0);
+
+    if (!map.getLayer(STATES_FILL)) {
+        map.addLayer({
+            id: STATES_FILL,
+            type: "fill",
+            source: STATES_SOURCE,
+            "source-layer": STATES_LAYER,
+            paint: {
+                "fill-color": colorExpression as maplibregl.ExpressionSpecification,
+                "fill-opacity": [
+                    "case",
+                    ["boolean", ["feature-state", "selected"], false],
+                    STATES_FILL_OPACITY.selected,
+                    ["boolean", ["feature-state", "hover"], false],
+                    STATES_FILL_OPACITY.hover,
+                    STATES_FILL_OPACITY.default,
+                ],
+            },
+        });
+    }
+
+    if (!map.getLayer(STATES_STROKE)) {
+        map.addLayer({
+            id: STATES_STROKE,
+            type: "line",
+            source: STATES_SOURCE,
+            "source-layer": STATES_LAYER,
+            paint: {
+                "line-color": [
+                    "case",
+                    ["boolean", ["feature-state", "selected"], false], STROKE_COLOR_ACTIVE,
+                    ["boolean", ["feature-state", "hover"], false], STROKE_COLOR_ACTIVE,
+                    STROKE_COLOR_DEFAULT_STATES,
+                ],
+                "line-width": [
+                    "case",
+                    ["boolean", ["feature-state", "selected"], false], STATES_LINE_WIDTH.selected,
+                    ["boolean", ["feature-state", "hover"], false], STATES_LINE_WIDTH.hover,
+                    STATES_LINE_WIDTH.default,
+                ],
+                "line-opacity": [
+                    "case",
+                    ["boolean", ["feature-state", "selected"], false],
+                    STATES_LINE_OPACITY.selected,
+                    STATES_LINE_OPACITY.default,
+                ],
+            },
+        });
+    }
 }
 
-function paintFeatureStates(
+function addZip3Layers(map: maplibregl.Map) {
+    const BASE = import.meta.env.BASE_URL;
+
+    if (!map.getSource(ZIP3_SOURCE)) {
+        map.addSource(ZIP3_SOURCE, {
+            type: "vector",
+            url: `pmtiles://${BASE}zip3.pmtiles`,
+            promoteId: { [ZIP3_LAYER]: ZIP3_ID_PROP },
+        });
+    }
+
+    if (!map.getLayer(ZIP3_FILL)) {
+        map.addLayer({
+            id: ZIP3_FILL,
+            type: "fill",
+            source: ZIP3_SOURCE,
+            "source-layer": ZIP3_LAYER,
+            paint: {
+                "fill-color": colorExpression as maplibregl.ExpressionSpecification,
+                "fill-opacity": [
+                    "case",
+                    ["boolean", ["feature-state", "selected"], false],
+                    ZIP3_FILL_OPACITY.selected,
+                    ["boolean", ["feature-state", "hover"], false],
+                    ZIP3_FILL_OPACITY.hover,
+                    ZIP3_FILL_OPACITY.default,
+                ],
+            },
+        });
+    }
+
+    if (!map.getLayer(ZIP3_STROKE)) {
+        map.addLayer({
+            id: ZIP3_STROKE,
+            type: "line",
+            source: ZIP3_SOURCE,
+            "source-layer": ZIP3_LAYER,
+            paint: {
+                "line-color": [
+                    "case",
+                    ["boolean", ["feature-state", "selected"], false], STROKE_COLOR_ACTIVE,
+                    ["boolean", ["feature-state", "hover"], false], STROKE_COLOR_ACTIVE,
+                    STROKE_COLOR_DEFAULT_ZIP3,
+                ],
+                "line-width": [
+                    "case",
+                    ["boolean", ["feature-state", "selected"], false], ZIP3_LINE_WIDTH.selected,
+                    ["boolean", ["feature-state", "hover"], false], ZIP3_LINE_WIDTH.hover,
+                    ZIP3_LINE_WIDTH.default,
+                ],
+                "line-opacity": [
+                    "case",
+                    ["boolean", ["feature-state", "selected"], false],
+                    ZIP3_LINE_OPACITY.selected,
+                    ZIP3_LINE_OPACITY.default,
+                ],
+            },
+        });
+    }
+}
+
+// ── Paint feature states from data caches ────────────────────
+
+function paintAllFeatureStates(
     map: maplibregl.Map,
-    source: string,
-    sourceLayer: string,
-    dataCache: Record<string, DataRecord[]>,
     year: string,
     activeLayer: LayerKey,
 ) {
-    for (const [id, records] of Object.entries(dataCache)) {
-        const value = getValueForRegion(records, year, activeLayer);
+    const stateData = getStateAnnualData();
+    const zip3Data = getZip3AnnualData();
+
+    for (const [id, records] of Object.entries(stateData)) {
         map.setFeatureState(
-            { source, sourceLayer, id },
-            { value },
+            { source: STATES_SOURCE, sourceLayer: STATES_LAYER, id },
+            { value: getValueForRegion(records, year, activeLayer) },
+        );
+    }
+    for (const [id, records] of Object.entries(zip3Data)) {
+        map.setFeatureState(
+            { source: ZIP3_SOURCE, sourceLayer: ZIP3_LAYER, id },
+            { value: getValueForRegion(records, year, activeLayer) },
         );
     }
 }
+
+// ── Component ────────────────────────────────────────────────
 
 export default function MapContainer() {
     const mapContainer = useRef<HTMLDivElement>(null);
@@ -117,9 +196,7 @@ export default function MapContainer() {
         activeLayerRef.current = activeLayer;
         selectedYearRef.current = selectedYear;
         if (!map.current || !map.current.isStyleLoaded()) return;
-
-        paintFeatureStates(map.current, STATES_SOURCE, STATES_LAYER, stateDataCache, selectedYear, activeLayer);
-        paintFeatureStates(map.current, ZIP3_SOURCE, ZIP3_LAYER, zip3DataCache, selectedYear, activeLayer);
+        paintAllFeatureStates(map.current, selectedYear, activeLayer);
     }, [activeLayer, selectedYear]);
 
     // Reset paint when panel is closed
@@ -146,14 +223,15 @@ export default function MapContainer() {
         map.current.setPaintProperty(ZIP3_FILL, "fill-color", colorExpression);
     }, [selectedRegion]);
 
+    // ── Click handlers ───────────────────────────────────────
+
     const handleStateClick = useCallback(
         (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
             if (!e.features?.length || !map.current) return;
-            const postal = e.features[0].properties?.postal as string;
+            const postal = e.features[0].properties?.[STATES_ID_PROP] as string;
             const name = e.features[0].properties?.name as string;
             if (!postal) return;
 
-            // Clear previous selection
             if (selectedStateRef.current) {
                 map.current.setFeatureState(
                     { source: STATES_SOURCE, sourceLayer: STATES_LAYER, id: selectedStateRef.current },
@@ -173,13 +251,12 @@ export default function MapContainer() {
                 { source: STATES_SOURCE, sourceLayer: STATES_LAYER, id: postal },
                 { selected: true },
             );
-
             map.current.setPaintProperty(
                 STATES_FILL, "fill-color",
-                buildColorExpression(hoveredStateRef.current, postal, "postal"),
+                buildColorExpression(hoveredStateRef.current, postal, STATES_ID_PROP),
             );
 
-            const records = stateDataCache[postal] ?? [];
+            const records = getStateAnnualData()[postal] ?? [];
             const detail: RegionDetail = { id: postal, name: name || postal, level: "state", records };
             setSelectedRegion(postal, detail);
             setSelectedState(postal);
@@ -191,10 +268,9 @@ export default function MapContainer() {
     const handleZip3Click = useCallback(
         (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
             if (!e.features?.length || !map.current) return;
-            const zip3 = e.features[0].properties?.["3dig_zip"] as string;
+            const zip3 = e.features[0].properties?.[ZIP3_ID_PROP] as string;
             if (!zip3) return;
 
-            // Clear previous zip3 selection
             if (selectedZip3Ref.current) {
                 map.current.setFeatureState(
                     { source: ZIP3_SOURCE, sourceLayer: ZIP3_LAYER, id: selectedZip3Ref.current },
@@ -207,13 +283,12 @@ export default function MapContainer() {
                 { source: ZIP3_SOURCE, sourceLayer: ZIP3_LAYER, id: zip3 },
                 { selected: true },
             );
-
             map.current.setPaintProperty(
                 ZIP3_FILL, "fill-color",
-                buildColorExpression(hoveredZip3Ref.current, zip3, "3dig_zip"),
+                buildColorExpression(hoveredZip3Ref.current, zip3, ZIP3_ID_PROP),
             );
 
-            const records = zip3DataCache[zip3] ?? [];
+            const records = getZip3AnnualData()[zip3] ?? [];
             const detail: RegionDetail = { id: zip3, name: `ZIP3 ${zip3}`, level: "zip3", records };
             setSelectedRegion(zip3, detail);
             dismissHint();
@@ -221,11 +296,13 @@ export default function MapContainer() {
         [setSelectedRegion, dismissHint],
     );
 
+    // ── Hover handlers ───────────────────────────────────────
+
     const handleStateMouseMove = useCallback(
         (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
             if (!map.current || !e.features?.length) return;
             map.current.getCanvas().style.cursor = "pointer";
-            const postal = e.features[0].properties?.postal as string;
+            const postal = e.features[0].properties?.[STATES_ID_PROP] as string;
             if (!postal) return;
 
             if (hoveredStateRef.current && hoveredStateRef.current !== postal) {
@@ -240,13 +317,16 @@ export default function MapContainer() {
                 { source: STATES_SOURCE, sourceLayer: STATES_LAYER, id: postal },
                 { hover: true },
             );
-
             map.current.setPaintProperty(
                 STATES_FILL, "fill-color",
-                buildColorExpression(postal, selectedStateRef.current, "postal"),
+                buildColorExpression(postal, selectedStateRef.current, STATES_ID_PROP),
             );
 
-            const val = getValueForRegion(stateDataCache[postal], selectedYearRef.current, activeLayerRef.current);
+            const val = getValueForRegion(
+                getStateAnnualData()[postal],
+                selectedYearRef.current,
+                activeLayerRef.current,
+            );
             setHovered(postal, val, { x: e.point.x, y: e.point.y });
         },
         [setHovered],
@@ -256,7 +336,7 @@ export default function MapContainer() {
         (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
             if (!map.current || !e.features?.length) return;
             map.current.getCanvas().style.cursor = "pointer";
-            const zip3 = e.features[0].properties?.["3dig_zip"] as string;
+            const zip3 = e.features[0].properties?.[ZIP3_ID_PROP] as string;
             if (!zip3) return;
 
             if (hoveredZip3Ref.current && hoveredZip3Ref.current !== zip3) {
@@ -271,13 +351,16 @@ export default function MapContainer() {
                 { source: ZIP3_SOURCE, sourceLayer: ZIP3_LAYER, id: zip3 },
                 { hover: true },
             );
-
             map.current.setPaintProperty(
                 ZIP3_FILL, "fill-color",
-                buildColorExpression(zip3, selectedZip3Ref.current, "3dig_zip"),
+                buildColorExpression(zip3, selectedZip3Ref.current, ZIP3_ID_PROP),
             );
 
-            const val = getValueForRegion(zip3DataCache[zip3], selectedYearRef.current, activeLayerRef.current);
+            const val = getValueForRegion(
+                getZip3AnnualData()[zip3],
+                selectedYearRef.current,
+                activeLayerRef.current,
+            );
             setHovered(`ZIP3 ${zip3}`, val, { x: e.point.x, y: e.point.y });
         },
         [setHovered],
@@ -297,7 +380,7 @@ export default function MapContainer() {
         setHovered(null, null, null);
         map.current.setPaintProperty(
             STATES_FILL, "fill-color",
-            buildColorExpression(null, selectedStateRef.current, "postal"),
+            buildColorExpression(null, selectedStateRef.current, STATES_ID_PROP),
         );
     }, [setHovered]);
 
@@ -315,9 +398,11 @@ export default function MapContainer() {
         setHovered(null, null, null);
         map.current.setPaintProperty(
             ZIP3_FILL, "fill-color",
-            buildColorExpression(null, selectedZip3Ref.current, "3dig_zip"),
+            buildColorExpression(null, selectedZip3Ref.current, ZIP3_ID_PROP),
         );
     }, [setHovered]);
+
+    // ── Map initialization ───────────────────────────────────
 
     useEffect(() => {
         if (!mapContainer.current || map.current) return;
@@ -340,7 +425,7 @@ export default function MapContainer() {
                         {
                             id: "background",
                             type: "background",
-                            paint: { "background-color": "#f0ede8" },
+                            paint: { "background-color": FALLBACK_BG_COLOR },
                         },
                     ],
                 };
@@ -351,10 +436,10 @@ export default function MapContainer() {
             map.current = new maplibregl.Map({
                 container: mapContainer.current,
                 style,
-                center: [-98.5, 39.8],
-                zoom: 4,
-                minZoom: 2,
-                maxZoom: 14,
+                center: MAP_CENTER,
+                zoom: MAP_ZOOM,
+                minZoom: MAP_MIN_ZOOM,
+                maxZoom: MAP_MAX_ZOOM,
                 attributionControl: false,
             });
 
@@ -364,134 +449,19 @@ export default function MapContainer() {
             map.current.on("load", async () => {
                 if (!map.current) return;
 
-                const BASE = import.meta.env.BASE_URL;
+                addStatesLayers(map.current);
+                addZip3Layers(map.current);
 
-                // States source + layers
-                if (!map.current.getSource(STATES_SOURCE)) {
-                    map.current.addSource(STATES_SOURCE, {
-                        type: "vector",
-                        url: `pmtiles://${BASE}states.pmtiles`,
-                        promoteId: { [STATES_LAYER]: "postal" },
-                    });
-                }
-
-                if (!map.current.getLayer(STATES_FILL)) {
-                    map.current.addLayer({
-                        id: STATES_FILL,
-                        type: "fill",
-                        source: STATES_SOURCE,
-                        "source-layer": STATES_LAYER,
-                        paint: {
-                            "fill-color": colorExpression as maplibregl.ExpressionSpecification,
-                            "fill-opacity": [
-                                "case",
-                                ["boolean", ["feature-state", "selected"], false],
-                                1.0,
-                                ["boolean", ["feature-state", "hover"], false],
-                                0.95,
-                                0.82,
-                            ],
-                        },
-                    });
-                }
-
-                if (!map.current.getLayer(STATES_STROKE)) {
-                    map.current.addLayer({
-                        id: STATES_STROKE,
-                        type: "line",
-                        source: STATES_SOURCE,
-                        "source-layer": STATES_LAYER,
-                        paint: {
-                            "line-color": [
-                                "case",
-                                ["boolean", ["feature-state", "selected"], false],
-                                "#1a1917",
-                                ["boolean", ["feature-state", "hover"], false],
-                                "#1a1917",
-                                "#6b7f7d",
-                            ],
-                            "line-width": [
-                                "case",
-                                ["boolean", ["feature-state", "selected"], false],
-                                2,
-                                ["boolean", ["feature-state", "hover"], false],
-                                1.5,
-                                0.8,
-                            ],
-                            "line-opacity": ["case", ["boolean", ["feature-state", "selected"], false], 1, 0.6],
-                        },
-                    });
-                }
-
-                // Zip3 source + layers
-                if (!map.current.getSource(ZIP3_SOURCE)) {
-                    map.current.addSource(ZIP3_SOURCE, {
-                        type: "vector",
-                        url: `pmtiles://${BASE}zip3.pmtiles`,
-                        promoteId: { [ZIP3_LAYER]: "3dig_zip" },
-                    });
-                }
-
-                if (!map.current.getLayer(ZIP3_FILL)) {
-                    map.current.addLayer({
-                        id: ZIP3_FILL,
-                        type: "fill",
-                        source: ZIP3_SOURCE,
-                        "source-layer": ZIP3_LAYER,
-                        paint: {
-                            "fill-color": colorExpression as maplibregl.ExpressionSpecification,
-                            "fill-opacity": [
-                                "case",
-                                ["boolean", ["feature-state", "selected"], false],
-                                1.0,
-                                ["boolean", ["feature-state", "hover"], false],
-                                0.9,
-                                0.5,
-                            ],
-                        },
-                    });
-                }
-
-                if (!map.current.getLayer(ZIP3_STROKE)) {
-                    map.current.addLayer({
-                        id: ZIP3_STROKE,
-                        type: "line",
-                        source: ZIP3_SOURCE,
-                        "source-layer": ZIP3_LAYER,
-                        paint: {
-                            "line-color": [
-                                "case",
-                                ["boolean", ["feature-state", "selected"], false],
-                                "#1a1917",
-                                ["boolean", ["feature-state", "hover"], false],
-                                "#1a1917",
-                                "#9a948d",
-                            ],
-                            "line-width": [
-                                "case",
-                                ["boolean", ["feature-state", "selected"], false],
-                                2,
-                                ["boolean", ["feature-state", "hover"], false],
-                                1.2,
-                                0.3,
-                            ],
-                            "line-opacity": ["case", ["boolean", ["feature-state", "selected"], false], 1, 0.4],
-                        },
-                    });
-                }
-
-                // Event handlers — states
                 map.current.on("click", STATES_FILL, handleStateClick);
                 map.current.on("mousemove", STATES_FILL, handleStateMouseMove);
                 map.current.on("mouseleave", STATES_FILL, handleStateMouseLeave);
 
-                // Event handlers — zip3
                 map.current.on("click", ZIP3_FILL, handleZip3Click);
                 map.current.on("mousemove", ZIP3_FILL, handleZip3MouseMove);
                 map.current.on("mouseleave", ZIP3_FILL, handleZip3MouseLeave);
 
-                // Load data
-                await loadAndPaint(map.current, activeLayerRef.current, selectedYearRef.current);
+                await loadAnnualData();
+                paintAllFeatureStates(map.current, selectedYearRef.current, activeLayerRef.current);
             });
         };
 
@@ -519,24 +489,4 @@ export default function MapContainer() {
             }}
         />
     );
-}
-
-async function loadAndPaint(map: maplibregl.Map, activeLayer: LayerKey, selectedYear: string) {
-    try {
-        const BASE = import.meta.env.BASE_URL;
-        const [stateData, zip3Data] = await Promise.all([
-            fetchNDJSON<DataRecord>(`${BASE}data/provider_procedure_category_aggregate_annual_state.json`),
-            fetchNDJSON<DataRecord>(`${BASE}data/provider_procedure_category_aggregate_annual_zip3.json`),
-        ]);
-
-        stateDataCache = stateData;
-        zip3DataCache = zip3Data;
-
-        paintFeatureStates(map, STATES_SOURCE, STATES_LAYER, stateDataCache, selectedYear, activeLayer);
-        paintFeatureStates(map, ZIP3_SOURCE, ZIP3_LAYER, zip3DataCache, selectedYear, activeLayer);
-
-        console.log(`Painted ${Object.keys(stateData).length} states, ${Object.keys(zip3Data).length} zip3 regions`);
-    } catch (err) {
-        console.error("Failed to load data:", err);
-    }
 }

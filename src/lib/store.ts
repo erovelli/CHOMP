@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { LayerKey, RegionDetail } from "./types";
+import { DEFAULT_YEAR } from "../constants/time";
 
 interface MapState {
     activeLayer: LayerKey;
@@ -41,7 +42,7 @@ export const useMapStore = create<MapState>((set) => ({
     activeLayer: "all",
     setActiveLayer: (layer) => set({ activeLayer: layer }),
 
-    selectedYear: "2024",
+    selectedYear: DEFAULT_YEAR,
     setSelectedYear: (year) => set({ selectedYear: year, selectedMonth: null }),
 
     selectedMonth: null,

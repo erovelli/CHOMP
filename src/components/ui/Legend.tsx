@@ -1,12 +1,8 @@
 import { useMapStore } from "../../lib/store";
-import { LAYER_CONFIGS } from "../../lib/types";
+import { LAYER_CONFIGS } from "../../constants/map";
 import { CHOROPLETH_COLORS, CHOROPLETH_STOPS } from "../../lib/mapStyles";
-
-function formatStop(value: number): string {
-    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-    if (value >= 1_000) return `${(value / 1_000).toFixed(0)}k`;
-    return String(value);
-}
+import { formatStop } from "../../lib/formatters";
+import { Z_INDEX, PANEL_SHADOW } from "../../constants/layout";
 
 export default function Legend() {
     const { activeLayer } = useMapStore();
@@ -18,13 +14,13 @@ export default function Legend() {
                 position: "absolute",
                 bottom: 36,
                 left: 16,
-                zIndex: 50,
+                zIndex: Z_INDEX.HEADER,
                 background: "var(--surface)",
                 border: "1px solid var(--border)",
                 borderRadius: 4,
                 padding: "12px 14px",
                 minWidth: 200,
-                boxShadow: "0 2px 12px rgba(0,0,0,0.08)",
+                boxShadow: PANEL_SHADOW,
             }}
         >
             <p
