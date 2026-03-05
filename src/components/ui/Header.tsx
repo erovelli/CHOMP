@@ -3,6 +3,7 @@ import DetailPanel from "./DetailPanel/index";
 import Tooltip from "./Tooltip";
 import Legend from "./Legend";
 import ClickHint from "./ClickHint";
+import InfoModal from "./InfoModal";
 import { HEADER_HEIGHT, Z_INDEX } from "../../constants/layout";
 
 export default function Header() {
@@ -60,6 +61,7 @@ export default function Header() {
             <Tooltip />
             <DetailPanel />
             <ClickHint />
+            <InfoModal />
         </>
     );
 }
