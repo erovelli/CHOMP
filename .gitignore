@@ -1,2 +1,5 @@
-# Ignore macOS DS_Store files
+node_modules
+dist
+.env.local
+.env
 .DS_Store

@@ -1,0 +1,52 @@
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+:root {
+    --bg: #f5f3ef;
+    --surface: #faf9f7;
+    --surface2: #f0ede8;
+    --border: #ddd9d3;
+    --border-dark: #c4bfb8;
+    --ink: #1a1917;
+    --ink-mid: #5c5750;
+    --ink-dim: #9a948d;
+    --accent: #c8460a;
+    --accent-light: #f4e8e2;
+    --ff-sans: "Libre Franklin", sans-serif;
+    --ff-serif: "Source Serif 4", serif;
+    --ff-mono: "IBM Plex Mono", monospace;
+}
+
+html, body, #root {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--ff-sans);
+}
+
+/* MapLibre overrides */
+.maplibregl-ctrl-group {
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 4px !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+}
+
+.maplibregl-ctrl button {
+    width: 28px !important;
+    height: 28px !important;
+}
+
+.maplibregl-ctrl-attrib {
+    font-size: 9px !important;
+    background: rgba(245, 243, 239, 0.85) !important;
+}
+
+.maplibregl-ctrl-attrib a {
+    color: var(--ink-dim) !important;
+}
