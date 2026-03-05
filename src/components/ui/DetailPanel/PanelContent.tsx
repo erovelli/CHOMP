@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useMapStore } from "../../../lib/store";
 import type { RegionDetail, MonthlyDataRecord } from "../../../lib/types";
 import { loadMonthlyData, getMonthlyRecords } from "../../../lib/dataService";
@@ -23,6 +23,13 @@ export default function PanelContent({
     const yearMonth = isMonthly
         ? `${selectedYear}-${String(monthSlider).padStart(2, "0")}`
         : null;
+
+    // Re-fetch monthly records when the selected region changes while in monthly view
+    useEffect(() => {
+        if (monthSlider > 0 && monthlyDataLoaded) {
+            setMonthlyRecords(getMonthlyRecords(detail.id, detail.level));
+        }
+    }, [detail.id, detail.level, monthSlider, monthlyDataLoaded]);
 
     const handleYearChange = useCallback((year: string) => {
         setSelectedYear(year);
