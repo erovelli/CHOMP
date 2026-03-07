@@ -13,7 +13,7 @@ export const INFO_MODAL_BODY =
 
 export const INFO_MODAL_NOTES: string[] = [
     "HHS Open Data does not include claims if there are less than 12 of a particular code per month, or if there are less than 12 unique beneficiaries per month. This may impact accuracy, especially in less populated areas.",
-    "We are displaying data at a zip-3 level to purposefully avoid identifying or targeting individual providers. This data is not intended to assist in finding outlier providers.",
+    "We are displaying data at a ZIP3 level to purposefully avoid identifying or targeting individual providers. This data is not intended to assist in finding outlier providers.",
     "[Note about NPI changes/providers moving depending on how well we can address this]",
     "[Explanation of what we did with mislabeled/incomplete data, US territories, etc]",
 ];
