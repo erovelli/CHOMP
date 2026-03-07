@@ -10,7 +10,7 @@
     },
     "dependencies": {
         "maplibre-gl": "^4.1.2",
-        "pmtiles": "^3.0.6",
+        "pmtiles": "^4.4.0",
         "zustand": "^4.5.2",
         "react": "^18.3.1",
         "react-dom": "^18.3.1"
