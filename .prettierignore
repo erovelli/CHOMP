@@ -1,0 +1,8 @@
+dist
+node_modules
+coverage
+public/data
+public/*.geojson
+public/*.pmtiles
+package-lock.json
+exports
