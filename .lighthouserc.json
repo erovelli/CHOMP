@@ -1,8 +1,9 @@
 {
   "ci": {
     "collect": {
-      "staticDistDir": "./dist",
-      "url": ["http://localhost/medicaid-dent-policy/"],
+      "startServerCommand": "npm run preview -- --port 4173 --strictPort",
+      "startServerReadyPattern": "Local:",
+      "url": ["http://localhost:4173/medicaid-dent-policy/"],
       "numberOfRuns": 3,
       "settings": {
         "preset": "desktop",
