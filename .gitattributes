@@ -1,0 +1,26 @@
+# Normalize line endings across platforms
+* text=auto eol=lf
+
+# Binary assets — never diff, never munge
+*.pmtiles   binary
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.woff      binary
+*.woff2     binary
+*.ttf       binary
+*.otf       binary
+*.pdf       binary
+
+# Large but text-ish — mark as generated so GitHub collapses them in diffs
+public/data/*.json          linguist-generated=true
+public/*.geojson            linguist-generated=true
+package-lock.json           linguist-generated=true
+
+# Scripts should always be LF even on Windows checkouts
+*.sh        text eol=lf
+
+# Keep drawio readable
+*.drawio    text
