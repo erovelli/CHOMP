@@ -12,7 +12,7 @@ The map re-colors on three events:
 2. User switches procedure category (ten options).
 3. User hovers or clicks a region.
 
-Event 1 and 2 require repainting *every* polygon. Event 3 touches exactly one.
+Event 1 and 2 require repainting _every_ polygon. Event 3 touches exactly one.
 
 The idiomatic MapLibre approach for #1 and #2 is to mutate the GeoJSON source:
 
@@ -28,14 +28,16 @@ This works. It also:
 
 ## Decision
 
-Use [MapLibre feature-state](https://maplibre.org/maplibre-gl-js/docs/API/classes/Map/#setfeaturestate) for *all three* events. The paint expression references `["feature-state", "value"]`, `["feature-state", "hover"]`, and `["feature-state", "selected"]` directly.
+Use [MapLibre feature-state](https://maplibre.org/maplibre-gl-js/docs/API/classes/Map/#setfeaturestate) for _all three_ events. The paint expression references `["feature-state", "value"]`, `["feature-state", "hover"]`, and `["feature-state", "selected"]` directly.
 
 Year/category changes run:
 
 ```ts
 for (const [id, records] of Object.entries(stateCache)) {
-  map.setFeatureState({ source, sourceLayer, id },
-                     { value: getValueForRegion(records, year, activeLayer) });
+  map.setFeatureState(
+    { source, sourceLayer, id },
+    { value: getValueForRegion(records, year, activeLayer) },
+  );
 }
 ```
 
@@ -61,11 +63,11 @@ map.setFeatureState({ source, sourceLayer, id }, { hover: true });
 
 ## Alternatives considered
 
-| Option | Why not |
-|---|---|
-| `setData` on every event | Re-uploads entire source per change; visible lag. |
+| Option                                                                               | Why not                                                                                 |
+| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| `setData` on every event                                                             | Re-uploads entire source per change; visible lag.                                       |
 | Data-driven expressions with a property lookup (`["get", "claims_2024_preventive"]`) | Requires baking every (year, category) combo into the tile — explodes the PMTiles size. |
-| Client-side per-feature overlay (extra vector layer for highlights) | Fine for hover; doesn't solve the year/category repaint. |
+| Client-side per-feature overlay (extra vector layer for highlights)                  | Fine for hover; doesn't solve the year/category repaint.                                |
 
 ## Related
 

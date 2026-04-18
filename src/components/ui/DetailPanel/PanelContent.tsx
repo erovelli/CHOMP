@@ -14,15 +14,14 @@ export default function PanelContent({
     detail: RegionDetail;
     onClose: () => void;
 }) {
-    const { selectedYear, setSelectedYear, monthlyDataLoaded, setMonthlyDataLoaded } = useMapStore();
+    const { selectedYear, setSelectedYear, monthlyDataLoaded, setMonthlyDataLoaded } =
+        useMapStore();
     const [monthSlider, setMonthSlider] = useState(0);
     const [loadingMonthly, setLoadingMonthly] = useState(false);
     const [monthlyRecords, setMonthlyRecords] = useState<MonthlyDataRecord[]>([]);
 
     const isMonthly = monthSlider > 0;
-    const yearMonth = isMonthly
-        ? `${selectedYear}-${String(monthSlider).padStart(2, "0")}`
-        : null;
+    const yearMonth = isMonthly ? `${selectedYear}-${String(monthSlider).padStart(2, "0")}` : null;
 
     // Re-fetch monthly records when the selected region changes while in monthly view
     useEffect(() => {
@@ -31,28 +30,39 @@ export default function PanelContent({
         }
     }, [detail.id, detail.level, monthSlider, monthlyDataLoaded]);
 
-    const handleYearChange = useCallback((year: string) => {
-        setSelectedYear(year);
-        setMonthSlider(0);
-    }, [setSelectedYear]);
+    const handleYearChange = useCallback(
+        (year: string) => {
+            setSelectedYear(year);
+            setMonthSlider(0);
+        },
+        [setSelectedYear],
+    );
 
-    const handleSliderChange = useCallback(async (value: number) => {
-        setMonthSlider(value);
-        if (value === 0) return;
+    const handleSliderChange = useCallback(
+        async (value: number) => {
+            setMonthSlider(value);
+            if (value === 0) return;
 
-        if (!monthlyDataLoaded) {
-            setLoadingMonthly(true);
-            await loadMonthlyData();
-            setMonthlyDataLoaded(true);
-            setLoadingMonthly(false);
-        }
+            if (!monthlyDataLoaded) {
+                setLoadingMonthly(true);
+                await loadMonthlyData();
+                setMonthlyDataLoaded(true);
+                setLoadingMonthly(false);
+            }
 
-        const records = getMonthlyRecords(detail.id, detail.level);
-        setMonthlyRecords(records);
-    }, [monthlyDataLoaded, setMonthlyDataLoaded, detail.id, detail.level]);
+            const records = getMonthlyRecords(detail.id, detail.level);
+            setMonthlyRecords(records);
+        },
+        [monthlyDataLoaded, setMonthlyDataLoaded, detail.id, detail.level],
+    );
 
     // Compute display records
-    let displayRecords: { category: string; total_claims: number; total_beneficiaries_served: number; total_amount_paid: number }[];
+    let displayRecords: {
+        category: string;
+        total_claims: number;
+        total_beneficiaries_served: number;
+        total_amount_paid: number;
+    }[];
 
     if (isMonthly && !loadingMonthly) {
         displayRecords = monthlyRecords
@@ -165,8 +175,12 @@ export default function PanelContent({
                                     padding: "4px 10px",
                                     fontSize: 12,
                                     fontWeight: year === selectedYear ? 600 : 400,
-                                    background: year === selectedYear ? "var(--accent-light)" : "var(--surface2)",
-                                    color: year === selectedYear ? "var(--accent)" : "var(--ink-mid)",
+                                    background:
+                                        year === selectedYear
+                                            ? "var(--accent-light)"
+                                            : "var(--surface2)",
+                                    color:
+                                        year === selectedYear ? "var(--accent)" : "var(--ink-mid)",
                                     border: `1px solid ${year === selectedYear ? "rgba(200,70,10,0.3)" : "var(--border)"}`,
                                     borderRadius: 3,
                                     cursor: "pointer",
@@ -265,12 +279,13 @@ export default function PanelContent({
                                 value={totalBeneficiaries.toLocaleString()}
                                 label="Beneficiaries Served"
                             />
+                            <StatCard value={formatCurrency(totalPaid)} label="Total Paid" />
                             <StatCard
-                                value={formatCurrency(totalPaid)}
-                                label="Total Paid"
-                            />
-                            <StatCard
-                                value={totalClaims > 0 ? `$${(totalPaid / totalClaims).toFixed(0)}` : "—"}
+                                value={
+                                    totalClaims > 0
+                                        ? `$${(totalPaid / totalClaims).toFixed(0)}`
+                                        : "—"
+                                }
                                 label="Avg Paid / Claim"
                             />
                         </div>

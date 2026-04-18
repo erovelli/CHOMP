@@ -3,8 +3,7 @@ import { LAYER_CONFIGS } from "../../constants/map";
 import { Z_INDEX } from "../../constants/layout";
 
 export default function Tooltip() {
-    const { hoveredRegion, hoveredValue, hoveredPoint, activeLayer } =
-        useMapStore();
+    const { hoveredRegion, hoveredValue, hoveredPoint, activeLayer } = useMapStore();
     const cfg = LAYER_CONFIGS[activeLayer];
 
     if (!hoveredRegion || hoveredPoint === null) return null;

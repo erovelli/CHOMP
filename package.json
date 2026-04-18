@@ -1,79 +1,79 @@
 {
-    "name": "dental-map-vite",
-    "version": "0.1.0",
-    "private": true,
-    "type": "module",
-    "engines": {
-        "node": ">=20.18.0"
-    },
-    "scripts": {
-        "dev": "vite",
-        "build": "tsc && vite build",
-        "preview": "vite preview",
-        "typecheck": "tsc --noEmit",
-        "lint": "eslint .",
-        "lint:fix": "eslint . --fix",
-        "format": "prettier --write .",
-        "format:check": "prettier --check .",
-        "test": "vitest run",
-        "test:watch": "vitest",
-        "test:coverage": "vitest run --coverage",
-        "size": "size-limit",
-        "deploy": "npm run build && gh-pages -d dist",
-        "prepare": "husky"
-    },
-    "lint-staged": {
-        "*.{ts,tsx}": [
-            "eslint --fix",
-            "prettier --write"
-        ],
-        "*.{js,json,md,yml,yaml,css}": [
-            "prettier --write"
-        ]
-    },
-    "dependencies": {
-        "maplibre-gl": "^4.1.2",
-        "pmtiles": "^3.0.6",
-        "react": "^18.3.1",
-        "react-dom": "^18.3.1",
-        "zustand": "^4.5.2"
-    },
-    "devDependencies": {
-        "@eslint/js": "^9.13.0",
-        "@size-limit/preset-app": "^11.1.0",
-        "@testing-library/jest-dom": "^6.5.0",
-        "@testing-library/react": "^16.0.0",
-        "@types/react": "^18.3.1",
-        "@types/react-dom": "^18.3.1",
-        "@vitejs/plugin-react": "^4.3.1",
-        "eslint": "^9.13.0",
-        "eslint-config-prettier": "^9.1.0",
-        "eslint-plugin-react-hooks": "^5.1.0",
-        "eslint-plugin-react-refresh": "^0.4.14",
-        "gh-pages": "^6.1.1",
-        "globals": "^15.11.0",
-        "husky": "^9.1.6",
-        "jsdom": "^25.0.0",
-        "lint-staged": "^15.2.10",
-        "prettier": "^3.3.3",
-        "size-limit": "^11.1.0",
-        "typescript": "^5.4.5",
-        "typescript-eslint": "^8.11.0",
-        "vite": "^5.3.1",
-        "vitest": "^2.1.3"
-    },
-    "size-limit": [
-        {
-            "name": "JS bundle (gzip)",
-            "path": "dist/assets/*.js",
-            "limit": "300 KB",
-            "gzip": true
-        },
-        {
-            "name": "CSS bundle (gzip)",
-            "path": "dist/assets/*.css",
-            "limit": "30 KB",
-            "gzip": true
-        }
+  "name": "dental-map-vite",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.18.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "size": "size-limit",
+    "deploy": "npm run build && gh-pages -d dist",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{js,json,md,yml,yaml,css}": [
+      "prettier --write"
     ]
+  },
+  "dependencies": {
+    "maplibre-gl": "^4.1.2",
+    "pmtiles": "^3.0.6",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^4.5.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.13.0",
+    "@size-limit/preset-app": "^11.1.0",
+    "@testing-library/jest-dom": "^6.5.0",
+    "@testing-library/react": "^16.0.0",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.1",
+    "eslint": "^9.13.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "eslint-plugin-react-refresh": "^0.4.14",
+    "gh-pages": "^6.1.1",
+    "globals": "^15.11.0",
+    "husky": "^9.1.6",
+    "jsdom": "^25.0.0",
+    "lint-staged": "^15.2.10",
+    "prettier": "^3.3.3",
+    "size-limit": "^11.1.0",
+    "typescript": "^5.4.5",
+    "typescript-eslint": "^8.11.0",
+    "vite": "^5.3.1",
+    "vitest": "^2.1.3"
+  },
+  "size-limit": [
+    {
+      "name": "JS bundle (gzip)",
+      "path": "dist/assets/*.js",
+      "limit": "300 KB",
+      "gzip": true
+    },
+    {
+      "name": "CSS bundle (gzip)",
+      "path": "dist/assets/*.css",
+      "limit": "30 KB",
+      "gzip": true
+    }
+  ]
 }

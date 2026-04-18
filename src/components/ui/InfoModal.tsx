@@ -9,7 +9,9 @@ export default function InfoModal() {
 
     useEffect(() => {
         if (!visible) return;
-        const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape") close();
+        };
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
     }, [visible, close]);

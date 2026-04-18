@@ -48,8 +48,8 @@ say why you didn't take it. If there was no real fork in the road, write
 <!-- Required for any UI change. Before/after is ideal. -->
 
 | Before | After |
-|---|---|
-|  |  |
+| ------ | ----- |
+|        |       |
 
 ## Data-pipeline checklist
 

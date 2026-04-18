@@ -23,10 +23,10 @@ This document is the single source of truth for the shape and semantics of the N
 provider_procedure_category_aggregate_{grain}_{geo}.json
 ```
 
-| Slot | Values | Meaning |
-|---|---|---|
+| Slot    | Values                | Meaning                     |
+| ------- | --------------------- | --------------------------- |
 | `grain` | `annual` \| `monthly` | Temporal aggregation level. |
-| `geo` | `state` \| `zip3` | Spatial aggregation level. |
+| `geo`   | `state` \| `zip3`     | Spatial aggregation level.  |
 
 Four files total. Each view name in [`migrations/aggregate_views/`](../migrations/aggregate_views/) maps 1-to-1 to one output file — if you rename a view, rename the file, and update [`DATA_PATHS`](../src/constants/map.ts) to match. All three change in the same PR.
 
@@ -52,11 +52,11 @@ Consumer: [`fetchNDJSON`](../src/lib/dataService.ts) splits on `\n`, `JSON.parse
 
 ```ts
 interface DataRecord {
-    year: string;                          // "2018" .. "2024"
-    category: string;                      // see "Categories" below
-    total_beneficiaries_served: number;
-    total_claims: number;
-    total_amount_paid: number;             // USD, whole dollars
+  year: string; // "2018" .. "2024"
+  category: string; // see "Categories" below
+  total_beneficiaries_served: number;
+  total_claims: number;
+  total_amount_paid: number; // USD, whole dollars
 }
 ```
 
@@ -64,11 +64,11 @@ interface DataRecord {
 
 ```ts
 interface MonthlyDataRecord {
-    year_month: string;                    // "YYYY-MM", e.g. "2023-06"
-    category: string;
-    total_beneficiaries_served: number;
-    total_claims: number;
-    total_amount_paid: number;
+  year_month: string; // "YYYY-MM", e.g. "2023-06"
+  category: string;
+  total_beneficiaries_served: number;
+  total_claims: number;
+  total_amount_paid: number;
 }
 ```
 
@@ -76,14 +76,14 @@ Types are mirrored in [`src/lib/types.ts`](../src/lib/types.ts). Changing the sc
 
 ## Field reference
 
-| Field | Type | Units | Source | Notes |
-|---|---|---|---|---|
-| `year` | `string` | — | Extracted from HHS `year_month` | `"2018"`–`"2024"`. |
-| `year_month` | `string` | — | HHS source column | ISO-8601 `YYYY-MM`. Missing months are absent, not zero. |
-| `category` | `string` | — | Derived from HCPCS code in SQL view `006_…` | See categories table. |
-| `total_beneficiaries_served` | `number` | unique Medicaid beneficiaries | `SUM(beneficiaries_served_count)` | Not unique across rows — summing across categories may double-count patients. |
-| `total_claims` | `number` | individual claim lines | `SUM(claims_count)` | The primary display field in the choropleth. |
-| `total_amount_paid` | `number` | USD dollars | `SUM(total_amount_paid)` | Gross amount paid by Medicaid; not patient responsibility. |
+| Field                        | Type     | Units                         | Source                                      | Notes                                                                         |
+| ---------------------------- | -------- | ----------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------- |
+| `year`                       | `string` | —                             | Extracted from HHS `year_month`             | `"2018"`–`"2024"`.                                                            |
+| `year_month`                 | `string` | —                             | HHS source column                           | ISO-8601 `YYYY-MM`. Missing months are absent, not zero.                      |
+| `category`                   | `string` | —                             | Derived from HCPCS code in SQL view `006_…` | See categories table.                                                         |
+| `total_beneficiaries_served` | `number` | unique Medicaid beneficiaries | `SUM(beneficiaries_served_count)`           | Not unique across rows — summing across categories may double-count patients. |
+| `total_claims`               | `number` | individual claim lines        | `SUM(claims_count)`                         | The primary display field in the choropleth.                                  |
+| `total_amount_paid`          | `number` | USD dollars                   | `SUM(total_amount_paid)`                    | Gross amount paid by Medicaid; not patient responsibility.                    |
 
 All numeric fields are non-negative integers. `total_amount_paid` is in whole USD (not cents).
 
@@ -97,28 +97,28 @@ All numeric fields are non-negative integers. `total_amount_paid` is in whole US
 
 The `category` field is derived from the HCPCS D-code range in SQL view [`006_create_procedure_category_aggregate_view.sql`](../migrations/aggregate_views/006_create_procedure_category_aggregate_view.sql):
 
-| Category (string in NDJSON) | HCPCS range | Example procedures |
-|---|---|---|
-| `Diagnostic` | D0100–D0999 | Exams, radiographs, evaluations |
-| `Preventive` | D1000–D1999 | Cleanings, fluoride, sealants |
-| `Restorative` | D2000–D2999 | Fillings, crowns, inlays |
-| `Endodontics` | D3000–D3999 | Root canals, pulp therapy |
-| `Periodontics` | D4000–D4999 | Gum disease treatment |
-| `Prosthodontics (removable)` | D5000–D5899 | Dentures, partials |
-| `Maxillofacial Prosthetics` | D5900–D5999 | Surgical obturators, implants for facial defects |
-| `Implant Services` | D6000–D6199 | Surgical implants |
-| `Prosthodontics (fixed)` | D6200–D6999 | Fixed bridges |
-| `Oral Surgery` | D7000–D7999 | Extractions, surgical procedures |
-| `Orthodontics` | D8000–D8999 | Braces, retainers |
-| `Adjunctive General Services` | D9000–D9999 | Anesthesia, drug administration, palliative care |
-| `Uncategorized` | non-D codes or malformed | Dropped by the UI. |
+| Category (string in NDJSON)   | HCPCS range              | Example procedures                               |
+| ----------------------------- | ------------------------ | ------------------------------------------------ |
+| `Diagnostic`                  | D0100–D0999              | Exams, radiographs, evaluations                  |
+| `Preventive`                  | D1000–D1999              | Cleanings, fluoride, sealants                    |
+| `Restorative`                 | D2000–D2999              | Fillings, crowns, inlays                         |
+| `Endodontics`                 | D3000–D3999              | Root canals, pulp therapy                        |
+| `Periodontics`                | D4000–D4999              | Gum disease treatment                            |
+| `Prosthodontics (removable)`  | D5000–D5899              | Dentures, partials                               |
+| `Maxillofacial Prosthetics`   | D5900–D5999              | Surgical obturators, implants for facial defects |
+| `Implant Services`            | D6000–D6199              | Surgical implants                                |
+| `Prosthodontics (fixed)`      | D6200–D6999              | Fixed bridges                                    |
+| `Oral Surgery`                | D7000–D7999              | Extractions, surgical procedures                 |
+| `Orthodontics`                | D8000–D8999              | Braces, retainers                                |
+| `Adjunctive General Services` | D9000–D9999              | Anesthesia, drug administration, palliative care |
+| `Uncategorized`               | non-D codes or malformed | Dropped by the UI.                               |
 
 Frontend mapping from these category strings to the nine `LayerKey` values is in [`CATEGORY_TO_KEY`](../src/constants/map.ts). The pipeline's 13 categories collapse to the UI's 9 layers — both `Prosthodontics (removable)` and `Prosthodontics (fixed)` map to the same `prosthodontics` layer. Adding a new category is a two-place change: the SQL CASE and `CATEGORY_TO_KEY`.
 
 ## Suppression & null handling
 
 - **HHS suppresses cells with <12 claims or <12 unique beneficiaries per provider-month.** Those rows are absent from the raw HHS release and therefore absent from every downstream aggregate. This is surfaced in the InfoModal on first visit.
-- **Missing periods are absent, not zero.** A ZIP3 with no preventive claims in March 2022 has no `("2022-03", "Preventive")` record — the UI must treat missing as zero for summation but must *not* plot a zero point on a time series.
+- **Missing periods are absent, not zero.** A ZIP3 with no preventive claims in March 2022 has no `("2022-03", "Preventive")` record — the UI must treat missing as zero for summation but must _not_ plot a zero point on a time series.
 - **Uncategorized rows are dropped at export**, not at ingest. If a new HCPCS range appears in a future HHS release it will show up under `Uncategorized` until the `CASE` expression is extended.
 - **`state = NULL` rows are dropped at export.** Providers whose NPI record has no practice state are omitted from the state-grain files; they appear (when their ZIP5 is known) in the ZIP3-grain files.
 

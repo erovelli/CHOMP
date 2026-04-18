@@ -46,7 +46,13 @@ export default function CategoryBreakdown({
                                         marginBottom: 4,
                                     }}
                                 >
-                                    <span style={{ fontSize: 12, fontWeight: 500, color: "var(--ink)" }}>
+                                    <span
+                                        style={{
+                                            fontSize: 12,
+                                            fontWeight: 500,
+                                            color: "var(--ink)",
+                                        }}
+                                    >
                                         {record.category}
                                     </span>
                                     <span
@@ -85,7 +91,8 @@ export default function CategoryBreakdown({
                                     }}
                                 >
                                     <span style={{ fontSize: 10, color: "var(--ink-dim)" }}>
-                                        {record.total_beneficiaries_served.toLocaleString()} beneficiaries
+                                        {record.total_beneficiaries_served.toLocaleString()}{" "}
+                                        beneficiaries
                                     </span>
                                     <span style={{ fontSize: 10, color: "var(--ink-dim)" }}>
                                         ${(record.total_amount_paid / 1000).toFixed(0)}k paid
@@ -97,7 +104,14 @@ export default function CategoryBreakdown({
             </div>
 
             {records.length === 0 && (
-                <p style={{ fontSize: 12, color: "var(--ink-dim)", textAlign: "center", padding: 20 }}>
+                <p
+                    style={{
+                        fontSize: 12,
+                        color: "var(--ink-dim)",
+                        textAlign: "center",
+                        padding: 20,
+                    }}
+                >
                     No data available for {periodLabel}
                 </p>
             )}

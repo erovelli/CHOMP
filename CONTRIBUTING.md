@@ -25,15 +25,15 @@ This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md). By particip
 
 ## Ways to contribute
 
-| Type | Open an issue? | Open a PR? |
-|---|---|---|
-| Bug fix with a clear reproduction | Optional | Yes |
-| Typo / wording / docs tweak | No | Yes |
-| Dependency bump beyond Dependabot's scope | Yes (discuss first) | Yes |
-| New feature (category, layer, viz) | **Yes** — discuss before coding | After alignment |
-| Data-pipeline change (new SQL view, new export) | **Yes** — discuss first | After alignment |
-| Architectural change / major refactor | **Yes** — discuss first; file an [ADR](docs/adr/) in the PR | After alignment |
-| Data quality question (a number looks wrong) | Use the **Data Quality** issue template | Usually no code change |
+| Type                                            | Open an issue?                                              | Open a PR?             |
+| ----------------------------------------------- | ----------------------------------------------------------- | ---------------------- |
+| Bug fix with a clear reproduction               | Optional                                                    | Yes                    |
+| Typo / wording / docs tweak                     | No                                                          | Yes                    |
+| Dependency bump beyond Dependabot's scope       | Yes (discuss first)                                         | Yes                    |
+| New feature (category, layer, viz)              | **Yes** — discuss before coding                             | After alignment        |
+| Data-pipeline change (new SQL view, new export) | **Yes** — discuss first                                     | After alignment        |
+| Architectural change / major refactor           | **Yes** — discuss first; file an [ADR](docs/adr/) in the PR | After alignment        |
+| Data quality question (a number looks wrong)    | Use the **Data Quality** issue template                     | Usually no code change |
 
 Small PRs are welcomed without a tracking issue. Anything that changes behavior, adds dependencies, or touches the data shape should start with an issue.
 
@@ -55,12 +55,12 @@ npm run dev               # http://localhost:5173/medicaid-dent-policy/
 
 Useful scripts:
 
-| Command | Purpose |
-|---|---|
-| `npm run dev` | Vite dev server with HMR. |
-| `npm run build` | Production build (`tsc && vite build`). This is the command CI runs. |
-| `npm run preview` | Serve the production build locally. |
-| `npm run deploy` | Publish `dist/` to the `gh-pages` branch. Requires maintainer permissions. |
+| Command           | Purpose                                                                    |
+| ----------------- | -------------------------------------------------------------------------- |
+| `npm run dev`     | Vite dev server with HMR.                                                  |
+| `npm run build`   | Production build (`tsc && vite build`). This is the command CI runs.       |
+| `npm run preview` | Serve the production build locally.                                        |
+| `npm run deploy`  | Publish `dist/` to the `gh-pages` branch. Requires maintainer permissions. |
 
 **Editor setup:** the repo ships with an [`.editorconfig`](.editorconfig) that pins indentation and line endings. Recommended VS Code extensions: TypeScript, EditorConfig for VS Code, ESLint (once added).
 
@@ -78,11 +78,13 @@ Useful scripts:
   Types: `feat`, `fix`, `docs`, `refactor`, `chore`, `data`, `ci`, `test`, `perf`.
 
   Good:
+
   ```
   feat: lazy-load monthly ZIP3 data behind month slider
   ```
 
   Bad:
+
   ```
   updates
   ```

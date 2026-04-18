@@ -6,7 +6,7 @@
 
 ## Context
 
-The current NDJSON export of monthly ZIP3 data is **~61 MB uncompressed** (~15 MB gzipped). It's lazy-loaded behind the month slider, but when a user *does* touch it, they pay the full download up-front — the file has to arrive before any of the ~930 × 12 × 7 = ~78k monthly-region-year cells are usable.
+The current NDJSON export of monthly ZIP3 data is **~61 MB uncompressed** (~15 MB gzipped). It's lazy-loaded behind the month slider, but when a user _does_ touch it, they pay the full download up-front — the file has to arrive before any of the ~930 × 12 × 7 = ~78k monthly-region-year cells are usable.
 
 This is fine on broadband. It is not fine on a phone, and it is not fine if we ever want to reduce latency on first monthly interaction.
 
@@ -23,7 +23,7 @@ This reduces the byte budget of first-interaction from ~15 MB gzip to a viewport
 **Positive**
 
 - **Range-requested monthly data.** Only the visible ZIPs' time series are downloaded.
-- **Unified data path.** Geometry *and* data flow through the same PMTiles mechanism.
+- **Unified data path.** Geometry _and_ data flow through the same PMTiles mechanism.
 - **Smoother loading UX.** The "Loading monthly data…" spinner disappears.
 
 **Negative**
@@ -37,7 +37,7 @@ This reduces the byte budget of first-interaction from ~15 MB gzip to a viewport
 Proposed, not accepted, because:
 
 1. The NDJSON works today and is observably within tolerance on broadband.
-2. The PMTiles migration is ~1–2 days of build-script work, which is worth doing *after* the accessibility pass and the per-capita feature.
+2. The PMTiles migration is ~1–2 days of build-script work, which is worth doing _after_ the accessibility pass and the per-capita feature.
 
 ## Related
 

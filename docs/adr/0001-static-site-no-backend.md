@@ -15,7 +15,7 @@ Postgres ── API (FastAPI / Node) ── React SPA ── user
 This shape is familiar and flexible. It is also:
 
 - **Non-zero-cost to host.** An always-on API tier, even a small one, has a recurring bill.
-- **A privacy surface.** Even though the raw data is already public, an interactive API lets users *query patterns* the cell-suppression rules are designed to prevent (e.g. narrowly-scoped filters that effectively identify providers).
+- **A privacy surface.** Even though the raw data is already public, an interactive API lets users _query patterns_ the cell-suppression rules are designed to prevent (e.g. narrowly-scoped filters that effectively identify providers).
 - **A reliability burden.** The project has one maintainer. Every backend is eventually a pager.
 
 ## Decision
@@ -34,18 +34,18 @@ Ship the site as a **static bundle**. All data aggregations happen in Postgres a
 
 **Negative**
 
-- **No dynamic slicing.** If a user wants *"preventive claims in Worcester County among pediatric beneficiaries,"* we can't answer it without a re-export. The categorical axes (year × category × region) are pre-baked.
+- **No dynamic slicing.** If a user wants _"preventive claims in Worcester County among pediatric beneficiaries,"_ we can't answer it without a re-export. The categorical axes (year × category × region) are pre-baked.
 - **Payload is larger.** A server could deliver only the rows a user asked for; we ship the whole table. Mitigated by (a) lazy-loading monthly data, (b) gzip, (c) a planned migration of the monthly ZIP3 dataset to PMTiles (see [ADR 0002](0002-zip3-monthly-as-pmtiles.md)).
 - **Harder real-time feel.** First-load time is bounded by the size of the JSON files, not by a response from a query engine.
 
 ## Alternatives considered
 
-| Option | Why not |
-|---|---|
-| Full FastAPI / Express backend | Violates the zero-cost and privacy goals. |
-| Cloudflare Workers + D1 / Turso | Cheaper than a VM, still a runtime to own. Would be the natural next step if the use-case demands dynamic queries. |
-| Shiny / Observable notebook | Excellent for one-shot exploration; less good as a portable, self-contained app. |
-| Serverless-only (Netlify + read-only DB at the edge) | Adds complexity without a clear user benefit over pre-baked static files. |
+| Option                                               | Why not                                                                                                            |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Full FastAPI / Express backend                       | Violates the zero-cost and privacy goals.                                                                          |
+| Cloudflare Workers + D1 / Turso                      | Cheaper than a VM, still a runtime to own. Would be the natural next step if the use-case demands dynamic queries. |
+| Shiny / Observable notebook                          | Excellent for one-shot exploration; less good as a portable, self-contained app.                                   |
+| Serverless-only (Netlify + read-only DB at the edge) | Adds complexity without a clear user benefit over pre-baked static files.                                          |
 
 ## Related
 
