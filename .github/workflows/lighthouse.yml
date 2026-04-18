@@ -1,0 +1,37 @@
+name: Lighthouse
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Lighthouse audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build
+        env:
+          VITE_PROTOMAPS_API_KEY: ${{ secrets.VITE_PROTOMAPS_API_KEY }}
+        run: npm run build
+
+      - name: Install Lighthouse CI
+        run: npm install --no-save @lhci/cli@0.14.x
+
+      - name: Run Lighthouse CI
+        run: npx lhci autorun
+        env:
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}

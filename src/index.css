@@ -1,4 +1,6 @@
-*, *::before, *::after {
+*,
+*::before,
+*::after {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
@@ -12,15 +14,17 @@
     --border-dark: #c4bfb8;
     --ink: #1a1917;
     --ink-mid: #5c5750;
-    --ink-dim: #9a948d;
-    --accent: #c8460a;
+    --ink-dim: #6b655c;
+    --accent: #b94009;
     --accent-light: #f4e8e2;
     --ff-sans: "Libre Franklin", sans-serif;
     --ff-serif: "Source Serif 4", serif;
     --ff-mono: "IBM Plex Mono", monospace;
 }
 
-html, body, #root {
+html,
+body,
+#root {
     height: 100%;
     width: 100%;
     overflow: hidden;

@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/erovelli/medicaid-dent-policy/security/advisories/new
+    about: Report a security issue privately via GitHub Security Advisories. Do not open a public issue.
+  - name: Project documentation
+    url: https://github.com/erovelli/medicaid-dent-policy/blob/main/docs/ARCHITECTURE.md
+    about: Architecture and design notes — most "why does it work this way" questions are answered here.
+  - name: HHS Medicaid source data
+    url: https://data.cms.gov/
+    about: Questions about the underlying Medicaid dental claims data belong upstream at CMS, not here.

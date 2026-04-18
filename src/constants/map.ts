@@ -50,13 +50,13 @@ export const ZIP3_LINE_OPACITY = { selected: 1, default: 0.4 } as const;
 
 // ── Category mapping ──────────────────────────────────────────
 export const CATEGORY_TO_KEY: Record<string, LayerKey> = {
-    "Diagnostic": "diagnostic",
-    "Preventive": "preventive",
-    "Restorative": "restorative",
+    Diagnostic: "diagnostic",
+    Preventive: "preventive",
+    Restorative: "restorative",
     "Oral Surgery": "oral_surgery",
-    "Orthodontics": "orthodontics",
-    "Endodontics": "endodontics",
-    "Periodontics": "periodontics",
+    Orthodontics: "orthodontics",
+    Endodontics: "endodontics",
+    Periodontics: "periodontics",
     "Adjunctive General Services": "adjunctive",
     "Prosthodontics (removable)": "prosthodontics",
     "Prosthodontics (fixed)": "prosthodontics",

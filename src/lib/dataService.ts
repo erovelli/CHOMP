@@ -36,7 +36,9 @@ export async function loadAnnualData(): Promise<void> {
     ]);
     stateAnnualCache = stateData;
     zip3AnnualCache = zip3Data;
-    console.log(`Loaded annual data: ${Object.keys(stateData).length} states, ${Object.keys(zip3Data).length} zip3`);
+    console.log(
+        `Loaded annual data: ${Object.keys(stateData).length} states, ${Object.keys(zip3Data).length} zip3`,
+    );
 }
 
 export function getStateAnnualData(): Record<string, DataRecord[]> {
@@ -58,7 +60,9 @@ export async function loadMonthlyData(): Promise<void> {
     ]);
     stateMonthlyCache = stateData;
     zip3MonthlyCache = zip3Data;
-    console.log(`Loaded monthly data: ${Object.keys(stateData).length} states, ${Object.keys(zip3Data).length} zip3`);
+    console.log(
+        `Loaded monthly data: ${Object.keys(stateData).length} states, ${Object.keys(zip3Data).length} zip3`,
+    );
 }
 
 export function getMonthlyRecords(id: string, level: "state" | "zip3"): MonthlyDataRecord[] {

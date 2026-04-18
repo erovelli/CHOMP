@@ -1,5 +1,10 @@
 import { useMapStore } from "../../../lib/store";
-import { HEADER_HEIGHT, Z_INDEX, DETAIL_PANEL_WIDTH, PANEL_TRANSITION } from "../../../constants/layout";
+import {
+    HEADER_HEIGHT,
+    Z_INDEX,
+    DETAIL_PANEL_WIDTH,
+    PANEL_TRANSITION,
+} from "../../../constants/layout";
 import PanelContent from "./PanelContent";
 
 export default function DetailPanel() {

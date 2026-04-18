@@ -11,14 +11,30 @@ import {
     getValueForRegion,
 } from "../../lib/dataService";
 import {
-    MAP_CENTER, MAP_ZOOM, MAP_MIN_ZOOM, MAP_MAX_ZOOM,
-    STATES_SOURCE, STATES_FILL, STATES_STROKE, STATES_LAYER, STATES_ID_PROP,
-    ZIP3_SOURCE, ZIP3_FILL, ZIP3_STROKE, ZIP3_LAYER, ZIP3_ID_PROP,
+    MAP_CENTER,
+    MAP_ZOOM,
+    MAP_MIN_ZOOM,
+    MAP_MAX_ZOOM,
+    STATES_SOURCE,
+    STATES_FILL,
+    STATES_STROKE,
+    STATES_LAYER,
+    STATES_ID_PROP,
+    ZIP3_SOURCE,
+    ZIP3_FILL,
+    ZIP3_STROKE,
+    ZIP3_LAYER,
+    ZIP3_ID_PROP,
     FALLBACK_BG_COLOR,
-    STROKE_COLOR_ACTIVE, STROKE_COLOR_DEFAULT_STATES, STROKE_COLOR_DEFAULT_ZIP3,
-    STATES_FILL_OPACITY, ZIP3_FILL_OPACITY,
-    STATES_LINE_WIDTH, ZIP3_LINE_WIDTH,
-    STATES_LINE_OPACITY, ZIP3_LINE_OPACITY,
+    STROKE_COLOR_ACTIVE,
+    STROKE_COLOR_DEFAULT_STATES,
+    STROKE_COLOR_DEFAULT_ZIP3,
+    STATES_FILL_OPACITY,
+    ZIP3_FILL_OPACITY,
+    STATES_LINE_WIDTH,
+    ZIP3_LINE_WIDTH,
+    STATES_LINE_OPACITY,
+    ZIP3_LINE_OPACITY,
 } from "../../constants/map";
 
 // ── Layer helpers ────────────────────────────────────────────
@@ -63,14 +79,18 @@ function addStatesLayers(map: maplibregl.Map) {
             paint: {
                 "line-color": [
                     "case",
-                    ["boolean", ["feature-state", "selected"], false], STROKE_COLOR_ACTIVE,
-                    ["boolean", ["feature-state", "hover"], false], STROKE_COLOR_ACTIVE,
+                    ["boolean", ["feature-state", "selected"], false],
+                    STROKE_COLOR_ACTIVE,
+                    ["boolean", ["feature-state", "hover"], false],
+                    STROKE_COLOR_ACTIVE,
                     STROKE_COLOR_DEFAULT_STATES,
                 ],
                 "line-width": [
                     "case",
-                    ["boolean", ["feature-state", "selected"], false], STATES_LINE_WIDTH.selected,
-                    ["boolean", ["feature-state", "hover"], false], STATES_LINE_WIDTH.hover,
+                    ["boolean", ["feature-state", "selected"], false],
+                    STATES_LINE_WIDTH.selected,
+                    ["boolean", ["feature-state", "hover"], false],
+                    STATES_LINE_WIDTH.hover,
                     STATES_LINE_WIDTH.default,
                 ],
                 "line-opacity": [
@@ -124,14 +144,18 @@ function addZip3Layers(map: maplibregl.Map) {
             paint: {
                 "line-color": [
                     "case",
-                    ["boolean", ["feature-state", "selected"], false], STROKE_COLOR_ACTIVE,
-                    ["boolean", ["feature-state", "hover"], false], STROKE_COLOR_ACTIVE,
+                    ["boolean", ["feature-state", "selected"], false],
+                    STROKE_COLOR_ACTIVE,
+                    ["boolean", ["feature-state", "hover"], false],
+                    STROKE_COLOR_ACTIVE,
                     STROKE_COLOR_DEFAULT_ZIP3,
                 ],
                 "line-width": [
                     "case",
-                    ["boolean", ["feature-state", "selected"], false], ZIP3_LINE_WIDTH.selected,
-                    ["boolean", ["feature-state", "hover"], false], ZIP3_LINE_WIDTH.hover,
+                    ["boolean", ["feature-state", "selected"], false],
+                    ZIP3_LINE_WIDTH.selected,
+                    ["boolean", ["feature-state", "hover"], false],
+                    ZIP3_LINE_WIDTH.hover,
                     ZIP3_LINE_WIDTH.default,
                 ],
                 "line-opacity": [
@@ -147,11 +171,7 @@ function addZip3Layers(map: maplibregl.Map) {
 
 // ── Paint feature states from data caches ────────────────────
 
-function paintAllFeatureStates(
-    map: maplibregl.Map,
-    year: string,
-    activeLayer: LayerKey,
-) {
+function paintAllFeatureStates(map: maplibregl.Map, year: string, activeLayer: LayerKey) {
     const stateData = getStateAnnualData();
     const zip3Data = getZip3AnnualData();
 
@@ -234,7 +254,11 @@ export default function MapContainer() {
 
             if (selectedStateRef.current) {
                 map.current.setFeatureState(
-                    { source: STATES_SOURCE, sourceLayer: STATES_LAYER, id: selectedStateRef.current },
+                    {
+                        source: STATES_SOURCE,
+                        sourceLayer: STATES_LAYER,
+                        id: selectedStateRef.current,
+                    },
                     { selected: false },
                 );
             }
@@ -252,12 +276,18 @@ export default function MapContainer() {
                 { selected: true },
             );
             map.current.setPaintProperty(
-                STATES_FILL, "fill-color",
+                STATES_FILL,
+                "fill-color",
                 buildColorExpression(hoveredStateRef.current, postal, STATES_ID_PROP),
             );
 
             const records = getStateAnnualData()[postal] ?? [];
-            const detail: RegionDetail = { id: postal, name: name || postal, level: "state", records };
+            const detail: RegionDetail = {
+                id: postal,
+                name: name || postal,
+                level: "state",
+                records,
+            };
             setSelectedRegion(postal, detail);
             setSelectedState(postal);
             dismissHint();
@@ -284,7 +314,8 @@ export default function MapContainer() {
                 { selected: true },
             );
             map.current.setPaintProperty(
-                ZIP3_FILL, "fill-color",
+                ZIP3_FILL,
+                "fill-color",
                 buildColorExpression(hoveredZip3Ref.current, zip3, ZIP3_ID_PROP),
             );
 
@@ -307,7 +338,11 @@ export default function MapContainer() {
 
             if (hoveredStateRef.current && hoveredStateRef.current !== postal) {
                 map.current.setFeatureState(
-                    { source: STATES_SOURCE, sourceLayer: STATES_LAYER, id: hoveredStateRef.current },
+                    {
+                        source: STATES_SOURCE,
+                        sourceLayer: STATES_LAYER,
+                        id: hoveredStateRef.current,
+                    },
                     { hover: false },
                 );
             }
@@ -318,7 +353,8 @@ export default function MapContainer() {
                 { hover: true },
             );
             map.current.setPaintProperty(
-                STATES_FILL, "fill-color",
+                STATES_FILL,
+                "fill-color",
                 buildColorExpression(postal, selectedStateRef.current, STATES_ID_PROP),
             );
 
@@ -352,7 +388,8 @@ export default function MapContainer() {
                 { hover: true },
             );
             map.current.setPaintProperty(
-                ZIP3_FILL, "fill-color",
+                ZIP3_FILL,
+                "fill-color",
                 buildColorExpression(zip3, selectedZip3Ref.current, ZIP3_ID_PROP),
             );
 
@@ -379,7 +416,8 @@ export default function MapContainer() {
         hoveredStateRef.current = null;
         setHovered(null, null, null);
         map.current.setPaintProperty(
-            STATES_FILL, "fill-color",
+            STATES_FILL,
+            "fill-color",
             buildColorExpression(null, selectedStateRef.current, STATES_ID_PROP),
         );
     }, [setHovered]);
@@ -397,7 +435,8 @@ export default function MapContainer() {
         hoveredZip3Ref.current = null;
         setHovered(null, null, null);
         map.current.setPaintProperty(
-            ZIP3_FILL, "fill-color",
+            ZIP3_FILL,
+            "fill-color",
             buildColorExpression(null, selectedZip3Ref.current, ZIP3_ID_PROP),
         );
     }, [setHovered]);
@@ -443,8 +482,14 @@ export default function MapContainer() {
                 attributionControl: false,
             });
 
-            map.current.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
-            map.current.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+            map.current.addControl(
+                new maplibregl.AttributionControl({ compact: true }),
+                "bottom-right",
+            );
+            map.current.addControl(
+                new maplibregl.NavigationControl({ showCompass: false }),
+                "bottom-right",
+            );
 
             map.current.on("load", async () => {
                 if (!map.current) return;
@@ -473,8 +518,12 @@ export default function MapContainer() {
             map.current = null;
         };
     }, [
-        handleStateClick, handleStateMouseMove, handleStateMouseLeave,
-        handleZip3Click, handleZip3MouseMove, handleZip3MouseLeave,
+        handleStateClick,
+        handleStateMouseMove,
+        handleStateMouseLeave,
+        handleZip3Click,
+        handleZip3MouseMove,
+        handleZip3MouseLeave,
     ]);
 
     return (

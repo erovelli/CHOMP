@@ -55,9 +55,7 @@ export default function LayerControl() {
                             gap: 10,
                             width: "100%",
                             padding: "9px 14px",
-                            background: isActive
-                                ? "var(--accent-light)"
-                                : "transparent",
+                            background: isActive ? "var(--accent-light)" : "transparent",
                             border: "none",
                             borderBottom: "1px solid var(--border)",
                             cursor: "pointer",
@@ -66,15 +64,13 @@ export default function LayerControl() {
                         }}
                         onMouseEnter={(e) => {
                             if (!isActive)
-                                (
-                                    e.currentTarget as HTMLButtonElement
-                                ).style.background = "var(--surface2)";
+                                (e.currentTarget as HTMLButtonElement).style.background =
+                                    "var(--surface2)";
                         }}
                         onMouseLeave={(e) => {
                             if (!isActive)
-                                (
-                                    e.currentTarget as HTMLButtonElement
-                                ).style.background = "transparent";
+                                (e.currentTarget as HTMLButtonElement).style.background =
+                                    "transparent";
                         }}
                     >
                         <div
@@ -92,9 +88,7 @@ export default function LayerControl() {
                                     display: "block",
                                     fontSize: 12,
                                     fontWeight: 500,
-                                    color: isActive
-                                        ? "var(--accent)"
-                                        : "var(--ink)",
+                                    color: isActive ? "var(--accent)" : "var(--ink)",
                                     lineHeight: 1.2,
                                 }}
                             >

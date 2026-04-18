@@ -1,8 +1,11 @@
 import MapContainer from "./components/map/MapContainer";
 import Header from "./components/ui/Header";
 import { HEADER_HEIGHT } from "./constants/layout";
+import { useUrlSync } from "./lib/useUrlSync";
 
 export default function App() {
+    useUrlSync();
+
     return (
         <div style={{ position: "relative", width: "100vw", height: "100vh" }}>
             <Header />
