@@ -1,0 +1,108 @@
+name: Bug report
+description: Something in the app behaves incorrectly or breaks.
+title: "[bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. The more specific you can be about
+        how to reproduce it, the faster it gets fixed.
+
+        > Please check existing issues first — many bugs are already tracked.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One or two sentences describing what's wrong.
+      placeholder: When I select Massachusetts and switch to 2023, the detail panel shows stale counts from 2022.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal sequence of actions that triggers the bug.
+      value: |
+        1. Open https://erovelli.github.io/medicaid-dent-policy/
+        2. Click on …
+        3. Select …
+        4. Observe …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened? Paste any console errors verbatim.
+    validations:
+      required: true
+
+  - type: input
+    id: url
+    attributes:
+      label: URL (if applicable)
+      description: A deep link or snapshot URL where the bug is visible.
+      placeholder: https://erovelli.github.io/medicaid-dent-policy/
+
+  - type: dropdown
+    id: browser
+    attributes:
+      label: Browser
+      options:
+        - Chrome (desktop)
+        - Firefox (desktop)
+        - Safari (desktop)
+        - Edge (desktop)
+        - Chrome (Android)
+        - Safari (iOS)
+        - Other (note below)
+    validations:
+      required: true
+
+  - type: input
+    id: browser-version
+    attributes:
+      label: Browser version / OS
+      placeholder: Chrome 126 on macOS 14.5
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - Blocker (site unusable)
+        - Major (core feature broken)
+        - Minor (visual / cosmetic)
+        - Nitpick
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots, GIFs, or console logs
+      description: Drag-and-drop attachments; paste text logs in triple-backtick blocks.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+        - label: I can reproduce this on the latest deployed version.
+          required: true

@@ -1,0 +1,94 @@
+name: Data quality issue
+description: A number in the map or detail panel looks wrong, stale, or implausible.
+title: "[data]: "
+labels: ["data-quality", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Data-quality reports are the most valuable kind of feedback this project gets.
+        Please include enough detail that the number is unambiguous and the expectation
+        is falsifiable.
+
+        **Note:** HHS suppresses any provider-month cell with <12 claims or <12 unique
+        beneficiaries. Missing data at fine grain is often *intentional*, not a bug.
+
+  - type: input
+    id: region
+    attributes:
+      label: Region
+      description: State postal code or 3-digit ZIP.
+      placeholder: MA, 02139 (→ enter 021), etc.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: granularity
+    attributes:
+      label: Granularity
+      options:
+        - State × year (annual)
+        - State × month
+        - ZIP3 × year (annual)
+        - ZIP3 × month
+    validations:
+      required: true
+
+  - type: input
+    id: period
+    attributes:
+      label: Period
+      description: Year (and month, if monthly).
+      placeholder: 2023, or 2023-06
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - All Categories
+        - Diagnostic
+        - Preventive
+        - Restorative
+        - Oral Surgery
+        - Orthodontics
+        - Endodontics
+        - Periodontics
+        - Adjunctive General
+        - Prosthodontics
+    validations:
+      required: true
+
+  - type: textarea
+    id: observed
+    attributes:
+      label: Value shown in the map
+      description: Exactly what the tooltip / detail panel displays.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Value you expected, and why
+      description: Include any cross-reference (HHS dashboard, state report, peer-reviewed study).
+    validations:
+      required: true
+
+  - type: textarea
+    id: source
+    attributes:
+      label: Reference / source
+      description: Link or citation for your expected value. A cross-reference is what makes this actionable.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I've read the InfoModal about HHS cell suppression and NPI-to-practice-location limitations.
+          required: true
+        - label: The discrepancy is not explained by a definitional difference (HCPCS categorization, claim vs. encounter, gross vs. paid).
+          required: true

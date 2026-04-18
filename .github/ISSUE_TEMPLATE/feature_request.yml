@@ -1,0 +1,63 @@
+name: Feature request
+description: Propose a new capability, visualization, or control.
+title: "[feat]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to propose something. Please discuss here before
+        opening a PR — a short alignment thread saves a long reverted diff.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What question, workflow, or user pain motivates this request?
+      placeholder: As a state Medicaid analyst, I want to compare my state's preventive utilization to the national median…
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you build? Be concrete about UI, data, and behavior.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What else did you think about, and why did you rule it out?
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - Visualization / UX
+        - New data layer (requires SQL + export change)
+        - Accessibility
+        - Performance
+        - Developer experience
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: data-impact
+    attributes:
+      label: Data-pipeline impact
+      description: Does this require new SQL views, new NDJSON exports, or a change to CATEGORY_TO_KEY? If yes, sketch the shape.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I searched existing issues and the roadmap; this isn't already tracked.
+          required: true
+        - label: I've read CONTRIBUTING.md and understand that architectural changes should discuss an ADR.
+          required: true
