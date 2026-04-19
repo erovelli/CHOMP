@@ -1,6 +1,6 @@
 <!--
-Thank you for the PR. Please fill every section — write "N/A" if a section does
-not apply. Reviewers read top-to-bottom and skip PRs that hide their context.
+Thanks for the PR. Please fill every section — write "N/A" if a section does
+not apply. Reviewers read top-to-bottom and skip PRs that hide the context.
 -->
 
 ## Summary
@@ -11,7 +11,7 @@ not apply. Reviewers read top-to-bottom and skip PRs that hide their context.
 
 <!--
 What prompted this change? Link the issue it closes, the ADR it implements, or
-the upstream report it responds to. If there's no issue, explain the trigger
+the upstream report it responds to. Without an issue, explain the trigger
 here. "Closes #123" on its own line will auto-close the issue on merge.
 -->
 
@@ -35,11 +35,11 @@ Closes #
 -
 -
 
-## What I considered and didn't pick
+## Alternatives considered and not picked
 
 <!--
 The single most useful section for a reviewer. Name the alternative approach,
-say why you didn't take it. If there was no real fork in the road, write
+state why it wasn't taken. If there was no real fork in the road, write
 "nothing non-obvious".
 -->
 
@@ -65,16 +65,16 @@ say why you didn't take it. If there was no real fork in the road, write
 
 - [ ] `npm run build` passes locally
 - [ ] `npx tsc --noEmit` reports no errors
-- [ ] I clicked through the happy path in a browser (state → ZIP3 → year → month → category → close panel)
+- [ ] Happy path clicked through in a browser (state → ZIP3 → year → month → category → close panel)
 - [ ] No `console.log` debug statements in shipped code
 - [ ] No unused imports, types, or dead files
 - [ ] README, ARCHITECTURE, or an ADR updated if load-bearing behavior changed
 - [ ] Accessibility: interactive controls reachable by keyboard; contrast meets WCAG AA
-- [ ] I've read [CONTRIBUTING.md](../CONTRIBUTING.md)
+- [ ] [CONTRIBUTING.md](../CONTRIBUTING.md) has been read
 
 ## Reviewer notes
 
 <!--
-Optional. Highlight any area you'd like particular scrutiny on, or known
-follow-ups you're deferring to a separate PR.
+Optional. Highlight any area deserving particular scrutiny, or known
+follow-ups deferred to a separate PR.
 -->

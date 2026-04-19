@@ -15,8 +15,8 @@ Postgres ── API (FastAPI / Node) ── React SPA ── user
 This shape is familiar and flexible. It is also:
 
 - **Non-zero-cost to host.** An always-on API tier, even a small one, has a recurring bill.
-- **A privacy surface.** Even though the raw data is already public, an interactive API lets users _query patterns_ the cell-suppression rules are designed to prevent (e.g. narrowly-scoped filters that effectively identify providers).
-- **A reliability burden.** The project has one maintainer. Every backend is eventually a pager.
+- **A privacy surface.** Even though the raw data is already public, an interactive API lets callers _query patterns_ the cell-suppression rules are designed to prevent (e.g. narrowly-scoped filters that effectively identify providers).
+- **A reliability burden.** The project has a small volunteer maintainer team. Every backend is eventually a pager.
 
 ## Decision
 
@@ -27,15 +27,15 @@ Ship the site as a **static bundle**. All data aggregations happen in Postgres a
 **Positive**
 
 - **$0 hosting.** GitHub Pages absorbs the traffic.
-- **Privacy by construction.** Users can only access the aggregations I chose to publish. No query can exceed that surface.
+- **Privacy by construction.** Only the published aggregations are accessible. No query can exceed that surface.
 - **Trivial CDN story.** Static files → global edge caches for free.
 - **Reproducible.** Every artifact in `public/data/` corresponds to a specific commit of the SQL in `migrations/`. Rebuilding is a single `bash` invocation.
 - **Frontend is decoupled from backend.** The NDJSON contract lets the pipeline evolve (new views, different grain) without breaking the frontend as long as file names and shapes hold.
 
 **Negative**
 
-- **No dynamic slicing.** If a user wants _"preventive claims in Worcester County among pediatric beneficiaries,"_ we can't answer it without a re-export. The categorical axes (year × category × region) are pre-baked.
-- **Payload is larger.** A server could deliver only the rows a user asked for; we ship the whole table. Mitigated by (a) lazy-loading monthly data, (b) gzip, (c) a planned migration of the monthly ZIP3 dataset to PMTiles (see [ADR 0002](0002-zip3-monthly-as-pmtiles.md)).
+- **No dynamic slicing.** A query such as _"preventive claims in Worcester County among pediatric beneficiaries"_ cannot be answered without a re-export. The categorical axes (year × category × region) are pre-baked.
+- **Payload is larger.** A server could deliver only the rows a caller asked for; a static bundle ships the whole table. Mitigated by (a) lazy-loading monthly data, (b) gzip, (c) a planned migration of the monthly ZIP3 dataset to PMTiles (see [ADR 0002](0002-zip3-monthly-as-pmtiles.md)).
 - **Harder real-time feel.** First-load time is bounded by the size of the JSON files, not by a response from a query engine.
 
 ## Alternatives considered

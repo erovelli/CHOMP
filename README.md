@@ -23,7 +23,7 @@ A full-stack data visualization project that transforms ~60 GB of raw HHS Open D
 
 ## Why this exists
 
-On **February 8, 2026**, the U.S. Department of Health and Human Services released the first public, provider-level dataset of Medicaid dental claims spanning 2018–2024. The release is technically remarkable and practically unusable: tens of millions of rows keyed by NPI and HCPCS code, with no geography attached. Policymakers, oral-health researchers, and state Medicaid offices can ask _"how much is being spent on preventive dental care in my state?"_ — but answering that question requires joining the release against the **NPPES provider registry**, categorizing ~1,000 HCPCS codes, aggregating across time, and rendering at an appropriate geographic grain.
+On **February 8, 2026**, the U.S. Department of Health and Human Services released the first public, provider-level dataset of Medicaid dental claims spanning 2018–2024. The release is technically remarkable and practically unusable: tens of millions of rows keyed by NPI and HCPCS code, with no geography attached. Policymakers, oral-health researchers, and state Medicaid offices can pose the question _"how much is being spent on preventive dental care in a given state?"_ — but answering that question requires joining the release against the **NPPES provider registry**, categorizing ~1,000 HCPCS codes, aggregating across time, and rendering at an appropriate geographic grain.
 
 This project does all of that end-to-end, and makes the result explorable in a browser tab.
 
@@ -38,7 +38,7 @@ The design is deliberately constrained:
 |                  |                                                                                                                                                                                          |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Map**          | Full-nation choropleth at two zoom levels: states (PMTiles vector), ZIP3 areas (PMTiles vector). Feature-state driven recoloring — no GeoJSON re-parse on year/category change.          |
-| **Controls**     | Nine procedure-category layers (plus "All"), 2018–2024 year selector, month slider that lazy-loads a 61 MB monthly dataset only when first used.                                         |
+| **Controls**     | Nine procedure-category layers (plus "All"), 2018–2024 year selector, month slider that lazy-loads a 61 MB monthly dataset only on first use.                                            |
 | **Detail panel** | Per-region stats — total claims, beneficiaries served, dollars paid, avg $/claim — and a ranked category breakdown for the selected period.                                              |
 | **Tooltip**      | Pixel-anchored hover readout; respects feature-state hover/selected to drive stroke weights and fills without reconfiguring paint properties.                                            |
 | **Info modal**   | Surfaces the caveats that matter: HHS cell-suppression (<12 claims or <12 beneficiaries/month), interstate variation in Medicaid dental coverage, and NPI/practice-location limitations. |
@@ -90,7 +90,7 @@ The design is deliberately constrained:
           └──────────────────────────────────────────────────────────────────────┘
 ```
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the long-form write-up, including the specific trade-offs I picked and the ones I deliberately deferred.
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the long-form write-up, including the specific trade-offs chosen and the ones deliberately deferred.
 
 ## Stack & rationale
 
@@ -98,23 +98,23 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the long-form write-up, i
 | --------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Renderer**    | MapLibre GL JS                                   | GPU-accelerated, hardware-composited vector tiles; supports `setFeatureState` for per-feature updates without rebuilding sources.                                  |
 | **Tile format** | [PMTiles](https://protomaps.com/docs/pmtiles) v3 | Single-file vector tiles served over static HTTPS with range requests — no tile server to run.                                                                     |
-| **Basemap**     | Protomaps                                        | Paid-tier vector basemap (key in `.env.local`); gracefully degrades to a blank background if no key is present.                                                    |
+| **Basemap**     | Protomaps                                        | Paid-tier vector basemap (key in `.env.local`); gracefully degrades to a blank background when no key is present.                                                  |
 | **Framework**   | React 18 + Vite 5                                | Fast HMR; `React.StrictMode` in dev catches double-mount regressions in the map lifecycle.                                                                         |
 | **Language**    | TypeScript `strict`                              | Every layer is typed end-to-end: `LayerKey` union ↔ `LAYER_CONFIGS` record enforces exhaustiveness at compile time.                                                |
 | **State**       | [Zustand](https://zustand-demo.pmnd.rs/)         | Single small store with selector-hooks; avoids the provider-tree churn a Context-based solution would introduce in a map app that re-renders on every hover event. |
 | **Data shape**  | NDJSON of `{ key: records[] }` objects           | Streamable, append-only, gzips well. The browser consumes all four files through a single `fetchNDJSON` helper.                                                    |
 | **Pipeline**    | PostgreSQL + psql                                | SQL is the right language for this transformation. Views are version-controlled in `migrations/`; export orchestrated by a single `bash` script.                   |
-| **Hosting**     | GitHub Pages (static)                            | Zero-infra. Site is ~6 MB gzipped including both PMTiles archives.                                                                                                 |
+| **Hosting**     | GitHub Pages (static)                            | Zero-infra. The site is ~6 MB gzipped including both PMTiles archives.                                                                                             |
 
 ## Engineering highlights
 
-A few decisions I'd call out in a code review:
+A few decisions worth calling out in a code review:
 
-- **Feature-state paint expressions instead of data-driven filters.** Hover/selection/value are all feature-state fields; the paint expression (`src/lib/mapStyles.ts`) interpolates over them. Switching year or category dispatches a single `setFeatureState` loop — no source rebuild, no GL re-upload.
+- **Feature-state paint expressions instead of data-driven filters.** Hover/selection/value are all feature-state fields; the paint expression (`src/lib/mapStyles.ts`) interpolates over those fields. Switching year or category dispatches a single `setFeatureState` loop — no source rebuild, no GL re-upload.
 - **Two-tier loading.** Annual data (~5 MB) is fetched on map `load` so the full-nation view is immediate. Monthly data (~61 MB) is lazy-loaded on first interaction with the month slider, guarded by a `monthlyDataLoaded` flag in the store.
 - **Single source of truth for procedure categories.** `CATEGORY_TO_KEY` in [`src/constants/map.ts`](src/constants/map.ts) maps HHS category strings to the app's `LayerKey` union. `CATEGORY_COLORS` and `LAYER_ORDER` are _derived_ from it — adding a new category is a one-line change.
 - **Refs, not state, for hover and selection IDs.** The map's event handlers run on every mouse move at 60 Hz; routing those through React state would trigger cascading re-renders of the entire tree. Hover/selection are held in `useRef` and written back to MapLibre's feature-state directly.
-- **Constants are colocated.** `src/constants/{map,time,layout,infoModal}.ts` means there are no magic numbers in component files. Every z-index, transition, and API path is nameable and greppable.
+- **Constants are colocated.** `src/constants/{map,time,layout,infoModal}.ts` means no magic numbers appear in component files. Every z-index, transition, and API path is nameable and greppable.
 - **Data pipeline mirrors the frontend.** The `provider_procedure_category_aggregate_{annual,monthly}_{state,zip3}` view names map 1:1 to the NDJSON files and to the `DATA_PATHS` constants — the naming discipline is deliberate.
 
 ## Getting started
@@ -163,7 +163,7 @@ The web app ships with pre-exported JSON under `public/data/`. To rebuild from s
 # 1. Load HHS + NPPES source data into Postgres
 psql "$DATABASE_URL" -f migrations/001_create_medicaid_schema.sql
 psql "$DATABASE_URL" -f migrations/002_create_nppes_schema.sql
-#    … ingest via your preferred tool (COPY, dbt, etc.)
+#    … ingest via any preferred tool (COPY, dbt, etc.)
 
 # 2. Build the transformed tables & views
 for f in migrations/003_*.sql migrations/004_*.sql migrations/005_*.sql \
@@ -178,7 +178,7 @@ bash scripts/export_views.sh public/data
 
 ### Deploy
 
-CI publishes to GitHub Pages on every push to `main` (see [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)). To push manually:
+CI publishes to GitHub Pages on every push to `main` (see [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)). For a manual push:
 
 ```bash
 npm run build
@@ -258,14 +258,14 @@ medicaid-dent-policy/
 
 ## License
 
-Released under the [MIT License](LICENSE). The underlying HHS, CMS, and Census datasets are public-domain U.S. Government works; please honor their individual terms of use when redistributing.
+Released under the [MIT License](LICENSE). The underlying HHS, CMS, and Census datasets are public-domain U.S. Government works; please honor the individual terms of use for each source when redistributing.
 
 ---
 
 <div align="center">
 
-Built by [**Evan Rovelli**](https://github.com/erovelli).
+Built by [@erovelli](https://github.com/erovelli), [@kennethliu64](https://github.com/kennethliu64), [@jakerobg](https://github.com/jakerobg), [@mattngaw](https://github.com/mattngaw), and [@clarkmorgan](https://github.com/clarkmorgan).
 
-_If you found this useful — for policy analysis, for a class, or as a reference — I'd love to hear about it._
+_Feedback from anyone finding this useful — for policy analysis, for a class, or as a reference — is always welcome._
 
 </div>

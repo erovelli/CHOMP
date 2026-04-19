@@ -28,7 +28,7 @@ provider_procedure_category_aggregate_{grain}_{geo}.json
 | `grain` | `annual` \| `monthly` | Temporal aggregation level. |
 | `geo`   | `state` \| `zip3`     | Spatial aggregation level.  |
 
-Four files total. Each view name in [`migrations/aggregate_views/`](../migrations/aggregate_views/) maps 1-to-1 to one output file — if you rename a view, rename the file, and update [`DATA_PATHS`](../src/constants/map.ts) to match. All three change in the same PR.
+Four files total. Each view name in [`migrations/aggregate_views/`](../migrations/aggregate_views/) maps 1-to-1 to one output file — renaming a view requires renaming the file, and updating [`DATA_PATHS`](../src/constants/map.ts) to match. All three change in the same PR.
 
 ## NDJSON envelope
 
@@ -44,7 +44,7 @@ Producer: [`scripts/sql/*.sql`](../scripts/sql/) invoked by [`scripts/export_vie
 
 Consumer: [`fetchNDJSON`](../src/lib/dataService.ts) splits on `\n`, `JSON.parse`s each line, and merges into an in-memory `Record<regionId, Record[]>` cache.
 
-**Why NDJSON, not JSON?** Gzips better than a wrapping array; streamable if we ever move to incremental load; `psql` emits it with no post-processing.
+**Why NDJSON, not JSON?** Gzips better than a wrapping array; streamable if a future iteration moves to incremental load; `psql` emits it with no post-processing.
 
 ## Record schema
 
@@ -119,22 +119,22 @@ Frontend mapping from these category strings to the nine `LayerKey` values is in
 
 - **HHS suppresses cells with <12 claims or <12 unique beneficiaries per provider-month.** Those rows are absent from the raw HHS release and therefore absent from every downstream aggregate. This is surfaced in the InfoModal on first visit.
 - **Missing periods are absent, not zero.** A ZIP3 with no preventive claims in March 2022 has no `("2022-03", "Preventive")` record — the UI must treat missing as zero for summation but must _not_ plot a zero point on a time series.
-- **Uncategorized rows are dropped at export**, not at ingest. If a new HCPCS range appears in a future HHS release it will show up under `Uncategorized` until the `CASE` expression is extended.
-- **`state = NULL` rows are dropped at export.** Providers whose NPI record has no practice state are omitted from the state-grain files; they appear (when their ZIP5 is known) in the ZIP3-grain files.
+- **Uncategorized rows are dropped at export**, not at ingest. A new HCPCS range appearing in a future HHS release will show up under `Uncategorized` until the `CASE` expression is extended.
+- **`state = NULL` rows are dropped at export.** Providers whose NPI record has no practice state are omitted from the state-grain files; those records appear (when the ZIP5 is known) in the ZIP3-grain files.
 
 ## Identifier formats
 
 - **State:** USPS two-letter postal code, uppercase. Matches the `postal` property on `states.pmtiles`. Source: NPPES `provider_business_practice_location_address_state_name`.
 - **ZIP3:** three-digit string, zero-padded (`"021"`, not `21`). Derived by `LEFT(zip5, 3)` in SQL. Matches the `3dig_zip` property on `zip3.pmtiles`.
-- **Period:** year as `"YYYY"`; month as `"YYYY-MM"`. Always strings, never numbers — this is deliberate so downstream code can't accidentally do arithmetic on them.
+- **Period:** year as `"YYYY"`; month as `"YYYY-MM"`. Always strings, never numbers — this is deliberate so downstream code can't accidentally do arithmetic on the values.
 
 ## Versioning
 
-These files are **not versioned in the URL**. A user's browser cache is invalidated by the Vite build hash on the HTML document, which forces a re-fetch of all data URLs.
+These files are **not versioned in the URL**. A browser cache is invalidated by the Vite build hash on the HTML document, which forces a re-fetch of all data URLs.
 
 If the schema ever breaks backward compatibility (e.g., renaming a field, changing `total_amount_paid` to cents), bump the cache-buster by either:
 
 1. Renaming the file (e.g., `..._annual_state_v2.json`) and updating [`DATA_PATHS`](../src/constants/map.ts) in the same PR, **or**
-2. Re-deploying the site; the fresh HTML has a new bundle hash and a fresh `BASE_URL` hash key, which functions as a cache-bust for downstream consumers who aren't hot-linking.
+2. Re-deploying the site; the fresh HTML has a new bundle hash and a fresh `BASE_URL` hash key, which functions as a cache-bust for downstream consumers not hot-linking.
 
-Option 1 is preferred for breaking schema changes because it keeps old consumers working until they update.
+Option 1 is preferred for breaking schema changes because old consumers keep working until the consumer code updates.

@@ -1,8 +1,8 @@
 # Architecture
 
-> **Audience:** engineers evaluating the codebase, contributors preparing a PR, and future-me in six months wondering why a given decision was made.
+> **Audience:** engineers evaluating the codebase, contributors preparing a PR, and a future reader wondering why a given decision was made.
 
-This document is the long-form complement to the [top-level README](../README.md). The README tells you _what_ the project is; this document tells you _why it's built the way it is_.
+This document is the long-form complement to the [top-level README](../README.md). The README describes _what_ the project is; this document describes _why it's built the way it is_.
 
 ## Contents
 
@@ -22,7 +22,7 @@ This document is the long-form complement to the [top-level README](../README.md
 
 The raw inputs are three large, public, and structurally incompatible datasets:
 
-| Dataset                                | Shape                   | Size                     | What it has                                  | What it's missing            |
+| Dataset                                | Shape                   | Size                     | What it has                                  | What is missing              |
 | -------------------------------------- | ----------------------- | ------------------------ | -------------------------------------------- | ---------------------------- |
 | HHS Open Data (Medicaid dental claims) | Per NPI × HCPCS × month | Tens of millions of rows | Claim counts, $ paid, beneficiaries served   | Any geography. Any category. |
 | CMS NPPES                              | Per NPI                 | ~9M rows, ~330 columns   | Provider name, practice location, taxonomies | No claim or spending data.   |
@@ -41,17 +41,17 @@ The "join everything, aggregate, serve over HTTP" problem is deliberately straig
             +Census                 NDJSON export             Static hosting
 ```
 
-There are exactly two runtimes in this project, and they are intentionally decoupled:
+There are exactly two runtimes in this project, intentionally decoupled:
 
-- **The build runtime** — a local Postgres database, the SQL under `migrations/`, and `scripts/export_views.sh`. Produces a handful of NDJSON files and PMTiles archives. Runs _on my laptop, manually, when source data updates._
+- **The build runtime** — a local Postgres database, the SQL under `migrations/`, and `scripts/export_views.sh`. Produces a handful of NDJSON files and PMTiles archives. Runs _on the maintainer's laptop, manually, when source data updates._
 - **The serving runtime** — React + Vite + MapLibre. Reads only the static artifacts. Runs _in every visitor's browser._
 
-The NDJSON files and `.pmtiles` archives are the **interface contract** between the two. Everything upstream of them can change without breaking the frontend, and vice versa, as long as the file names and schemas hold.
+The NDJSON files and `.pmtiles` archives are the **interface contract** between the two. Everything upstream of those artifacts can change without breaking the frontend, and vice versa, as long as the file names and schemas hold.
 
 This is the single most consequential architectural decision in the project, and it flows from two constraints:
 
 1. **Cost.** Zero-dollar hosting was a hard requirement.
-2. **Privacy.** The source data is public but a live backend would expose query patterns that the suppression rules (<12 claims / <12 beneficiaries per cell) are designed to prevent. Pre-aggregating at build time means users can only access the aggregations I chose to publish.
+2. **Privacy.** The source data is public but a live backend would expose query patterns that the suppression rules (<12 claims / <12 beneficiaries per cell) are designed to prevent. Pre-aggregating at build time means only the published aggregations are accessible.
 
 ## 3. Data pipeline
 
@@ -77,7 +77,7 @@ aggregate_views/
 
 A few deliberate choices:
 
-- **`_raw` suffix for staging.** The raw tables are treated as ingest targets and nothing else; they're dropped and recreated on every full rebuild. Downstream tables derive from them.
+- **`_raw` suffix for staging.** The raw tables are treated as ingest targets and nothing else; each one is dropped and recreated on every full rebuild. Downstream tables derive from the raw tables.
 - **Views, not materialized views, for aggregates.** These are computed once at export time and never queried by the runtime. Views keep the schema declarative and make the SQL diffable.
 - **HCPCS categorization happens exactly once**, in `006`. Every downstream view reads the `category` column. The HCPCS → category mapping is one CASE expression, mirrored in the frontend's `CATEGORY_TO_KEY` — two copies of the same fact, and that is intentional: the SQL is the source of truth for the backend; the TS is the source of truth for the UI shell.
 
@@ -88,12 +88,12 @@ A few deliberate choices:
 The NDJSON format was picked because:
 
 - It **gzip-compresses** far better than repeated JSON array boilerplate.
-- It's **streamable** if we ever want to move to incremental load.
+- It's **streamable** if a future iteration moves to incremental load.
 - `psql -t -A` emits it natively with no post-processing.
 
 ### 3.3 Cell suppression
 
-HHS suppresses any provider-month-code cell with fewer than 12 claims or 12 unique beneficiaries. This is preserved end-to-end: suppressed rows are simply absent from the raw data, and the aggregations pass through only what they see. The absence is surfaced to the user through the InfoModal on first load, not hidden.
+HHS suppresses any provider-month-code cell with fewer than 12 claims or 12 unique beneficiaries. This is preserved end-to-end: suppressed rows are simply absent from the raw data, and the aggregations pass through only what arrives. The absence is surfaced through the InfoModal on first load, not hidden.
 
 ## 4. Frontend architecture
 
@@ -123,7 +123,7 @@ The shape is intentionally flat:
 
 - **One component owns the Map.** `MapContainer.tsx` is the only place where `maplibregl.Map` is instantiated, mutated, and torn down. Everything else reads from the Zustand store or from callbacks that route through it.
 - **No component composition frameworks.** No styled-components, Emotion, Tailwind, Radix, shadcn — just inline style objects on primitives. This project's UI is small enough that a component library would be more infrastructure than payoff, and portfolio-legibility is better served by vanilla React.
-- **Constants are siblings, not magic numbers.** Every duration, z-index, color, and layer name lives in `src/constants/`. Component files read them; they never hard-code.
+- **Constants are siblings, not magic numbers.** Every duration, z-index, color, and layer name lives in `src/constants/`. Component files read those constants; hard-coding is never used.
 
 ### 4.2 Types as contracts
 
@@ -187,7 +187,7 @@ const selectedStateRef = useRef<string | null>(null);
 // ...and the same for zip3
 ```
 
-These look like an escape hatch, but they're the right tool here. The alternative is to put them in Zustand and react to store changes — which would mean:
+These look like an escape hatch, but refs are the right tool here. The alternative is putting the IDs in Zustand and reacting to store changes — which would mean:
 
 - Every mouse-move triggers a Zustand write.
 - Every Zustand write would trigger a render of every subscribed component.
@@ -228,11 +228,11 @@ The 61 MB monthly ZIP3 file is the elephant in the room. It's deferred behind an
 
 ## 8. Trade-offs and deferred work
 
-Things I _could_ have done, considered, and chose not to:
+Options considered and deliberately deferred:
 
 | Trade-off                     | Decision     | Reasoning                                                                                                                                                                    |
 | ----------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Tests                         | No tests yet | The app is ~1k LOC and the shape is still moving. Tests would ossify the current design prematurely; I plan to add Vitest coverage once the API surface freezes.             |
+| Tests                         | No tests yet | The app is ~1k LOC and the shape is still moving. Tests would ossify the current design prematurely; Vitest coverage will be added once the API surface freezes.             |
 | CSS framework                 | None         | Inline styles are fine at this size. Moving to CSS-modules would be a chore-PR, not a value-PR.                                                                              |
 | ADA compliance                | Partial      | Keyboard nav works; focus rings on the picker need work; screen-reader annotations are not there yet. Tracked as a roadmap item.                                             |
 | Per-capita normalization      | Not yet      | Claim counts are directly comparable across ZIP3s of similar population. Adding enrollment as a denominator is a real feature; it needs its own data join and sanity checks. |
