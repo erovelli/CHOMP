@@ -4,4 +4,15 @@ dist
 .env
 .DS_Store
 .lighthouseci/
+
+# Local raw datasets (HHS CSV, NPPES zips, merge outputs)
 data/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Claude Code local state
+.claude/
