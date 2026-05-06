@@ -25,11 +25,86 @@ from __future__ import annotations
 
 import argparse
 import re
+import shutil
+import subprocess
 import sys
 import zipfile
+from contextlib import contextmanager
+from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
+
+# NBER's larger NPPES archives use deflate64 compression (method 9). Neither
+# Python's stdlib zipfile nor Windows' bundled tar/libarchive supports it.
+# We use stdlib zipfile to list contents (the central directory is
+# compression-agnostic) and shell out to 7-Zip to read member contents.
+# 7-Zip handles deflate64 (and every other zip variant in the wild).
+
+
+@lru_cache(maxsize=1)
+def _find_7z() -> str:
+    """Locate 7z.exe on PATH or in standard install locations."""
+    for name in ("7z", "7z.exe"):
+        p = shutil.which(name)
+        if p:
+            return p
+    for candidate in (
+        Path(r"C:\Program Files\7-Zip\7z.exe"),
+        Path(r"C:\Program Files (x86)\7-Zip\7z.exe"),
+    ):
+        if candidate.exists():
+            return str(candidate)
+    raise RuntimeError(
+        "7z.exe not found. Install 7-Zip from https://www.7-zip.org/ "
+        "(or run: winget install 7zip.7zip) and re-run."
+    )
+
+
+def _sniff_zip_member_header(zip_path: Path, member: str) -> list[str]:
+    """Read only the CSV header from a zip member, then kill the 7-Zip
+    process. Avoids decompressing the full ~3 GB just to grab column names —
+    and avoids the broken-pipe exit code that 7-Zip would otherwise raise
+    when we close the pipe after a partial read."""
+    sevenz = _find_7z()
+    proc = subprocess.Popen(
+        [sevenz, "e", "-so", str(zip_path), member],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        header = pd.read_csv(proc.stdout, nrows=0).columns.tolist()
+    finally:
+        # Force-kill rather than wait — we only consumed the first line.
+        proc.kill()
+        proc.wait()
+    return header
+
+
+@contextmanager
+def _open_zip_member(zip_path: Path, member: str):
+    """Stream a single zip member's contents via 7-Zip for FULL reads
+    (caller must consume the entire stream). Works for plain deflate AND
+    deflate64. Yields a binary file-like object suitable for pd.read_csv.
+    For header-only peeks, use _sniff_zip_member_header() instead."""
+    sevenz = _find_7z()
+    proc = subprocess.Popen(
+        [sevenz, "e", "-so", str(zip_path), member],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        yield proc.stdout
+    finally:
+        if proc.stdout is not None:
+            proc.stdout.close()
+        proc.wait()
+        if proc.returncode != 0:
+            err_bytes = proc.stderr.read() if proc.stderr else b""
+            raise RuntimeError(
+                f"7z failed extracting {member!r} from {zip_path.name} "
+                f"(exit {proc.returncode}): {err_bytes.decode(errors='replace').strip()}"
+            )
 
 NPPES_FILENAME_RE = re.compile(r"npi_raw_(\d{6})\.zip$", re.IGNORECASE)
 
@@ -151,8 +226,7 @@ def merge_one_month(
     """Merge one month and append to output_csv. Returns row count appended."""
     csv_name = _find_nppes_csv(nppes_zip)
 
-    with zipfile.ZipFile(nppes_zip) as z, z.open(csv_name) as f:
-        header = pd.read_csv(f, nrows=0).columns.tolist()
+    header = _sniff_zip_member_header(nppes_zip, csv_name)
 
     missing = [c for c in NPPES_ADDRESS_COLS if c not in header]
     if missing:
@@ -177,7 +251,7 @@ def merge_one_month(
     usecols = ["NPI", *NPPES_ADDRESS_COLS, country_col, *tax_code_cols, *tax_switch_cols]
     dtype = {c: "string" for c in usecols}
 
-    with zipfile.ZipFile(nppes_zip) as z, z.open(csv_name) as f:
+    with _open_zip_member(nppes_zip, csv_name) as f:
         nppes = pd.read_csv(f, usecols=usecols, dtype=dtype)
 
     primary = pd.Series(pd.NA, index=nppes.index, dtype="string")
@@ -196,7 +270,14 @@ def merge_one_month(
             country_col: "practice_country_code",
         }
     )
-    nppes["practice_zip5"] = nppes["_postal_code"].str[:5]
+    # NPPES postal codes are typically 9-char ZIP+4 unhyphenated (e.g., "071034521").
+    # Truncate to 5, then zfill to defend against any upstream-stripped leading zeros
+    # (e.g., a 4-char "7103" gets re-padded to "07103"). Empty strings -> NA so we
+    # don't fabricate "00000" out of nothing. Stored as string so leading zeros
+    # survive to_csv; downstream readers should pass dtype={'practice_zip5': 'string'}
+    # to avoid pandas auto-inferring int and dropping the leading zero on read.
+    zip5 = nppes["_postal_code"].str[:5]
+    nppes["practice_zip5"] = zip5.mask(zip5 == "", pd.NA).str.zfill(5)
     nppes_slim = nppes[
         [
             "NPI",
