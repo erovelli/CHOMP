@@ -151,6 +151,60 @@ SQL lives under `migrations/`, ordered numerically.
 
 A data-pipeline PR should touch all three layers (SQL, export script, frontend constant) when adding a new dataset, and none when refactoring a transform internally.
 
+### Python ingest / enrichment scripts (HHS×NPPES merge, ACS fetch, geocoding)
+
+The build-time data pipeline also includes Python scripts under `scripts/` for ingest, merging, and external API fetches that don't fit a SQL migration:
+
+- [`scripts/merge_hhs_nppes.py`](scripts/merge_hhs_nppes.py) — joins HHS dental claims to monthly NPPES snapshots.
+- [`scripts/fetch_acs_medicaid.py`](scripts/fetch_acs_medicaid.py) — pulls ACS C27007 (Medicaid enrollment) from the Census Data API for county and ZCTA, used as the per-enrollee denominator.
+- [`scripts/extract_geocoding_input.py`](scripts/extract_geocoding_input.py), [`scripts/join_geocoded.py`](scripts/join_geocoded.py) — handoff to and from the geocoding collaborator.
+- [`scripts/analyze_coverage.py`](scripts/analyze_coverage.py), [`scripts/diagnose_drops.py`](scripts/diagnose_drops.py), [`scripts/categorize_servicing_ids.py`](scripts/categorize_servicing_ids.py) — post-merge quality reporting.
+
+Conventions for these scripts:
+
+- **Dependencies:** add to [`requirements.txt`](requirements.txt). Prefer pure-Python wheels; if a C extension is required, surface a fallback (e.g., the merge script shells out to 7-Zip rather than depending on `zipfile-deflate64`).
+- **API keys:** read from the environment (`CENSUS_API_KEY`, etc.). Document the variable in [`.env.example`](.env.example) and the script's docstring; never commit a key.
+- **Cache external API responses** to disk under `data/<source>/raw/` so re-runs are free. Include a `--force` flag to invalidate the cache.
+- **Be polite to upstream APIs** — add a small delay between calls (the ACS fetch uses 0.5 s) and handle 404 / 5xx gracefully.
+- **Document jam values / sentinel handling** explicitly in the script and in [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md). Never silently coerce to zero.
+
+### Documenting data limitations
+
+[`docs/LIMITATIONS.md`](docs/LIMITATIONS.md) is the project's running ledger of data-quality issues, structural exclusions, and methodological caveats. Treat it as a load-bearing artifact, not commentary.
+
+**Add an entry there before merging code that:**
+
+- Discovers a new edge case in source data (HHS suppression, NPPES coverage gap, ACS undercount, geocoder failure mode, etc.).
+- Introduces a deliberate exclusion in a transform (a `WHERE` filter that drops rows, an inner join that silently loses NPIs, a `dropna()` that hides cells).
+- Adds a new external data source or API dependency (the Census API, a new geocoder, a state directory, etc.) — every source has its own quirks that need surfacing.
+- Surfaces a caveat that would change how a number should be interpreted in a publication (e.g., interstate Medicaid benefit variation, claims-processing lag in trailing months, ACS 5-year temporal smoothing).
+
+**Format the entry** to match the existing style: continue the `L##` ID sequence; pick the right category section (Source / Merge / Geocoding / ACS / Attribution — add a new section if none fits); use one of the severity emojis (🟥 🟨 ⬜) from the legend at the top of the file; include the **Issue**, **Impact**, and **Mitigation/Status** subsections.
+
+**If your PR fixes an existing limitation,** don't delete the entry — change its `Status` line to `Mitigated (PR #N)`. The historical record matters for a methods footnote later.
+
+**If your PR touches a number that's referenced in a limitation,** double-check the entry is still accurate and update if not.
+
+Reviewers will block a data-pipeline PR that adds a new exclusion or new data source without an accompanying `LIMITATIONS.md` entry.
+
+### Documenting data limitations
+
+[`docs/LIMITATIONS.md`](docs/LIMITATIONS.md) is the project's running ledger of data-quality issues, structural exclusions, and methodological caveats. Treat it as a load-bearing artifact, not commentary.
+
+**Add an entry there before merging code that:**
+
+- Discovers a new edge case in source data (HHS suppression, NPPES coverage gap, geocoder failure mode, etc.).
+- Introduces a deliberate exclusion in a transform (a `WHERE` filter that drops rows, an inner join that silently loses NPIs, a `dropna()` that hides cells).
+- Surfaces a caveat that would change how a number should be interpreted in a publication (e.g., interstate Medicaid benefit variation, claims-processing lag in trailing months).
+
+**Format the entry** to match the existing style: continue the `L##` ID sequence; pick the right category section (Source / Merge / Geocoding / Attribution); use one of the severity emojis (🟥 🟨 ⬜) from the legend at the top of the file; include the **Issue**, **Impact**, and **Mitigation/Status** subsections.
+
+**If your PR fixes an existing limitation,** don't delete the entry — change its `Status` line to `Mitigated (PR #N)`. The historical record matters for a methods footnote later.
+
+**If your PR touches a number that's referenced in a limitation,** double-check the entry is still accurate and update if not.
+
+Reviewers will block a data-pipeline PR that adds a new exclusion without an accompanying `LIMITATIONS.md` entry.
+
 ## Accessibility & performance expectations
 
 - **Keyboard:** all interactive controls (layer picker, year chips, month slider, modal close) must be reachable by Tab and operable by Enter/Space/Arrows.

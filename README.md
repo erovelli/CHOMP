@@ -243,6 +243,7 @@ medicaid-dent-policy/
 
 - [**ARCHITECTURE**](docs/ARCHITECTURE.md) — System design, data flow, and the trade-offs behind each decision.
 - [**DATA DICTIONARY**](docs/DATA_DICTIONARY.md) — NDJSON schema, field semantics, units, and suppression rules.
+- [**LIMITATIONS**](docs/LIMITATIONS.md) — Running ledger of data-quality issues, structural exclusions, and methodological caveats. Read before publishing any number derived from this pipeline.
 - [**ADRs**](docs/adr/) — Architecture Decision Records for the load-bearing calls.
 - [**CONTRIBUTING**](CONTRIBUTING.md) — Workflow, coding standards, commit conventions.
 - [**SECURITY**](SECURITY.md) — Responsible disclosure policy.
@@ -255,6 +256,8 @@ medicaid-dent-policy/
 - **CMS NPPES** — National Plan and Provider Enumeration System monthly download. [download.cms.gov/nppes](https://download.cms.gov/nppes/NPI_Files.html)
 - **U.S. Census TIGER/Line** — State and ZIP Code Tabulation Area polygons.
 - **HCPCS D-code categories** — CDT category conventions from the American Dental Association.
+
+> Every source has known caveats — small-cell suppression in HHS, snapshot-cadence gaps in NPPES, territory and address-quality edge cases in geocoding. The full ledger lives in [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md). **Read it before quoting any number from this dataset in a publication or external report.**
 
 ## License
 

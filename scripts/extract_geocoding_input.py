@@ -138,8 +138,15 @@ def main() -> int:
         practice_zip5=("practice_zip5", "first"),
     ).reset_index()
 
-    # Build address_id (from normalized) and address_full (from raw, geocoder-friendly)
-    final["address_id"] = _address_id(final.rename(columns={c + "_norm": c for c in ADDR_COLS}))
+    # Build address_id from the normalized columns. We can't use .rename to
+    # drop the _norm suffix in-place because the raw columns of the same name
+    # also live on `final` (as the "first"-aggregated values shown to humans),
+    # and a rename with collision creates duplicate column names that bleed
+    # NAs into the join. Build a clean DataFrame with just the normalized
+    # values under the canonical ADDR_COLS names instead.
+    norm_for_id = final[[c + "_norm" for c in ADDR_COLS]].copy()
+    norm_for_id.columns = ADDR_COLS
+    final["address_id"] = _address_id(norm_for_id)
     final["address_full"] = _address_full(final)
 
     out = final[
