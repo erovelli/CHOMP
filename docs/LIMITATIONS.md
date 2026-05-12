@@ -75,7 +75,7 @@ This is a comprehensive list of limitations that affect the merged and geocoded 
 **Mitigation.** Pre-merge per-month counts are preserved in `data/MergedHHS-NPI/hhs_dental/*.parquet` for sanity-checking. `analyze_coverage.py` produces the count differential per month.
 
 ### L10 🟨 Servicing NPI used as join key, not billing NPI
-**Issue.** We join on `SERVICING_PROVIDER_NPI_NUM`, matching `migrations/005_populate_provider_procedure_monthly_geo.sql`. The billing NPI is preserved as a column but not used to attribute geography.
+**Issue.** [`scripts/merge_hhs_nppes.py`](../scripts/merge_hhs_nppes.py) joins on `SERVICING_PROVIDER_NPI_NUM`. The billing NPI is preserved as a column but not used to attribute geography.
 **Impact.** For claims where servicing = NPI but billing = non-NPI organization (or vice versa), we attribute geography to the dentist's practice address, which is usually correct for utilization mapping. But high-volume DSO (Dental Support Organization) claims may have the dentist's address point to the chain's central office rather than where the patient actually went.
 **Mitigation.** Documented choice. Servicing-NPI attribution matches CMS convention and is correct for "where dental care happens" questions.
 
