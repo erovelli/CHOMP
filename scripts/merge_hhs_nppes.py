@@ -3,7 +3,7 @@ one month at a time, without ever loading the full NPPES corpus into memory.
 
 The merge runs in Python rather than SQL because NPPES archives use
 deflate64 (needs 7-Zip, not stdlib zipfile) and a per-month streaming
-flow is dramatically cheaper than loading 84 × ~9M-row vintages into
+flow is dramatically cheaper than loading 84 x ~9M-row vintages into
 Postgres for one inner join. The output CSV is COPY'd into
 medicaid.provider_procedure_monthly_geo for the downstream SQL aggregates.
 

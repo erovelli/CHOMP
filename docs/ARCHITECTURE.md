@@ -66,7 +66,7 @@ loading 84 × ~9M-row vintages into Postgres for a single inner join.
 The merged CSV is loaded directly into
 `medicaid.provider_procedure_monthly_geo`; SQL takes over from there:
 
-```
+```text
 003_create_provider_procedure_monthly_geo.sql
                                         ◄─ target table (enriched + geo'd)
                                           (populated by COPY from the

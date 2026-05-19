@@ -53,13 +53,13 @@ The design is deliberately constrained:
           │   claims 2018–2024          registry (~9M providers)                 │
           │        │                        │                                    │
           │        ▼                        ▼                                    │
-          │   provider_spending_raw    npi_raw                                   │
-          │         │  (staging)            │  (staging)                         │
+          │   HHS dental CSV           NPPES monthly zips                        │
+          │         │  merge_hhs_nppes.py    │                                   │
           │         └────────┬───────────────┘                                   │
           │                  │                                                   │
           │                  ▼                                                   │
-          │      provider_procedure_monthly_geo   ← joined on NPI, filtered      │
-          │                  │                      to HCPCS D-codes             │
+          │      provider_procedure_monthly_geo   ← loaded via COPY,             │
+          │                  │                      D-codes only                 │
           │                  ▼                                                   │
           │      provider_procedure_category_aggregate  ← categorization         │
           │                  │                            via code-range CASE    │
@@ -103,7 +103,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the long-form write-up, i
 | **Language**    | TypeScript `strict`                              | Every layer is typed end-to-end: `LayerKey` union ↔ `LAYER_CONFIGS` record enforces exhaustiveness at compile time.                                                |
 | **State**       | [Zustand](https://zustand-demo.pmnd.rs/)         | Single small store with selector-hooks; avoids the provider-tree churn a Context-based solution would introduce in a map app that re-renders on every hover event. |
 | **Data shape**  | NDJSON of `{ key: records[] }` objects           | Streamable, append-only, gzips well. The browser consumes all four files through a single `fetchNDJSON` helper.                                                    |
-| **Pipeline**    | PostgreSQL + psql                                | SQL is the right language for this transformation. Views are version-controlled in `migrations/`; export orchestrated by a single `bash` script.                   |
+| **Pipeline**    | Python + PostgreSQL                              | Python runs the HHS×NPPES merge (`merge_hhs_nppes.py`); SQL builds the aggregate views; `export_views.sh` writes the NDJSON exports.                               |
 | **Hosting**     | GitHub Pages (static)                            | Zero-infra. The site is ~6 MB gzipped including both PMTiles archives.                                                                                             |
 
 ## Engineering highlights
