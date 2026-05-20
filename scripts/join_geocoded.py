@@ -18,20 +18,27 @@ normalization extract_geocoding_input.py applied, so the join survives
 the geocoder dropping/reordering rows or columns -- it only needs to
 preserve the address_id column.
 
-Every claim row that ends up without coordinates is sorted into one of
-two failure buckets so the loss is attributable:
+Every claim row that ends up without coordinates (either lat or lon
+missing) is sorted into one of three failure buckets so the loss is
+attributable:
 
-    geocoder_unmatched  the address_id DID join, but the geocoder placed
-                        it as Status 'U' with no lat/lon -- the
-                        collaborator's geocoder could not locate it.
-    join_miss           the address_id matched no row in the geocoded
-                        file at all -- a join-side problem (stale
-                        geocoded file, or address normalization drift).
+    geocoder_unmatched         the address_id DID join, the geocoded row
+                               is Status 'U', and lat/lon are absent --
+                               the collaborator's geocoder could not
+                               locate it.
+    join_miss                  the address_id matched no row in the
+                               geocoded file at all -- a join-side
+                               problem (stale geocoded file, or address
+                               normalization drift).
+    unexpected_missing_coords  the address_id joined and the geocoded
+                               row's Status is NOT 'U', but lat/lon are
+                               missing anyway. Should be impossible;
+                               flags malformed delivery.
 
 A per-address ledger of every failure is written to geocode_failures.csv.
-`join_miss` rows, unused geocoded addresses, or an n_rows mismatch make
-the script exit non-zero; `geocoder_unmatched` is expected loss (see L13)
-and does not.
+`join_miss`, `unexpected_missing_coords`, unused geocoded addresses, or
+an n_rows mismatch make the script exit non-zero; `geocoder_unmatched`
+is expected loss (see L13) and does not.
 
 Inputs (defaults; data/ lives inside the repo and is git-ignored):
     data/MergedHHS-NPI/merged_hhs_nppes.csv          (the big merge)
@@ -121,18 +128,30 @@ def report(
     expected `geocoder_unmatched` loss does not count against it."""
     geocoded_ids = set(geo.index)
     seen_ids = set(seen_counts.index)
-    no_coords = set(geo.index[geo["latitude"].isna()])
+    # A row is "located" only when BOTH lat and lon are present -- guard
+    # against a future delivery with partial coordinates that would otherwise
+    # be classified as usable.
+    no_coords = set(geo.index[geo["latitude"].isna() | geo["longitude"].isna()])
+    status_u = set(geo.index[geo["geocode_status"].eq("U")])
 
-    # Two failure buckets, by the address_ids that produced them.
+    # Three failure buckets, by the address_ids that produced them:
+    #   join_miss                  -- address_id not in geocoded set at all.
+    #   geocoder_unmatched         -- in geocoded set, Status 'U', no coords.
+    #                                 The collaborator's geocoder couldn't
+    #                                 place it; expected loss (L13).
+    #   unexpected_missing_coords  -- in geocoded set, no coords, but Status
+    #                                 is NOT 'U'. Anomaly; flags QC.
     join_miss = sorted(seen_ids - geocoded_ids)
-    geocoder_fail = sorted((seen_ids & geocoded_ids) & no_coords)
+    geocoder_fail = sorted((seen_ids & geocoded_ids) & no_coords & status_u)
+    unexpected = sorted(((seen_ids & geocoded_ids) & no_coords) - status_u)
 
     def rows_for(ids: list[str]) -> int:
         return int(seen_counts.reindex(ids).sum()) if ids else 0
 
     jm_rows = rows_for(join_miss)
     gf_rows = rows_for(geocoder_fail)
-    failed_rows = jm_rows + gf_rows
+    um_rows = rows_for(unexpected)
+    failed_rows = jm_rows + gf_rows + um_rows
 
     def pct(n: int) -> str:
         return f"{100 * n / total_rows:.2f}%" if total_rows else "n/a"
@@ -148,12 +167,17 @@ def report(
     print(f"  {'-' * 60}")
     print(f"  {'geocoder_unmatched':<34}{len(geocoder_fail):>11,}{gf_rows:>15,}")
     print(f"  {'join_miss':<34}{len(join_miss):>11,}{jm_rows:>15,}")
+    print(f"  {'unexpected_missing_coords':<34}{len(unexpected):>11,}{um_rows:>15,}")
     print(f"  {'-' * 60}")
-    print(f"  {'TOTAL FAILED':<34}{len(geocoder_fail) + len(join_miss):>11,}{failed_rows:>15,}")
-    print("  geocoder_unmatched -> collaborator's geocoder returned no match")
-    print("                        (Status 'U'); expected loss, see L13.")
-    print("  join_miss          -> address_id matched no geocoded row; a")
-    print("                        join-side problem (stale file / drift).")
+    total_failed_addrs = len(geocoder_fail) + len(join_miss) + len(unexpected)
+    print(f"  {'TOTAL FAILED':<34}{total_failed_addrs:>11,}{failed_rows:>15,}")
+    print("  geocoder_unmatched        -> Status 'U' / no coords; the")
+    print("                               collaborator's geocoder could not")
+    print("                               locate it. Expected loss, see L13.")
+    print("  join_miss                 -> address_id matched no geocoded row;")
+    print("                               a join-side problem (stale file / drift).")
+    print("  unexpected_missing_coords -> in geocoded set, no coords, but Status")
+    print("                               is NOT 'U'. Malformed delivery; QC fails.")
 
     # Per-address failure ledger.
     meta = _load_geocoded_meta(geocoded_csv)
@@ -176,6 +200,15 @@ def report(
             "address_full": pd.NA,
         }
         for aid in join_miss
+    ] + [
+        {
+            "address_id": aid,
+            "failure_reason": "unexpected_missing_coords",
+            "n_claim_rows": int(seen_counts[aid]),
+            "geocode_status": geo.at[aid, "geocode_status"],
+            "address_full": full.get(aid, pd.NA),
+        }
+        for aid in unexpected
     ]
     fail_df = pd.DataFrame(
         records,
@@ -201,6 +234,15 @@ def report(
         print(f"  join_miss claim rows           : {jm_rows:>14,}  <<< join failed, investigate")
     else:
         print(f"  join_miss claim rows           : {0:>14,}  OK")
+
+    if um_rows:
+        ok = False
+        print(
+            f"  unexpected missing coords      : {um_rows:>14,}  "
+            f"<<< non-'U' rows missing lat/lon"
+        )
+    else:
+        print(f"  unexpected missing coords      : {0:>14,}  OK")
 
     if "n_rows" in meta.columns:
         expected = meta["n_rows"].astype("Int64")
@@ -253,7 +295,8 @@ def main() -> int:
 
     print(f"loading geocoded locations from {args.geocoded_csv}...")
     geo = load_geocoded(args.geocoded_csv)
-    n_no_latlon = int(geo["latitude"].isna().sum())
+    # Either coordinate missing means the row can't be placed on a map.
+    n_no_latlon = int((geo["latitude"].isna() | geo["longitude"].isna()).sum())
     n_no_county = int(geo["county_fips"].isna().sum())
     status = geo["geocode_status"].value_counts(dropna=False)
     print(
@@ -285,7 +328,9 @@ def main() -> int:
             chunk["address_id"].value_counts(), fill_value=0
         )
         joined = chunk.merge(geo, left_on="address_id", right_index=True, how="left")
-        located_rows += int(joined["latitude"].notna().sum())
+        located_rows += int(
+            (joined["latitude"].notna() & joined["longitude"].notna()).sum()
+        )
 
         joined.to_csv(args.output_csv, mode="a", header=(i == 0), index=False)
         print(f"  chunk {i + 1}: {total_rows:>12,} rows | {located_rows:>12,} located")

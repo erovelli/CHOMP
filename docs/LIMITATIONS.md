@@ -146,12 +146,13 @@ This is a comprehensive list of limitations that affect the merged and geocoded 
 
 **Issue.** A claim row can end up without coordinates for two unrelated reasons, and from `merged_hhs_nppes_geo.csv` alone they are indistinguishable: the geocoder could not place the address, or [`scripts/join_geocoded.py`](../scripts/join_geocoded.py) failed to match it back.
 **Impact.** Conflated, the two hide each other — a join bug or a stale geocoded file would masquerade as ordinary geocoder loss and silently, non-randomly understate utilization.
-**Mitigation.** `join_geocoded.py` sorts every unplaced claim row into one of two buckets and writes a per-address ledger to `data/MergedHHS-NPI/geocode_failures.csv`:
+**Mitigation.** `join_geocoded.py` sorts every unplaced claim row (either lat or lon missing) into one of three buckets and writes a per-address ledger to `data/MergedHHS-NPI/geocode_failures.csv`:
 
-- `geocoder_unmatched` — the `address_id` joined, but the geocoder placed it as Status `'U'` with no lat/lon. The collaborator's geocoder could not locate it; expected loss, see L13.
+- `geocoder_unmatched` — the `address_id` joined, Status is `'U'`, and lat/lon are absent. The collaborator's geocoder could not locate it; expected loss, see L13.
 - `join_miss` — the `address_id` matched no row in the geocoded file at all. A join-side problem: a stale geocoded file, or `_normalize` drift between the extract and join steps.
+- `unexpected_missing_coords` — the `address_id` joined and the geocoded row's Status is NOT `'U'`, yet lat/lon are missing. Should be impossible; flags a malformed delivery and fails QC.
 
-The script also runs integrity checks — no unused geocoded addresses, and per-address claim-row counts reconcile against the `n_rows` the extract step recorded — and exits non-zero on any `join_miss`, unused address, or count mismatch. On the current dataset all 69,960 geocoded addresses are used, all counts reconcile, and every one of the 32,488 unplaced rows (0.14%) is `geocoder_unmatched` with zero `join_miss`.
+The script also runs integrity checks — no unused geocoded addresses, and per-address claim-row counts reconcile against the `n_rows` the extract step recorded — and exits non-zero on any `join_miss`, `unexpected_missing_coords`, unused address, or count mismatch. On the current dataset all 69,960 geocoded addresses are used, all counts reconcile, and every one of the 32,488 unplaced rows (0.14%) is `geocoder_unmatched` with zero `join_miss` and zero `unexpected_missing_coords`.
 **Status.** Implemented.
 
 ---
