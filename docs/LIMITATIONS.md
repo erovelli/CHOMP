@@ -109,24 +109,24 @@ This is a comprehensive list of limitations that affect the merged and geocoded 
 
 ## 3. Geocoding limitations (from collaborator's geocoded output)
 
-> Per collaborator (Md Shahinoor Rahman, Harvard Dental Medicine), added four columns to the unique-addresses file: `latitude`, `longitude`, `county_FIPS`, `county_name`. The points below are issues he flagged or that arose from his handoff.
+> Per collaborator (Md Shahinoor Rahman, Harvard Dental Medicine), the unique-addresses file was geocoded with ArcGIS and returned as `Dental_Provider_Locations.csv`. [`scripts/join_geocoded.py`](../scripts/join_geocoded.py) keeps five of its columns — `latitude`, `longitude`, `county_fips`, `county_name`, `geocode_status` — and joins them onto the claims table by `address_id`. The points below are issues he flagged or that arose from his handoff.
 
-### L13 🟥 87 unique addresses failed to geocode
+### L13 🟥 86 unique addresses failed to geocode
 
-**Issue.** 87 of 69,960 unique addresses (~0.1%) returned NULL `latitude`/`longitude` because the input address was incomplete or malformed.
+**Issue.** 86 of 69,960 unique addresses (~0.1%) returned NULL `latitude`/`longitude` (geocoder `geocode_status == 'U'`) because the input address was incomplete or malformed. (The handoff email cited 87; the delivered file has 86.)
 **Impact.** Claims attributed to these addresses cannot be placed on the map. By `n_rows` weighting, this is a tiny share of total claims, but specific providers may be entirely lost.
 **Mitigation.** Re-attempt with a different geocoder or fix the addresses manually in a follow-up pass. Affected addresses are identifiable by `address_id` where `latitude IS NULL` after the join.
 **Status.** Known; documented.
 
-### L14 🟨 Some geocoded points marked `status == 'T'` (unreliable)
+### L14 🟨 Some geocoded points marked `geocode_status == 'T'` (unreliable)
 
-**Issue.** The geocoder flagged some addresses with a `status` value of `'T'` (tentative / unreliable). Most are nearly correct, with a few exceptions where the address lacks a valid street and the geocoder fell back to ZIP-centroid or city-centroid placement.
+**Issue.** The geocoder flagged 490 of 69,960 addresses with a `geocode_status` of `'T'` (tentative / unreliable). Most are nearly correct, with a few exceptions where the address lacks a valid street and the geocoder fell back to ZIP-centroid or city-centroid placement.
 **Impact.** A small fraction of points may sit in the wrong census tract or even the wrong county. For state/ZIP3-level aggregation this is usually invisible (centroid is still in the right state and ZIP3), but parcel- or tract-level analyses should exclude or flag these.
-**Mitigation.** Filter on `status != 'T'` for fine-grained spatial work. Inspection note: collaborator suggested manual review of `status == 'T'` addresses lacking a valid street.
+**Mitigation.** Filter on `geocode_status != 'T'` for fine-grained spatial work. Inspection note: collaborator suggested manual review of `geocode_status == 'T'` addresses lacking a valid street.
 
 ### L15 🟨 Territory addresses (Guam, USVI, Puerto Rico, etc.) have NULL county FIPS / names
 
-**Issue.** US territories aren't in the standard county FIPS system; the geocoder returned NULL for `county_FIPS` and `county_name`. Some territory addresses also fail geocoding entirely.
+**Issue.** US territories aren't in the standard county FIPS system; the geocoder returned NULL for `county_fips` and `county_name`. Some territory addresses also fail geocoding entirely.
 **Impact.** Any claims from territory providers are excluded from any county-level analysis. State-level analysis (using `practice_state` from the merge) still works for these rows.
 **Mitigation.** Decide explicitly whether to include territories in the analysis. The collaborator recommended dropping Puerto Rico for US-mainland-focused analyses, in addition to Guam and USVI which are NULL anyway.
 
@@ -134,13 +134,25 @@ This is a comprehensive list of limitations that affect the merged and geocoded 
 
 **Issue.** Standard county FIPS codes are 5 digits (`SSCCC`: 2-digit state, 3-digit county). Some downstream tools (Excel, default-dtype pandas) strip leading zeros when reading the geocoded CSV, producing 4-digit values.
 **Impact.** Any join keyed on FIPS will silently miss the ~10% of counties whose FIPS starts with `0` (Alabama, Alaska, Arizona, Arkansas, California with FIPS `0XXXX`).
-**Mitigation.** When reading the geocoded file, always pass `dtype={'county_FIPS': 'string'}` to pandas, or `.str.zfill(5)` after read.
+**Mitigation.** [`scripts/join_geocoded.py`](../scripts/join_geocoded.py) reads `county_fips` as a string and re-pads it to 5 digits, so `merged_hhs_nppes_geo.csv` is safe. Downstream readers of that file should still pass `dtype={'county_fips': 'string'}` to pandas.
 
 ### L17 🟨 Address normalization gaps cause over-splitting (false unique-address inflation)
 
 **Issue.** Our `_normalize` collapses case and whitespace but doesn't normalize abbreviations (`STREET` vs `ST`, `SUITE` vs `STE`, periods, etc.). The same physical building can appear as multiple "unique" addresses in `unique_addresses.csv`.
 **Impact.** Inflates the 69,960 unique-address count by some unknown small percentage. The geocoder typically maps near-duplicates to identical lat/lon, so post-geocoding the effective unique-location count drops 5–15%.
 **Mitigation.** Post-geocoding, addresses with identical (or near-identical) lat/lon can be re-merged as a follow-up cleanup pass if needed.
+
+### L32 ⬜ Geocoding failures are attributed by cause (geocoder vs. join)
+
+**Issue.** A claim row can end up without coordinates for two unrelated reasons, and from `merged_hhs_nppes_geo.csv` alone they are indistinguishable: the geocoder could not place the address, or [`scripts/join_geocoded.py`](../scripts/join_geocoded.py) failed to match it back.
+**Impact.** Conflated, the two hide each other — a join bug or a stale geocoded file would masquerade as ordinary geocoder loss and silently, non-randomly understate utilization.
+**Mitigation.** `join_geocoded.py` sorts every unplaced claim row into one of two buckets and writes a per-address ledger to `data/MergedHHS-NPI/geocode_failures.csv`:
+
+- `geocoder_unmatched` — the `address_id` joined, but the geocoder placed it as Status `'U'` with no lat/lon. The collaborator's geocoder could not locate it; expected loss, see L13.
+- `join_miss` — the `address_id` matched no row in the geocoded file at all. A join-side problem: a stale geocoded file, or `_normalize` drift between the extract and join steps.
+
+The script also runs integrity checks — no unused geocoded addresses, and per-address claim-row counts reconcile against the `n_rows` the extract step recorded — and exits non-zero on any `join_miss`, unused address, or count mismatch. On the current dataset all 69,960 geocoded addresses are used, all counts reconcile, and every one of the 32,488 unplaced rows (0.14%) is `geocoder_unmatched` with zero `join_miss`.
+**Status.** Implemented.
 
 ---
 

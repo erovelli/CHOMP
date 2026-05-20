@@ -168,8 +168,9 @@ zip5 + county + state grain, and DQ-Atlas warnings are in flight. The
    deflate64).
 2. **Geocode** (collaborator hand-off) —
    `python scripts/extract_geocoding_input.py` writes a deduplicated
-   address list; the geocoder returns `geocoded_addresses.csv`;
-   `python scripts/join_geocoded.py` merges lat/lon back in.
+   address list; the geocoder returns `data/Geocoded/Dental_Provider_Locations.csv`
+   (lat/lon + county FIPS/name); `python scripts/join_geocoded.py` joins
+   those back onto every claim row → `merged_hhs_nppes_geo.csv`.
 3. **Aggregate** — load the merged CSV into
    `medicaid.provider_procedure_monthly_geo` (defined by
    `migrations/003_*.sql`; column-name mapping is a known sharp edge —
