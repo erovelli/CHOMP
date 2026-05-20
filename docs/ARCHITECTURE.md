@@ -57,16 +57,20 @@ This is the single most consequential architectural decision in the project, and
 
 ### 3.1 Schema layering
 
-The SQL is organized in strict dependency order:
+The HHS × NPPES join was originally drafted in SQL (load both sides into
+staging tables, `INSERT ... JOIN ...`). It moved to Python
+([`scripts/merge_hhs_nppes.py`](../scripts/merge_hhs_nppes.py)) because
+the NPPES archives are deflate64-compressed (needs 7-Zip, not stdlib
+zipfile) and a streaming per-month flow is dramatically cheaper than
+loading 84 × ~9M-row vintages into Postgres for a single inner join.
+The merged CSV is loaded directly into
+`medicaid.provider_procedure_monthly_geo`; SQL takes over from there:
 
-```
-001_create_medicaid_schema.sql          ◄─ medicaid.provider_spending_raw (staging)
-002_create_nppes_schema.sql             ◄─ nppes.npi_raw (staging, 330 cols)
+```text
 003_create_provider_procedure_monthly_geo.sql
                                         ◄─ target table (enriched + geo'd)
-004_add_staging_join_indexes.sql        ◄─ idx on servicing_npi & npi
-005_populate_provider_procedure_monthly_geo.sql
-                                        ◄─ INSERT … JOIN … WHERE hcpcs_code LIKE 'D%'
+                                          (populated by COPY from the
+                                           Python merge output)
 aggregate_views/
     006_…_category_aggregate.sql        ◄─ zip5 × year_month × category grain
     007_…_monthly_state.sql             ◄─ rolled to state × month
@@ -77,7 +81,6 @@ aggregate_views/
 
 A few deliberate choices:
 
-- **`_raw` suffix for staging.** The raw tables are treated as ingest targets and nothing else; each one is dropped and recreated on every full rebuild. Downstream tables derive from the raw tables.
 - **Views, not materialized views, for aggregates.** These are computed once at export time and never queried by the runtime. Views keep the schema declarative and make the SQL diffable.
 - **HCPCS categorization happens exactly once**, in `006`. Every downstream view reads the `category` column. The HCPCS → category mapping is one CASE expression, mirrored in the frontend's `CATEGORY_TO_KEY` — two copies of the same fact, and that is intentional: the SQL is the source of truth for the backend; the TS is the source of truth for the UI shell.
 

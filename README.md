@@ -53,13 +53,13 @@ The design is deliberately constrained:
           │   claims 2018–2024          registry (~9M providers)                 │
           │        │                        │                                    │
           │        ▼                        ▼                                    │
-          │   provider_spending_raw    npi_raw                                   │
-          │         │  (staging)            │  (staging)                         │
+          │   HHS dental CSV           NPPES monthly zips                        │
+          │         │  merge_hhs_nppes.py    │                                   │
           │         └────────┬───────────────┘                                   │
           │                  │                                                   │
           │                  ▼                                                   │
-          │      provider_procedure_monthly_geo   ← joined on NPI, filtered      │
-          │                  │                      to HCPCS D-codes             │
+          │      provider_procedure_monthly_geo   ← loaded via COPY,             │
+          │                  │                      D-codes only                 │
           │                  ▼                                                   │
           │      provider_procedure_category_aggregate  ← categorization         │
           │                  │                            via code-range CASE    │
@@ -103,7 +103,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the long-form write-up, i
 | **Language**    | TypeScript `strict`                              | Every layer is typed end-to-end: `LayerKey` union ↔ `LAYER_CONFIGS` record enforces exhaustiveness at compile time.                                                |
 | **State**       | [Zustand](https://zustand-demo.pmnd.rs/)         | Single small store with selector-hooks; avoids the provider-tree churn a Context-based solution would introduce in a map app that re-renders on every hover event. |
 | **Data shape**  | NDJSON of `{ key: records[] }` objects           | Streamable, append-only, gzips well. The browser consumes all four files through a single `fetchNDJSON` helper.                                                    |
-| **Pipeline**    | PostgreSQL + psql                                | SQL is the right language for this transformation. Views are version-controlled in `migrations/`; export orchestrated by a single `bash` script.                   |
+| **Pipeline**    | Python + PostgreSQL                              | Python runs the HHS×NPPES merge (`merge_hhs_nppes.py`); SQL builds the aggregate views; `export_views.sh` writes the NDJSON exports.                               |
 | **Hosting**     | GitHub Pages (static)                            | Zero-infra. The site is ~6 MB gzipped including both PMTiles archives.                                                                                             |
 
 ## Engineering highlights
@@ -157,24 +157,32 @@ A Husky pre-commit hook runs `lint-staged` (ESLint + Prettier on staged files). 
 
 ### Rebuild the dataset
 
-The web app ships with pre-exported JSON under `public/data/`. To rebuild from source:
+The pipeline is mid-redesign — per-enrollee normalization (ACS C27007), a
+zip5 + county + state grain, and DQ-Atlas warnings are in flight. The
+`public/data/` JSON ships from the **current** flow, which is:
 
-```bash
-# 1. Load HHS + NPPES source data into Postgres
-psql "$DATABASE_URL" -f migrations/001_create_medicaid_schema.sql
-psql "$DATABASE_URL" -f migrations/002_create_nppes_schema.sql
-#    … ingest via any preferred tool (COPY, dbt, etc.)
+1. **Merge** — `python scripts/merge_hhs_nppes.py` streams the HHS claims
+   CSV against the per-month NPPES snapshots, writes
+   `data/MergedHHS-NPI/merged_hhs_nppes.csv`. Resumable; tracks completed
+   months in `.processed_months.txt`. Requires 7-Zip on PATH (NPPES uses
+   deflate64).
+2. **Geocode** (collaborator hand-off) —
+   `python scripts/extract_geocoding_input.py` writes a deduplicated
+   address list; the geocoder returns `data/Geocoded/Dental_Provider_Locations.csv`
+   (lat/lon + county FIPS/name); `python scripts/join_geocoded.py` joins
+   those back onto every claim row → `merged_hhs_nppes_geo.csv`.
+3. **Aggregate** — load the merged CSV into
+   `medicaid.provider_procedure_monthly_geo` (defined by
+   `migrations/003_*.sql`; column-name mapping is a known sharp edge —
+   see [`docs/DATA_DICTIONARY.md`](docs/DATA_DICTIONARY.md)) and run the
+   views in `migrations/aggregate_views/`.
+4. **Export** — `bash scripts/export_views.sh public/data` writes the
+   four NDJSON files the frontend consumes.
 
-# 2. Build the transformed tables & views
-for f in migrations/003_*.sql migrations/004_*.sql migrations/005_*.sql \
-         migrations/aggregate_views/*.sql; do
-  psql "$DATABASE_URL" -f "$f"
-done
-
-# 3. Export to NDJSON for the frontend
-export DATABASE_URL="postgresql://user:pass@localhost:5432/dbname"
-bash scripts/export_views.sh public/data
-```
+`pip install -r requirements.txt` for the Python steps; `$DATABASE_URL`
+for the SQL steps. ACS denominators are fetched separately by
+`scripts/fetch_acs_medicaid.py` and are not yet wired into the
+aggregations.
 
 ### Deploy
 

@@ -5,6 +5,7 @@
 This is a comprehensive list of limitations that affect the merged and geocoded dataset used by the Medicaid Dental Utilization Atlas. Each entry has a short ID for cross-reference in code comments, methods sections, and reviewer responses.
 
 **Severity legend:**
+
 - 🟥 **Material** — meaningfully affects interpretation; must be disclosed in any publication.
 - 🟨 **Moderate** — affects edge cases or specific cohorts; disclose if those cohorts matter.
 - ⬜ **Minor** — known but small; mention in technical appendix only.
@@ -14,35 +15,41 @@ This is a comprehensive list of limitations that affect the merged and geocoded 
 ## 1. Source-data limitations (inherent to HHS / NPPES / NBER releases)
 
 ### L01 🟥 Date range bounded by HHS release
+
 **Issue.** The HHS Medicaid dental claims release covers `2018-01` through `2024-12` only. Earlier claims pre-date the federal data-sharing rule that triggered this dataset; later claims await the next HHS release.
 **Impact.** No pre-2018 trend baseline. Late-2024 months have partial coverage (see L02).
 **Status.** Structural — wait for next release.
 
 ### L02 🟥 Claims-processing lag in trailing months
+
 **Issue.** Medicaid administrative data takes 6–18 months to fully reconcile. `2024-11` and `2024-12` show ~30–50% fewer rows than the 7-year monthly average (`202411 = 285,566 rows`; `202412 = 167,727 rows`; vs. `~340,000 rows/month` average).
 **Impact.** Cross-sectional totals for late 2024 systematically understate utilization. Year-over-year growth comparisons against 2024 are biased.
 **Mitigation.** For temporal analyses, treat anything from `2024-Q4` onward as preliminary. Document in methods footnote.
 **Status.** Structural — improves with next data release.
 
 ### L03 🟥 HHS cell-suppression (small-cell censoring)
+
 **Issue.** HHS suppresses any (provider × HCPCS × month) cell with fewer than 12 claims **or** fewer than 12 unique beneficiaries.
 **Impact.** Rural and low-volume providers are disproportionately suppressed. Pediatric subspecialties with rare procedure codes (e.g., D-prefix orthodontic) are suppressed more often than common preventive codes.
 **Mitigation.** Disclose suppression rule in methods. Suppressed rows are absent from the data; the absence is invisible in our dataset — we never see them.
 **Status.** Permanent feature of HHS release.
 
 ### L04 🟨 NBER NPPES snapshots are dated mid-month, not end-of-month
-**Issue.** NBER's monthly NPPES archive is a snapshot taken on a specific date (e.g., `npi_raw_201801.zip` contains `npidata_20050523-20180107.csv`, meaning data current through 2018-01-07). Providers registering between the snapshot date and end-of-month appear only in the *following* month's archive.
+
+**Issue.** NBER's monthly NPPES archive is a snapshot taken on a specific date (e.g., `npi_raw_201801.zip` contains `npidata_20050523-20180107.csv`, meaning data current through 2018-01-07). Providers registering between the snapshot date and end-of-month appear only in the _following_ month's archive.
 **Impact.** ~0.1% of HHS claims fail the same-month NPPES inner join because the servicing provider's NPI was registered after the snapshot was taken (see L08). Almost all of these are recoverable with a `±1` month window, but the current pipeline doesn't fall back.
 **Mitigation.** None implemented. `scripts/analyze_coverage.py --window 1` quantifies the recoverable share.
 **Status.** Known; recovery code drafted but not yet integrated.
 
 ### L05 🟨 NPPES coverage limited to NBER's monthly cadence
+
 **Issue.** CMS updates NPPES daily; NBER snapshots monthly. There's typically a ~30-day window where a freshly-registered NPI exists at CMS but hasn't appeared in any NBER archive yet.
 **Impact.** Very recent providers may be missing from all 84 NBER archives even if they billed Medicaid in the dataset window.
 **Mitigation.** None feasible without switching to CMS's daily feed.
 **Status.** Structural.
 
 ### L06 ⬜ Replacement NPIs not followed
+
 **Issue.** NPPES tracks NPI replacements via a `replacement_npi` field. When CMS administratively replaces an NPI, the old one is deactivated and points to the new one. Our merge ignores this chain.
 **Impact.** A small (<0.1%) number of historical claims keyed to a since-replaced NPI fail the merge even though the provider's address is recoverable via the successor NPI.
 **Mitigation.** None implemented. ~30-line script change would chase the chain.
@@ -53,38 +60,48 @@ This is a comprehensive list of limitations that affect the merged and geocoded 
 ## 2. Merge-pipeline limitations (caused by our `merge_hhs_nppes.py`)
 
 ### L07 🟥 3.2% inner-join drop rate
+
 **Issue.** ~3.2% of HHS dental rows are dropped because the `SERVICING_PROVIDER_NPI_NUM` value isn't found in the same-month NPPES file. Of these dropped rows:
-  - 99.9% have a `SERVICING_PROVIDER_NPI_NUM` that **isn't a real NPI** (see L08–L11).
-  - 0.1% are real NPIs that *would* be found in an adjacent NPPES month (see L04).
+
+- 99.9% have a `SERVICING_PROVIDER_NPI_NUM` that **isn't a real NPI** (see L08–L11).
+- 0.1% are real NPIs that _would_ be found in an adjacent NPPES month (see L04).
+
 **Impact.** The merged dataset excludes ~740,000 of ~23.9M dental claim-rows from any geography-attached analysis. The exclusion is non-random — it disproportionately removes care delivered by atypical providers (school-based dental, mobile units, FQHC satellite operations under aggregator IDs).
 **Mitigation.** Disclose as methodological exclusion. Quantified per-month in `data/MergedHHS-NPI/coverage_report.csv`.
 
 ### L08 🟥 Non-NPI servicing identifiers (A-prefix, M-prefix, sentinels, nulls)
+
 **Issue.** ~99.9% of dropped HHS rows have non-NPI servicing identifiers. Breakdown (run `scripts/categorize_servicing_ids.py` for current numbers):
-  - **NULL** — claim submitted without populating the servicing-NPI column (state submission gap).
-  - **A-prefix** (e.g., `A875718600`) — state-assigned Atypical Provider IDs. Used for Medicaid-billing entities that don't qualify for NPIs: school-based dental programs, group-home dental services, transportation-services entities, some HCBS dental hygiene programs.
-  - **M-prefix** (e.g., `M447402100`) — state Medicaid IDs (legacy / pre-NPI, dental therapists, hygienists with independent practice authority in some states).
-  - **Sentinels** (`0000000000`, `1999999992`, etc.) — placeholders used when the submitting state couldn't identify the provider.
-  - **Other malformed** — typos (e.g., `110141879A`), foreign IDs.
+
+- **NULL** — claim submitted without populating the servicing-NPI column (state submission gap).
+- **A-prefix** (e.g., `A875718600`) — state-assigned Atypical Provider IDs. Used for Medicaid-billing entities that don't qualify for NPIs: school-based dental programs, group-home dental services, transportation-services entities, some HCBS dental hygiene programs.
+- **M-prefix** (e.g., `M447402100`) — state Medicaid IDs (legacy / pre-NPI, dental therapists, hygienists with independent practice authority in some states).
+- **Sentinels** (`0000000000`, `1999999992`, etc.) — placeholders used when the submitting state couldn't identify the provider.
+- **Other malformed** — typos (e.g., `110141879A`), foreign IDs.
+
 **Impact.** These rows have no NPI → cannot be matched against NPPES → cannot be geocoded. They represent a real Medicaid dental population but are absent from the spatial analysis.
 **Mitigation.** Disclose as exclusion. State Medicaid offices publish their own provider directories; for a future iteration, state-level joins could partially fill the gap. Out of scope for current release.
 
 ### L09 🟨 Inner-join semantics (not left-join)
+
 **Issue.** `merge_hhs_nppes.py` does an inner join on `servicing_npi`. Dropped rows are silently excluded from the merged output — they don't appear with NULL geography fields.
 **Impact.** Downstream code can't distinguish "no claims at this address" from "claims existed but lost in merge." The total claim count in the merged file is 23,172,883 vs. ~23.9M in pre-merge HHS dental.
 **Mitigation.** Pre-merge per-month counts are preserved in `data/MergedHHS-NPI/hhs_dental/*.parquet` for sanity-checking. `analyze_coverage.py` produces the count differential per month.
 
 ### L10 🟨 Servicing NPI used as join key, not billing NPI
-**Issue.** We join on `SERVICING_PROVIDER_NPI_NUM`, matching `migrations/005_populate_provider_procedure_monthly_geo.sql`. The billing NPI is preserved as a column but not used to attribute geography.
+
+**Issue.** [`scripts/merge_hhs_nppes.py`](../scripts/merge_hhs_nppes.py) joins on `SERVICING_PROVIDER_NPI_NUM`. The billing NPI is preserved as a column but not used to attribute geography.
 **Impact.** For claims where servicing = NPI but billing = non-NPI organization (or vice versa), we attribute geography to the dentist's practice address, which is usually correct for utilization mapping. But high-volume DSO (Dental Support Organization) claims may have the dentist's address point to the chain's central office rather than where the patient actually went.
 **Mitigation.** Documented choice. Servicing-NPI attribution matches CMS convention and is correct for "where dental care happens" questions.
 
 ### L11 ⬜ Primary taxonomy resolution picks the first `Switch_N == 'Y'`
+
 **Issue.** NPPES allows up to 15 taxonomy slots per provider, with a primary flag per slot. Our code picks the lowest-numbered slot where `Switch_N == 'Y'`. NPPES rules require exactly one primary switch, but ~0.01% of records have data anomalies (multiple Y values or none).
 **Impact.** Negligible. Affects taxonomy assignment, not address.
 **Mitigation.** None needed.
 
 ### L12 ⬜ ZIP+4 truncated to ZIP5
+
 **Issue.** NPPES stores 9-digit ZIP+4 (no hyphen); we truncate to 5 digits. ZIP5 is the project's chosen geographic grain.
 **Impact.** Intentional; not a limitation per se. Disclosed for clarity.
 
@@ -92,54 +109,76 @@ This is a comprehensive list of limitations that affect the merged and geocoded 
 
 ## 3. Geocoding limitations (from collaborator's geocoded output)
 
-> Per collaborator (Md Shahinoor Rahman, Harvard Dental Medicine), added four columns to the unique-addresses file: `latitude`, `longitude`, `county_FIPS`, `county_name`. The points below are issues he flagged or that arose from his handoff.
+> Per collaborator (Md Shahinoor Rahman, Harvard Dental Medicine), the unique-addresses file was geocoded with ArcGIS and returned as `Dental_Provider_Locations.csv`. [`scripts/join_geocoded.py`](../scripts/join_geocoded.py) keeps five of its columns — `latitude`, `longitude`, `county_fips`, `county_name`, `geocode_status` — and joins them onto the claims table by `address_id`. The points below are issues he flagged or that arose from his handoff.
 
-### L13 🟥 87 unique addresses failed to geocode
-**Issue.** 87 of 69,960 unique addresses (~0.1%) returned NULL `latitude`/`longitude` because the input address was incomplete or malformed.
+### L13 🟥 86 unique addresses failed to geocode
+
+**Issue.** 86 of 69,960 unique addresses (~0.1%) returned NULL `latitude`/`longitude` (geocoder `geocode_status == 'U'`) because the input address was incomplete or malformed. (The handoff email cited 87; the delivered file has 86.)
 **Impact.** Claims attributed to these addresses cannot be placed on the map. By `n_rows` weighting, this is a tiny share of total claims, but specific providers may be entirely lost.
 **Mitigation.** Re-attempt with a different geocoder or fix the addresses manually in a follow-up pass. Affected addresses are identifiable by `address_id` where `latitude IS NULL` after the join.
 **Status.** Known; documented.
 
-### L14 🟨 Some geocoded points marked `status == 'T'` (unreliable)
-**Issue.** The geocoder flagged some addresses with a `status` value of `'T'` (tentative / unreliable). Most are nearly correct, with a few exceptions where the address lacks a valid street and the geocoder fell back to ZIP-centroid or city-centroid placement.
+### L14 🟨 Some geocoded points marked `geocode_status == 'T'` (unreliable)
+
+**Issue.** The geocoder flagged 490 of 69,960 addresses with a `geocode_status` of `'T'` (tentative / unreliable). Most are nearly correct, with a few exceptions where the address lacks a valid street and the geocoder fell back to ZIP-centroid or city-centroid placement.
 **Impact.** A small fraction of points may sit in the wrong census tract or even the wrong county. For state/ZIP3-level aggregation this is usually invisible (centroid is still in the right state and ZIP3), but parcel- or tract-level analyses should exclude or flag these.
-**Mitigation.** Filter on `status != 'T'` for fine-grained spatial work. Inspection note: collaborator suggested manual review of `status == 'T'` addresses lacking a valid street.
+**Mitigation.** Filter on `geocode_status != 'T'` for fine-grained spatial work. Inspection note: collaborator suggested manual review of `geocode_status == 'T'` addresses lacking a valid street.
 
 ### L15 🟨 Territory addresses (Guam, USVI, Puerto Rico, etc.) have NULL county FIPS / names
-**Issue.** US territories aren't in the standard county FIPS system; the geocoder returned NULL for `county_FIPS` and `county_name`. Some territory addresses also fail geocoding entirely.
+
+**Issue.** US territories aren't in the standard county FIPS system; the geocoder returned NULL for `county_fips` and `county_name`. Some territory addresses also fail geocoding entirely.
 **Impact.** Any claims from territory providers are excluded from any county-level analysis. State-level analysis (using `practice_state` from the merge) still works for these rows.
 **Mitigation.** Decide explicitly whether to include territories in the analysis. The collaborator recommended dropping Puerto Rico for US-mainland-focused analyses, in addition to Guam and USVI which are NULL anyway.
 
 ### L16 🟨 County FIPS 4-digit leading-zero handling
+
 **Issue.** Standard county FIPS codes are 5 digits (`SSCCC`: 2-digit state, 3-digit county). Some downstream tools (Excel, default-dtype pandas) strip leading zeros when reading the geocoded CSV, producing 4-digit values.
 **Impact.** Any join keyed on FIPS will silently miss the ~10% of counties whose FIPS starts with `0` (Alabama, Alaska, Arizona, Arkansas, California with FIPS `0XXXX`).
-**Mitigation.** When reading the geocoded file, always pass `dtype={'county_FIPS': 'string'}` to pandas, or `.str.zfill(5)` after read.
+**Mitigation.** [`scripts/join_geocoded.py`](../scripts/join_geocoded.py) reads `county_fips` as a string and re-pads it to 5 digits, so `merged_hhs_nppes_geo.csv` is safe. Downstream readers of that file should still pass `dtype={'county_fips': 'string'}` to pandas.
 
 ### L17 🟨 Address normalization gaps cause over-splitting (false unique-address inflation)
+
 **Issue.** Our `_normalize` collapses case and whitespace but doesn't normalize abbreviations (`STREET` vs `ST`, `SUITE` vs `STE`, periods, etc.). The same physical building can appear as multiple "unique" addresses in `unique_addresses.csv`.
 **Impact.** Inflates the 69,960 unique-address count by some unknown small percentage. The geocoder typically maps near-duplicates to identical lat/lon, so post-geocoding the effective unique-location count drops 5–15%.
 **Mitigation.** Post-geocoding, addresses with identical (or near-identical) lat/lon can be re-merged as a follow-up cleanup pass if needed.
+
+### L32 ⬜ Geocoding failures are attributed by cause (geocoder vs. join)
+
+**Issue.** A claim row can end up without coordinates for two unrelated reasons, and from `merged_hhs_nppes_geo.csv` alone they are indistinguishable: the geocoder could not place the address, or [`scripts/join_geocoded.py`](../scripts/join_geocoded.py) failed to match it back.
+**Impact.** Conflated, the two hide each other — a join bug or a stale geocoded file would masquerade as ordinary geocoder loss and silently, non-randomly understate utilization.
+**Mitigation.** `join_geocoded.py` sorts every unplaced claim row (either lat or lon missing) into one of three buckets and writes a per-address ledger to `data/MergedHHS-NPI/geocode_failures.csv`:
+
+- `geocoder_unmatched` — the `address_id` joined, Status is `'U'`, and lat/lon are absent. The collaborator's geocoder could not locate it; expected loss, see L13.
+- `join_miss` — the `address_id` matched no row in the geocoded file at all. A join-side problem: a stale geocoded file, or `_normalize` drift between the extract and join steps.
+- `unexpected_missing_coords` — the `address_id` joined and the geocoded row's Status is NOT `'U'`, yet lat/lon are missing. Should be impossible; flags a malformed delivery and fails QC.
+
+The script also runs integrity checks — no unused geocoded addresses, and per-address claim-row counts reconcile against the `n_rows` the extract step recorded — and exits non-zero on any `join_miss`, `unexpected_missing_coords`, unused address, or count mismatch. On the current dataset all 69,960 geocoded addresses are used, all counts reconcile, and every one of the 32,488 unplaced rows (0.14%) is `geocoder_unmatched` with zero `join_miss` and zero `unexpected_missing_coords`.
+**Status.** Implemented.
 
 ---
 
 ## 4. Geographic-attribution caveats (interpretive)
 
 ### L18 🟨 Provider practice address is where the dentist's office is, not necessarily where the care happened
+
 **Issue.** NPPES practice location is the dentist's primary clinic address. For dentists who work at multiple locations (rotating through community clinics, school visits, satellite offices), only the primary is captured.
 **Impact.** Geographic utilization is biased toward primary clinic addresses, undercounting service delivery at secondary sites.
 **Mitigation.** Documented. The NPPES "Practice Location 2..N" addendum tables could be incorporated in a future iteration (separate NBER files, not currently merged).
 
 ### L19 🟨 Provider address can change mid-period
+
 **Issue.** A provider who moves offices in, say, June 2021 has different addresses in NPPES before and after the move. Each claim is geocoded to the address current at the time of the relevant NPPES monthly snapshot — but this is a point-in-time approximation, not the address on the actual service date.
 **Impact.** Intra-month address changes are blurred to the snapshot date. Small effect overall; matters only for providers who move within a month.
 **Mitigation.** Documented. NPPES dates of address change are available in the NBER archives but not currently used.
 
 ### L20 🟨 Interstate variation in Medicaid dental coverage
+
 **Issue.** Adult Medicaid dental benefits vary dramatically by state: from comprehensive (NY, CA) to emergency-only (TN, AL) to none (DE). Pediatric coverage is more uniform (federally mandated under EPSDT).
 **Impact.** Raw claim counts and dollars are not comparable across states for adult dental services. A "low" map value in TN reflects benefit policy, not lack of need.
 **Mitigation.** Already surfaced in the InfoModal on the live site. Worth a paragraph in any policy interpretation of the map.
 
 ### L21 ⬜ Indian Health Service / tribal dental
+
 **Issue.** IHS and tribal dental clinics may bill Medicaid through atypical or institutional identifier conventions that don't appear in NPPES the same way as private providers. Coverage in this dataset depends on the specific state and tribal compact.
 **Impact.** Tribal communities may be systematically underrepresented in some states' dental utilization data.
 **Mitigation.** None feasible within scope. Document if making claims about access in tribal areas.
@@ -153,30 +192,35 @@ The ACS C27007 table — "Medicaid/Means-Tested Public Coverage by Sex by Age" �
 ### ACS source quality (the survey itself)
 
 ### L22 🟥 ACS 5-year endpoint-year dating (heavy temporal overlap)
+
 **Issue.** The ACS 5-year file labeled "2023" is a pooled estimate over 2019–2023. The "2024" file pools 2020–2024. Consecutive endpoint years share 4 of 5 sample years.
 **Impact.** Year-over-year changes in `medicaid_enrollees` from ACS are **not** independent annual observations — they reflect a smoothed/lagged 5-year window. A 2018→2024 plot of ACS Medicaid coverage will look much flatter than the underlying enrollment because of this overlap. The ACS 1-year release does avoid overlap but is unavailable for geographies below 65k population (no ZCTAs, ~75% of counties), so it's not an option for this project's grain.
 **Mitigation.** For trend statements, compare non-overlapping endpoint years (e.g., ACS 2018 and ACS 2023 share no underlying sample years). Document the smoothing in any temporal analysis.
 **Status.** Structural to ACS.
 
 ### L23 🟥 Survey-based Medicaid undercount vs. administrative rolls
+
 **Issue.** ACS captures respondent-reported coverage. State Medicaid administrative enrollment is consistently ~20–30% higher than ACS estimates (the documented "Medicaid undercount" phenomenon). Respondents misreport coverage type (naming their managed-care plan instead of Medicaid), miss spousal/dependent enrollment, or simply don't know.
 **Impact.** Per-enrollee utilization rates that use the ACS denominator are **systematically inflated** relative to what state Medicaid offices would publish using their own rolls. Cross-state comparisons are biased to the extent undercount varies by state (it does — e.g., TX under-reports more than MA).
 **Mitigation.** Disclose in methods. Where state administrative enrollment is available (CMS-64 federal financial participation reports, state-level enrollment dashboards), prefer it for the denominator. Within-state geographic comparisons remain valid because undercount is roughly stable inside a state.
 **Status.** Structural.
 
 ### L24 🟨 ACS universe excludes institutionalized populations
+
 **Issue.** C27007's universe is "civilian noninstitutionalized population." Excludes inmates of correctional facilities, residents of nursing homes / mental hospitals, persons in military barracks / ships, and similar group quarters.
 **Impact.** ZIPs or counties containing federal prisons, large military installations, or significant nursing-home capacity have ACS denominators that materially undercount the population eligible for healthcare services. Per-capita rates in those geographies look artificially high.
 **Mitigation.** Flag known-institutional ZIPs for separate handling. Census publishes a list of ZIPs with high group-quarters share.
 **Status.** Structural.
 
 ### L25 🟨 ZCTA boundary changes between 2010 and 2020 Census frames
+
 **Issue.** ACS 5-year files for endpoint years 2018, 2019, 2020, 2021 use 2010 ZCTA boundaries. Endpoint years 2022 and later use 2020 ZCTA boundaries. ZCTAs that were redrawn, merged, or split appear in the data with shifts that reflect boundary changes, not population changes.
 **Impact.** ZCTA-level trend analysis crossing 2021→2022 will show artificial discontinuities. At ZIP3 grain (this project's chosen aggregation), the impact is muted because most boundary changes redistribute population among ZCTAs that roll up to the same ZIP3 — but watch for cases where a ZCTA was split across two ZIP3 prefixes.
 **Mitigation.** Prefer ZIP3 aggregation over raw ZCTA comparisons when crossing 2021→2022. Document.
 **Status.** Structural.
 
 ### L26 🟨 ZCTAs are not USPS ZIP codes (coverage gaps)
+
 **Issue.** USPS ZIP codes include PO-box-only ZIPs, single-organization ZIPs (one building gets its own ZIP), military APO/FPO ZIPs, and ZIPs assigned only to large institutional addresses. None of these have a Census ZCTA. NPPES practice ZIPs come from USPS; some won't join to any ACS ZCTA.
 **Impact.** A small fraction (typically <2%) of unique practice ZIPs cannot be matched to an ACS denominator. Disproportionately affects practices inside large institutions (hospitals, universities, military bases).
 **Mitigation.** Accept NULL matches when joining HHS claims to ACS; report the unmatched share. For institutional ZIPs, fall back to the surrounding ZCTA at the same ZIP3 prefix.
@@ -185,21 +229,26 @@ The ACS C27007 table — "Medicaid/Means-Tested Public Coverage by Sex by Age" �
 ### ACS query / fetch pipeline
 
 ### L27 ⬜ ACS "jam values" are converted to NaN
+
 **Issue.** Census uses sentinel values (`-666666666`, `-888888888`, `-999999999`, etc.) for cells that couldn't be released — sample too small, controlled to zero, MoE not computable, not applicable. [`fetch_acs_medicaid.py`](../scripts/fetch_acs_medicaid.py) maps every known jam value to `NaN`.
 **Impact.** Some county/ZCTA rows have `NaN` in one or more `C27007_*` cells. Sums that silently treat `NaN` as zero (naive `.sum()` without `min_count`) would undercount. The fetch script propagates correctly using `min_count=len(components)`, so the aggregate is `NaN` if any component is missing — but downstream code must respect this.
 **Mitigation.** Handled in the script. Downstream contributors: never `.fillna(0)` on an enrollee column without a documented reason.
 **Status.** Handled at fetch; downstream awareness required.
 
 ### L28 ⬜ Census API operational risks (rate limits, trailing-year availability, no retry)
+
 **Issue.** Three small operational risks bundled:
-  - **Rate limit.** The Census Data API has a soft ~500 calls/day cap without an API key, and a higher but documented cap with one. [`fetch_acs_medicaid.py`](../scripts/fetch_acs_medicaid.py) makes 14 calls per full run (7 years × 2 geographies) plus a 0.5s polite delay — well below any limit.
-  - **Trailing-year availability.** ACS 5-year endpoint files are released in December of the *following* year (the 2024 endpoint file was released in Dec 2025). Running the fetch before the trailing-year file is published returns 404 for that year only; the script handles 404 gracefully and skips.
-  - **No retry on transient errors.** A 5xx response or network drop aborts the single year/geo call. Manual re-run with `--years` is needed to backfill.
+
+- **Rate limit.** The Census Data API has a soft ~500 calls/day cap without an API key, and a higher but documented cap with one. [`fetch_acs_medicaid.py`](../scripts/fetch_acs_medicaid.py) makes 14 calls per full run (7 years × 2 geographies) plus a 0.5s polite delay — well below any limit.
+- **Trailing-year availability.** ACS 5-year endpoint files are released in December of the _following_ year (the 2024 endpoint file was released in Dec 2025). Running the fetch before the trailing-year file is published returns 404 for that year only; the script handles 404 gracefully and skips.
+- **No retry on transient errors.** A 5xx response or network drop aborts the single year/geo call. Manual re-run with `--years` is needed to backfill.
+
 **Impact.** Operational; rarely hit. Worth knowing when running close to a Census release date or on a flaky network.
 **Mitigation.** Add `tenacity`-style retries around `fetch_one()` if reliability becomes an issue. Re-run with `--years` for selective backfill.
 **Status.** Acceptable for current cadence; documented for future contributors.
 
 ### L29 🟨 Margin of error fetched but not used downstream
+
 **Issue.** [`fetch_acs_medicaid.py`](../scripts/fetch_acs_medicaid.py) computes `medicaid_enrollees_moe` using the Census-recommended formula (`sqrt` of sum of squared component MoEs) and writes it to the output CSV. Nothing downstream — choropleth, per-capita rate calc, category aggregation — currently consumes it. The map shows point estimates without uncertainty.
 **Impact.** For low-population ZCTAs, MoE can exceed the point estimate (the 95% CI crosses zero), making the per-capita rate statistically indistinguishable from any value. This is invisible in the current map.
 **Mitigation.** Future work — suppress, grey out, or hatched-overlay cells where `MoE > 50%` of the estimate. Estimated 5–15% of ZCTAs affected, concentrated in rural areas with small Medicaid populations.
@@ -208,12 +257,14 @@ The ACS C27007 table — "Medicaid/Means-Tested Public Coverage by Sex by Age" �
 ### ACS interpretation / joining HHS
 
 ### L30 🟥 ACS Medicaid enrollment is not the same as Medicaid claimants
+
 **Issue.** ACS measures "person had Medicaid coverage during the survey window." HHS claims data measures "person filed a Medicaid dental claim during this month." Many Medicaid enrollees never use dental services in any given month (or year), and the dental-claimant subset is what HHS captures.
-**Impact.** Per-enrollee utilization rates computed as `(HHS claims) / (ACS enrollees)` are a mixture of two effects: (a) how many people *used* dental services, and (b) how many people *had* coverage. The rate is interpretable as "claims per enrollee" but **not** as "share of enrollees who got dental care" — the numerator's unit is claims, not unique people.
+**Impact.** Per-enrollee utilization rates computed as `(HHS claims) / (ACS enrollees)` are a mixture of two effects: (a) how many people _used_ dental services, and (b) how many people _had_ coverage. The rate is interpretable as "claims per enrollee" but **not** as "share of enrollees who got dental care" — the numerator's unit is claims, not unique people.
 **Mitigation.** State the denominator definition explicitly in any rate analysis ("dental claims per ACS-reported Medicaid enrollee, endpoint year X"). For "share who used dental care," use HHS's `beneficiaries_served_count` over ACS enrollees instead.
 **Status.** Methodological — disclosure required.
 
 ### L31 🟨 ACS endpoint-year alignment with claim month (design choice not yet made)
+
 **Issue.** An HHS claim filed in March 2022 could be normalized by any of several ACS endpoint years: the 2022 file (pooled 2018–2022, centered ~2020), the 2024 file (pooled 2020–2024, centered ~2022), or some interpolation. Each choice produces materially different per-capita maps for trailing project years.
 **Impact.** Different reviewers comparing this project's numbers to their own may get different per-capita rates depending on which ACS year the project picked. Without documentation this looks like inconsistency.
 **Mitigation.** Pick a rule and stick to it. Recommended default: for claim year Y, use the ACS endpoint year whose 5-year pool centers closest to Y (i.e., ACS endpoint year = Y + 2). Write up as an ADR before the first per-capita map ships.
