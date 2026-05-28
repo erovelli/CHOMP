@@ -103,7 +103,9 @@ export function getValueForRegion(
 ): number {
     if (!records) return 0;
     const rows = records.filter(
-        (r) => r.year === year && (activeLayer === "all" || CATEGORY_TO_KEY[r.category] === activeLayer),
+        (r) =>
+            r.year === year &&
+            (activeLayer === "all" || CATEGORY_TO_KEY[r.category] === activeLayer),
     );
     const claims = rows.reduce((sum, r) => sum + r.total_claims, 0);
     if (metric === "claims") return claims;

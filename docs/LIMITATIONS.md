@@ -16,15 +16,15 @@ This is a comprehensive list of limitations that affect the merged and geocoded 
 
 Cumulative accounting of how many rows we lose at each stage of the pipeline, and the limit ID that explains each loss. "Rows in" of each stage equals "rows remaining" from the previous stage; numbers come from `data/MergedHHS-NPI/coverage_report.csv`, `geocode_failures.csv`, and the HHS source CSV.
 
-| # | Stage | Reason for exclusion | Rows in | Rows dropped | Rows remaining | Limit ID |
-|---|---|---|---:|---:|---:|---|
-| 0 | HHS source CSV | — (raw release, 7 columns, 2018-01 → 2024-12) | — | — | 227,083,361 | — |
-| 1 | Phase A filter ([`merge_hhs_nppes.py`](../scripts/merge_hhs_nppes.py)) | HCPCS code not D-prefixed (non-dental — medical, behavioral, etc.) | 227,083,361 | 203,014,787 | 24,068,574 | structural |
-| 2 | Phase B NPPES inner join | `SERVICING_PROVIDER_NPI_NUM` not found in same-month NPPES (all causes combined) | 24,068,574 | 895,691 (3.72%) | 23,172,883 | L07 |
-| 2a | ↳ sub-cause | Non-NPI servicing identifier (NULL, A-prefix Atypical, M-prefix Medicaid, sentinels, other malformed) | — | ~895,083 (~99.9% of drops) | — | L08 |
-| 2b | ↳ sub-cause | Real 10-digit NPI but registered after the NBER monthly snapshot (recoverable with ±1-month window) | — | 608 (~0.07% of drops) | — | L04 |
-| 3 | Geocoding (ArcGIS, collaborator handoff) | Address could not be geocoded (`geocode_status == 'U'`; 86 of 69,960 unique addresses) | 23,172,883 | 32,488 (0.14%) | 23,140,395 | L13 / L32 |
-| — | **Final mapped dataset** | — | — | — | **23,140,395** | — |
+| #   | Stage                                                                  | Reason for exclusion                                                                                  |     Rows in |               Rows dropped | Rows remaining | Limit ID   |
+| --- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ----------: | -------------------------: | -------------: | ---------- |
+| 0   | HHS source CSV                                                         | — (raw release, 7 columns, 2018-01 → 2024-12)                                                         |           — |                          — |    227,083,361 | —          |
+| 1   | Phase A filter ([`merge_hhs_nppes.py`](../scripts/merge_hhs_nppes.py)) | HCPCS code not D-prefixed (non-dental — medical, behavioral, etc.)                                    | 227,083,361 |                203,014,787 |     24,068,574 | structural |
+| 2   | Phase B NPPES inner join                                               | `SERVICING_PROVIDER_NPI_NUM` not found in same-month NPPES (all causes combined)                      |  24,068,574 |            895,691 (3.72%) |     23,172,883 | L07        |
+| 2a  | ↳ sub-cause                                                            | Non-NPI servicing identifier (NULL, A-prefix Atypical, M-prefix Medicaid, sentinels, other malformed) |           — | ~895,083 (~99.9% of drops) |              — | L08        |
+| 2b  | ↳ sub-cause                                                            | Real 10-digit NPI but registered after the NBER monthly snapshot (recoverable with ±1-month window)   |           — |      608 (~0.07% of drops) |              — | L04        |
+| 3   | Geocoding (ArcGIS, collaborator handoff)                               | Address could not be geocoded (`geocode_status == 'U'`; 86 of 69,960 unique addresses)                |  23,172,883 |             32,488 (0.14%) |     23,140,395 | L13 / L32  |
+| —   | **Final mapped dataset**                                               | —                                                                                                     |           — |                          — | **23,140,395** | —          |
 
 **Cumulative loss from raw HHS:** 203,942,966 rows (89.81%) — almost entirely the non-dental filter at stage 1. From the dental-only universe of 24,068,574 rows, total downstream loss is 928,179 rows (3.86%).
 
