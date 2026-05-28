@@ -69,7 +69,6 @@ export default function Legend() {
                     fontSize: 9,
                     color: "var(--ink-dim)",
                     marginTop: 8,
-                    opacity: 0.8,
                 }}
             >
                 Scale adjusts to the current view

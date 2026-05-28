@@ -2,7 +2,12 @@ import { useEffect, useRef, useCallback } from "react";
 import maplibregl from "maplibre-gl";
 import { Protocol } from "pmtiles";
 import { useMapStore } from "../../lib/store";
-import { fetchProtomapsStyle, buildColorExpression, colorExpression, quantileStops } from "../../lib/mapStyles";
+import {
+    fetchProtomapsStyle,
+    buildColorExpression,
+    colorExpression,
+    quantileStops,
+} from "../../lib/mapStyles";
 import type { LayerKey, GeoLevel, Metric, RegionDetail } from "../../lib/types";
 import {
     loadAnnualData,
@@ -340,7 +345,12 @@ export default function MapContainer() {
         const level = geoLevelRef.current;
         const data = getAnnualDataForLevel(level);
         const values = Object.values(data).map((recs) =>
-            getValueForRegion(recs, selectedYearRef.current, activeLayerRef.current, metricRef.current),
+            getValueForRegion(
+                recs,
+                selectedYearRef.current,
+                activeLayerRef.current,
+                metricRef.current,
+            ),
         );
         const stops = quantileStops(values, metricRef.current);
         stopsRef.current = stops;
@@ -434,7 +444,12 @@ export default function MapContainer() {
             map.current.setPaintProperty(
                 STATES_FILL,
                 "fill-color",
-                buildColorExpression(hoveredStateRef.current, postal, STATES_ID_PROP, stopsRef.current),
+                buildColorExpression(
+                    hoveredStateRef.current,
+                    postal,
+                    STATES_ID_PROP,
+                    stopsRef.current,
+                ),
             );
 
             const records = getStateAnnualData()[postal] ?? [];
@@ -470,7 +485,12 @@ export default function MapContainer() {
             map.current.setPaintProperty(
                 COUNTY_FILL,
                 "fill-color",
-                buildColorExpression(hoveredCountyRef.current, fips, COUNTY_ID_PROP, stopsRef.current),
+                buildColorExpression(
+                    hoveredCountyRef.current,
+                    fips,
+                    COUNTY_ID_PROP,
+                    stopsRef.current,
+                ),
             );
 
             const records = getCountyAnnualData()[fips] ?? [];
@@ -546,7 +566,12 @@ export default function MapContainer() {
             map.current.setPaintProperty(
                 STATES_FILL,
                 "fill-color",
-                buildColorExpression(postal, selectedStateRef.current, STATES_ID_PROP, stopsRef.current),
+                buildColorExpression(
+                    postal,
+                    selectedStateRef.current,
+                    STATES_ID_PROP,
+                    stopsRef.current,
+                ),
             );
 
             const val = getValueForRegion(
@@ -580,7 +605,12 @@ export default function MapContainer() {
             map.current.setPaintProperty(
                 COUNTY_FILL,
                 "fill-color",
-                buildColorExpression(fips, selectedCountyRef.current, COUNTY_ID_PROP, stopsRef.current),
+                buildColorExpression(
+                    fips,
+                    selectedCountyRef.current,
+                    COUNTY_ID_PROP,
+                    stopsRef.current,
+                ),
             );
 
             const val = getValueForRegion(

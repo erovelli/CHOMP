@@ -170,11 +170,11 @@ This is the part most worth reading.
 
 Every state polygon and every ZIP3 polygon carries three feature-state fields:
 
-| Field      | Type    | Source       | Meaning                                      |
-| ---------- | ------- | ------------ | -------------------------------------------- |
+| Field      | Type    | Source       | Meaning                                                                                             |
+| ---------- | ------- | ------------ | --------------------------------------------------------------------------------------------------- |
 | `value`    | number  | Data JSON    | Active metric for the (year, category): total claims (volume) or claims-per-beneficiary (intensity) |
-| `hover`    | boolean | Mouse events | Cursor is over this polygon                  |
-| `selected` | boolean | Click events | Detail panel is open on this polygon         |
+| `hover`    | boolean | Mouse events | Cursor is over this polygon                                                                         |
+| `selected` | boolean | Click events | Detail panel is open on this polygon                                                                |
 
 The paint expression (`buildColorExpression` in [`src/lib/mapStyles.ts`](../src/lib/mapStyles.ts)) collapses these into a `fill-color`:
 
@@ -244,7 +244,7 @@ The store's single interesting piece of logic is in `setSelectedYear`, which cle
 Two elephants now: the deferred **monthly ZIP3 (58 MB)** and the new **monthly
 county (99 MB / 10.3 MB gzip)**, the largest artifact in the project. Both are
 loaded only on the first monthly-slider interaction, and `loadMonthlyData()`
-still fetches all three levels in one shot (so opening month view at *any* level
+still fetches all three levels in one shot (so opening month view at _any_ level
 pulls the county file too — a known cost). A post-MVP iteration (see
 [`docs/adr/0002-zip3-monthly-as-pmtiles.md`](adr/0002-zip3-monthly-as-pmtiles.md))
 should move the monthly grains to a vector-tile / range-requestable format and/or
