@@ -1,12 +1,20 @@
 import { useMapStore } from "../../lib/store";
 import { LAYER_CONFIGS } from "../../constants/map";
 import { Z_INDEX } from "../../constants/layout";
+import { formatRatio } from "../../lib/formatters";
 
 export default function Tooltip() {
-    const { hoveredRegion, hoveredValue, hoveredPoint, activeLayer } = useMapStore();
+    const { hoveredRegion, hoveredValue, hoveredPoint, activeLayer, metric } = useMapStore();
     const cfg = LAYER_CONFIGS[activeLayer];
 
     if (!hoveredRegion || hoveredPoint === null) return null;
+
+    const valueLabel =
+        hoveredValue == null
+            ? "—"
+            : metric === "ratio"
+              ? `${formatRatio(hoveredValue)} claims / patient`
+              : `${hoveredValue.toLocaleString()} ${cfg.unit}`;
 
     return (
         <div
@@ -28,9 +36,7 @@ export default function Tooltip() {
         >
             <span style={{ fontWeight: 600 }}>{hoveredRegion}</span>
             <span style={{ opacity: 0.5, margin: "0 6px" }}>·</span>
-            <span>
-                {hoveredValue != null ? hoveredValue.toLocaleString() : "—"} {cfg.unit}
-            </span>
+            <span>{valueLabel}</span>
         </div>
     );
 }

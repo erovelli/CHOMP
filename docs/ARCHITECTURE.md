@@ -84,9 +84,25 @@ A few deliberate choices:
 - **Views, not materialized views, for aggregates.** These are computed once at export time and never queried by the runtime. Views keep the schema declarative and make the SQL diffable.
 - **HCPCS categorization happens exactly once**, in `006`. Every downstream view reads the `category` column. The HCPCS → category mapping is one CASE expression, mirrored in the frontend's `CATEGORY_TO_KEY` — two copies of the same fact, and that is intentional: the SQL is the source of truth for the backend; the TS is the source of truth for the UI shell.
 
+### 3.1a DuckDB builder (authoritative) + county grain
+
+The Postgres view chain above remains as the documented SQL reference, but the
+**authoritative builder is now [`scripts/build_aggregates.py`](../scripts/build_aggregates.py)** — a DuckDB script that reads `merged_hhs_nppes_geo.csv`
+directly and emits all **six** NDJSON files (`{annual,monthly}` × `{state,county,zip3}`). It was added because (a) the build host has no Postgres provisioned,
+(b) DuckDB aggregates the 23M-row CSV in ~10s with no load step, and (c) the
+geocoded `county_fips` enables a `county` grain the original views never had.
+
+It mirrors the `006` HCPCS→category CASE exactly, then differs in geography:
+
+- `county` is keyed on the 5-digit geocoded `county_fips`.
+- `state` is **built from county sums** — postal is derived from `LEFT(county_fips, 2)` via a FIPS→USPS map — so `state == SUM(county)` holds exactly
+  (verified at build time). This replaces the old NPPES-`practice_state` rollup.
+- `zip3` is still `LEFT(practice_zip5, 3)`, which keeps a slightly larger row
+  universe than county/state (see L33 — the levels intentionally do not reconcile).
+
 ### 3.2 Export
 
-[`scripts/export_views.sh`](../scripts/export_views.sh) runs four `psql -f` invocations, each executing a `SELECT json_build_object(key, rows)` that serializes a view into NDJSON. Each line of output is `{"<region_id>": [<records>...]}` — an NDJSON stream where every line is already a key-partitioned bundle. That's the shape [`dataService.fetchNDJSON`](../src/lib/dataService.ts) consumes.
+The legacy SQL path: [`scripts/export_views.sh`](../scripts/export_views.sh) runs `psql -f` invocations, each executing a `SELECT json_build_object(key, rows)` that serializes a view into NDJSON. The DuckDB builder produces the same line shape (`{"<region_id>": [<records>...]}`) using `string_agg` over `json_object`. Either way each line is a key-partitioned bundle — the shape [`dataService.fetchNDJSON`](../src/lib/dataService.ts) consumes.
 
 The NDJSON format was picked because:
 
@@ -156,7 +172,7 @@ Every state polygon and every ZIP3 polygon carries three feature-state fields:
 
 | Field      | Type    | Source       | Meaning                                      |
 | ---------- | ------- | ------------ | -------------------------------------------- |
-| `value`    | number  | Data JSON    | Total claims for the active (year, category) |
+| `value`    | number  | Data JSON    | Active metric for the (year, category): total claims (volume) or claims-per-beneficiary (intensity) |
 | `hover`    | boolean | Mouse events | Cursor is over this polygon                  |
 | `selected` | boolean | Click events | Detail panel is open on this polygon         |
 
@@ -212,17 +228,28 @@ The store's single interesting piece of logic is in `setSelectedYear`, which cle
 
 ### 7.1 Payload budget
 
-| File                   | Size         | When loaded                         |
-| ---------------------- | ------------ | ----------------------------------- |
-| JS bundle              | ~200 KB gzip | On first load                       |
-| `states.pmtiles`       | ~105 KB      | On map `load`                       |
-| `zip3.pmtiles`         | ~1 MB        | On map `load`                       |
-| `…_annual_state.json`  | ~500 KB      | On map `load`                       |
-| `…_annual_zip3.json`   | ~5 MB        | On map `load`                       |
-| `…_monthly_state.json` | ~5 MB        | On first monthly slider interaction |
-| `…_monthly_zip3.json`  | ~61 MB       | On first monthly slider interaction |
+| File                    | Size (raw / gzip) | When loaded                         |
+| ----------------------- | ----------------- | ----------------------------------- |
+| JS bundle               | ~200 KB gzip      | On first load                       |
+| `states.pmtiles`        | ~105 KB           | On map `load`                       |
+| `zip3.pmtiles`          | ~1 MB             | On map `load`                       |
+| `counties.geojson`      | 2.7 MB / 0.85 MB  | On map `load` (county source)       |
+| `…_annual_state.json`   | 0.45 MB / 60 KB   | On map `load`                       |
+| `…_annual_county.json`  | 10 MB / 1.2 MB    | On map `load`                       |
+| `…_annual_zip3.json`    | 5.4 MB / 0.66 MB  | On map `load`                       |
+| `…_monthly_state.json`  | 5.2 MB / 0.6 MB   | On first monthly slider interaction |
+| `…_monthly_county.json` | 99 MB / 10.3 MB   | On first monthly slider interaction |
+| `…_monthly_zip3.json`   | 58 MB / 6.3 MB    | On first monthly slider interaction |
 
-The 61 MB monthly ZIP3 file is the elephant in the room. It's deferred behind an explicit user interaction, and the loading state is surfaced in the detail panel. A post-MVP iteration (see [`docs/adr/0002-zip3-monthly-as-pmtiles.md`](adr/0002-zip3-monthly-as-pmtiles.md)) will move this to a vector-tile-backed format so it can be range-requested.
+Two elephants now: the deferred **monthly ZIP3 (58 MB)** and the new **monthly
+county (99 MB / 10.3 MB gzip)**, the largest artifact in the project. Both are
+loaded only on the first monthly-slider interaction, and `loadMonthlyData()`
+still fetches all three levels in one shot (so opening month view at *any* level
+pulls the county file too — a known cost). A post-MVP iteration (see
+[`docs/adr/0002-zip3-monthly-as-pmtiles.md`](adr/0002-zip3-monthly-as-pmtiles.md))
+should move the monthly grains to a vector-tile / range-requestable format and/or
+lazy-load monthly per active level. County geometry is GeoJSON rather than
+PMTiles because the build host lacks tippecanoe/ogr2ogr (see L36).
 
 ### 7.2 Runtime
 

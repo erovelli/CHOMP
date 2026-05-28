@@ -5,8 +5,10 @@ dist
 .DS_Store
 .lighthouseci/
 
-# Local raw datasets (HHS CSV, NPPES zips, merge outputs)
-data/
+# Local raw datasets (HHS CSV, NPPES zips, merge outputs).
+# Anchored to repo root so it does NOT also match published aggregates in
+# public/data/ (an unanchored `data/` matches every dir named data at any depth).
+/data/
 
 # Python
 __pycache__/

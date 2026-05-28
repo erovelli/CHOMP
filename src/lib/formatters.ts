@@ -13,3 +13,8 @@ export function formatStop(value: number): string {
 export function formatNumber(value: number): string {
     return value.toLocaleString();
 }
+
+/** Claims-per-beneficiary ratio, e.g. 1.32. */
+export function formatRatio(value: number): string {
+    return value.toFixed(2);
+}

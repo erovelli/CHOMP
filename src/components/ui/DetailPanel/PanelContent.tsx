@@ -113,7 +113,11 @@ export default function PanelContent({
                         marginBottom: 4,
                     }}
                 >
-                    {detail.level === "state" ? "State" : "ZIP3 Area"}
+                    {detail.level === "state"
+                        ? "State"
+                        : detail.level === "county"
+                          ? "County"
+                          : "ZIP3 Area"}
                 </p>
                 <h2
                     style={{
@@ -287,6 +291,14 @@ export default function PanelContent({
                                         : "—"
                                 }
                                 label="Avg Paid / Claim"
+                            />
+                            <StatCard
+                                value={
+                                    totalBeneficiaries > 0
+                                        ? (totalClaims / totalBeneficiaries).toFixed(2)
+                                        : "—"
+                                }
+                                label="Claims / Patient"
                             />
                         </div>
 

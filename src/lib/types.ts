@@ -10,6 +10,16 @@ export type LayerKey =
     | "adjunctive"
     | "prosthodontics";
 
+/** Geographic aggregation level the map is currently showing. */
+export type GeoLevel = "state" | "county" | "zip3";
+
+/**
+ * What the choropleth color encodes.
+ * - `claims`: raw claim volume (a population/size map).
+ * - `ratio`: claims per beneficiary (a utilization-intensity map).
+ */
+export type Metric = "claims" | "ratio";
+
 export interface LayerConfig {
     key: LayerKey;
     label: string;
@@ -20,6 +30,9 @@ export interface LayerConfig {
     accent: string;
 }
 
+// Claims-per-beneficiary (the "Per patient" metric) is derived at runtime as
+// total_claims / total_beneficiaries_served — it is NOT a stored field (see
+// docs/DATA_DICTIONARY.md and the note in scripts/build_aggregates.py).
 export interface DataRecord {
     year: string;
     category: string;
@@ -39,7 +52,7 @@ export interface MonthlyDataRecord {
 export interface RegionDetail {
     id: string;
     name: string;
-    level: "state" | "zip3";
+    level: GeoLevel;
     records: DataRecord[];
     monthlyRecords?: MonthlyDataRecord[];
 }
