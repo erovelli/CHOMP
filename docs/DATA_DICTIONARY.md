@@ -23,12 +23,21 @@ This document is the single source of truth for the shape and semantics of the N
 provider_procedure_category_aggregate_{grain}_{geo}.json
 ```
 
-| Slot    | Values                | Meaning                     |
-| ------- | --------------------- | --------------------------- |
-| `grain` | `annual` \| `monthly` | Temporal aggregation level. |
-| `geo`   | `state` \| `zip3`     | Spatial aggregation level.  |
+| Slot    | Values                        | Meaning                     |
+| ------- | ----------------------------- | --------------------------- |
+| `grain` | `annual` \| `monthly`         | Temporal aggregation level. |
+| `geo`   | `state` \| `county` \| `zip3` | Spatial aggregation level.  |
 
-Four files total. Each view name in [`migrations/aggregate_views/`](../migrations/aggregate_views/) maps 1-to-1 to one output file — renaming a view requires renaming the file, and updating [`DATA_PATHS`](../src/constants/map.ts) to match. All three change in the same PR.
+**Six files total** (3 geographies × 2 grains). They are produced by
+[`scripts/build_aggregates.py`](../scripts/build_aggregates.py), a DuckDB script
+that reads the merged+geocoded claims CSV directly and applies the same
+HCPCS→category logic as the legacy Postgres view chain in
+[`migrations/aggregate_views/`](../migrations/aggregate_views/) (006). The
+Postgres views remain as the documented SQL equivalent but cover only `state`
+(from NPPES `practice_state`) and `zip3`; the **authoritative builder is now the
+DuckDB script**, which adds the `county` grain and rebuilds `state` from county
+sums (see [Aggregation invariants](#aggregation-invariants)). Adding/renaming an
+output requires updating [`DATA_PATHS`](../src/constants/map.ts) in the same PR.
 
 ## NDJSON envelope
 
@@ -60,7 +69,7 @@ interface DataRecord {
 }
 ```
 
-### Monthly records (`monthly_state`, `monthly_zip3`)
+### Monthly records (`monthly_state`, `monthly_county`, `monthly_zip3`)
 
 ```ts
 interface MonthlyDataRecord {
@@ -85,13 +94,17 @@ Types are mirrored in [`src/lib/types.ts`](../src/lib/types.ts). Changing the sc
 | `total_claims`               | `number` | individual claim lines        | `SUM(claims_count)`                         | The primary display field in the choropleth.                                  |
 | `total_amount_paid`          | `number` | USD dollars                   | `SUM(total_amount_paid)`                    | Gross amount paid by Medicaid; not patient responsibility.                    |
 
-All numeric fields are non-negative integers. `total_amount_paid` is in whole USD (not cents).
+`total_*` fields are non-negative integers; `total_amount_paid` is whole USD (not cents).
+
+**Two color metrics (one derived).** The choropleth can encode either `total_claims` (volume — a population/size map) or **claims per beneficiary** (utilization intensity). The ratio is **not a stored field** — it is computed at read time as `total_claims / total_beneficiaries_served` (materializing it pushed `monthly_county` past GitHub's 100 MB file limit for no functional gain). For a single category this is exact; for the UI's "All Categories" view it is `SUM(claims)/SUM(beneficiaries)` across categories, whose denominator double-counts patients active in multiple categories and so slightly understates true per-person intensity (see L33 note).
 
 ### Aggregation invariants
 
 - **Annual = SUM(monthly) across the same year.** If the totals disagree, the monthly file was rebuilt but the annual file wasn't.
-- **State = SUM(zip3) within the same state.** If the totals disagree, the NPI-to-state join is stale and the ZIP3 view should be rebuilt.
+- **State = SUM(county) within the same state.** State is built from county sums: the state USPS postal is derived from the county FIPS state prefix (`LEFT(county_fips, 2)`), so each state total equals the sum of its counties exactly, by construction. Verified at build time (0 mismatches).
+- **State ≠ SUM(zip3).** The three levels do **not** share one row universe. County and state are keyed off the geocoded `county_fips`; zip3 is keyed off NPPES `practice_zip5`. The ~32k geocode-failure rows (L13/L32) have a ZIP but no county, so they appear in `zip3` but not in `county`/`state`. Concretely, `sum(zip3) − sum(state) ≈ 2.0M claims`. This is intentional ("max coverage per level") — see L33.
 - **Records are one row per `(region × period × category)`.** Summing `total_claims` across categories within a region-period gives the "All Categories" total the UI shows when `activeLayer === "all"`.
+- **`Uncategorized`** is retained (not dropped) for parity with the legacy views; it has no `CATEGORY_TO_KEY` entry so it contributes to the "all" total but to no specific category layer.
 
 ## Categories
 
@@ -124,8 +137,9 @@ Frontend mapping from these category strings to the nine `LayerKey` values is in
 
 ## Identifier formats
 
-- **State:** USPS two-letter postal code, uppercase. Matches the `postal` property on `states.pmtiles`. Source: NPPES `provider_business_practice_location_address_state_name`.
-- **ZIP3:** three-digit string, zero-padded (`"021"`, not `21`). Derived by `LEFT(zip5, 3)` in SQL. Matches the `3dig_zip` property on `zip3.pmtiles`.
+- **State:** USPS two-letter postal code, uppercase. Matches the `postal` property on `states.pmtiles`. Derived from the county FIPS state prefix via the FIPS→USPS map in [`build_aggregates.py`](../scripts/build_aggregates.py) (50 states + DC + the 5 inhabited territories GU/MP/PR/VI/AS).
+- **County:** five-digit county FIPS / GEOID string, zero-padded (`"01001"`, not `1001`). Source: geocoded `county_fips`. Matches the `GEOID` property on [`public/counties.geojson`](../public/counties.geojson) (regenerate with [`scripts/fetch_county_geometry.py`](../scripts/fetch_county_geometry.py)).
+- **ZIP3:** three-digit string, zero-padded (`"021"`, not `21`). Derived by `LEFT(practice_zip5, 3)`. Matches the `3dig_zip` property on `zip3.pmtiles`.
 - **Period:** year as `"YYYY"`; month as `"YYYY-MM"`. Always strings, never numbers — this is deliberate so downstream code can't accidentally do arithmetic on the values.
 
 ## Versioning

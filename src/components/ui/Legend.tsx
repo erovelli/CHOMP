@@ -1,12 +1,15 @@
 import { useMapStore } from "../../lib/store";
 import { LAYER_CONFIGS } from "../../constants/map";
-import { CHOROPLETH_COLORS, CHOROPLETH_STOPS } from "../../lib/mapStyles";
-import { formatStop } from "../../lib/formatters";
+import { CHOROPLETH_COLORS } from "../../lib/mapStyles";
+import { formatStop, formatRatio } from "../../lib/formatters";
 import { Z_INDEX, PANEL_SHADOW } from "../../constants/layout";
 
 export default function Legend() {
-    const { activeLayer } = useMapStore();
+    const { activeLayer, metric, colorStops } = useMapStore();
     const cfg = LAYER_CONFIGS[activeLayer];
+    const fmt = metric === "ratio" ? formatRatio : formatStop;
+    const unit = metric === "ratio" ? "Claims / Patient" : cfg.unit;
+    const hasStops = colorStops.length > 0;
 
     return (
         <div
@@ -33,7 +36,7 @@ export default function Legend() {
                     marginBottom: 10,
                 }}
             >
-                {cfg.label} — {cfg.unit}
+                {cfg.label} — {unit}
             </p>
             <div
                 style={{
@@ -55,12 +58,22 @@ export default function Legend() {
                 }}
             >
                 <span style={{ fontSize: 10, color: "var(--ink-dim)" }}>
-                    {formatStop(CHOROPLETH_STOPS[0])}
+                    {hasStops ? fmt(colorStops[0]) : "—"}
                 </span>
                 <span style={{ fontSize: 10, color: "var(--ink-dim)" }}>
-                    {formatStop(CHOROPLETH_STOPS[CHOROPLETH_STOPS.length - 1])}+
+                    {hasStops ? `${fmt(colorStops[colorStops.length - 1])}+` : "—"}
                 </span>
             </div>
+            <p
+                style={{
+                    fontSize: 9,
+                    color: "var(--ink-dim)",
+                    marginTop: 8,
+                    opacity: 0.8,
+                }}
+            >
+                Scale adjusts to the current view
+            </p>
         </div>
     );
 }

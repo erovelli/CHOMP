@@ -1,9 +1,10 @@
 #!/usr/bin/env sh
 # Run lint-staged before each commit. A fresh checkout — e.g. a git
-# worktree where `npm install` has not been run — has no node_modules;
-# skip there instead of failing the commit with a spawn error.
-if [ -d node_modules ]; then
+# worktree where `npm install` has not been run, or a machine without Node
+# on PATH — can't run the linter; skip there instead of failing the commit
+# with a spawn error.
+if [ -d node_modules ] && command -v npx >/dev/null 2>&1; then
   npx lint-staged
 else
-  echo "husky: node_modules not found — skipping lint-staged (run 'npm install' to enable pre-commit linting)."
+  echo "husky: node_modules or npx not available — skipping lint-staged (run 'npm install' with Node on PATH to enable pre-commit linting)."
 fi

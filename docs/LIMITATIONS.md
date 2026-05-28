@@ -294,6 +294,84 @@ The ACS C27007 table — "Medicaid/Means-Tested Public Coverage by Sex by Age" �
 
 ---
 
+## 6. Aggregation / map-build limitations (from `build_aggregates.py`)
+
+> The published NDJSON files under [`public/data/`](../public/data/) are produced
+> by [`scripts/build_aggregates.py`](../scripts/build_aggregates.py) (DuckDB),
+> which reads `merged_hhs_nppes_geo.csv` and emits 6 files: `{annual,monthly}` ×
+> `{state,county,zip3}`. These caveats are specific to that roll-up step.
+
+### L33 🟥 State is built from county sums; the three levels do not share one universe
+
+**Issue.** `county` and `state` are keyed off the geocoded `county_fips`; `state`
+postal is derived from the county FIPS state prefix (`LEFT(county_fips, 2)`), so
+`state == SUM(its counties)` exactly. But `zip3` is keyed off NPPES
+`practice_zip5`. The two geographies cover **different row universes**:
+
+- county/state universe: 23,140,395 rows (rows with a non-NULL `county_fips`).
+- zip3 universe: 23,171,904 rows (rows with a non-NULL `practice_zip5`).
+
+The ~32,488 geocode-failure rows (L13/L32) have a ZIP but no county, so they are
+present in `zip3` but excluded from `county`/`state`.
+**Impact.** `sum(zip3) − sum(state) ≈ 2.0M claims` (~0.16% of the 1.23B total).
+Cross-level totals will not reconcile; a reviewer summing all ZIP3s and all
+states will get different national totals. This is a deliberate "max coverage per
+level" choice (confirmed with project owner): each level is as complete as its
+own geography allows, rather than intersecting to a common universe.
+**Mitigation.** Disclose in methods. If exact cross-level reconciliation is ever
+needed, restrict `zip3` to rows that also have a `county_fips` (one-line `WHERE`
+change in the build script) — at the cost of dropping the geocode-failure rows
+from the ZIP3 map too.
+**Status.** By design; documented.
+
+### L34 🟨 Territories roll up to state postals with no map geometry
+
+**Issue.** 316,734 rows carry territory county FIPS (PR `72`, GU `66`, VI `78`,
+MP `69`). `build_aggregates.py` maps these to USPS postals (`PR/GU/VI/MP`) so they
+roll into `state` and keep the `state == SUM(county)` invariant. But
+`states.pmtiles` and `counties.geojson` may not include territory polygons.
+**Impact.** Territory keys exist in the data files but render nowhere on the map
+(the UI silently ignores keys with no matching feature). Territory claims are in
+the national `state`/`county` totals but invisible spatially.
+**Mitigation.** Acceptable. To surface territories, add their geometries to the
+state/county sources. Note `merged_hhs_nppes_geo.csv` does have territory
+`county_fips` despite L15's earlier expectation that territories geocode to NULL.
+**Status.** Documented.
+
+### L35 ⬜ Choropleth color scale is dynamic (quantile breaks), not fixed
+
+**Issue.** Claim magnitudes differ by ~2 orders of magnitude across levels (2023
+medians: state ~1.9M, zip3 ~98k, county ~11k) and again between the two metrics
+(volume vs. claims-per-beneficiary), so any single fixed scale washes most
+regions to one end of the palette.
+**Resolution.** The scale is computed at runtime: `quantileStops()` in
+[`src/lib/mapStyles.ts`](../src/lib/mapStyles.ts) derives 7 stops from the
+quantiles of whatever slice is on screen — geography level × year × category ×
+metric — and the map re-scales on every such change. The Legend reads the same
+stops from the store (`colorStops`).
+**Caveats.** (a) Because the scale is relative, color is **not comparable across
+different views** — the same shade means different absolute values at, say, state
+vs. county, or volume vs. ratio. The Legend always shows the active range. (b) The
+top quantile is clipped at p97 so a single extreme outlier doesn't flatten the
+rest into one bucket; the most-extreme regions therefore share the darkest band.
+**Status.** Implemented (supersedes the earlier fixed-scale approach).
+
+### L36 ⬜ County geometry vintage differs from claims
+
+**Issue.** Counties are served as GeoJSON (Census cartographic-boundary counties,
+via [`scripts/fetch_county_geometry.py`](../scripts/fetch_county_geometry.py))
+because the build environment has no tippecanoe/ogr2ogr to produce a county
+`.pmtiles`. The boundary file is a fixed Census vintage; a handful of FIPS codes
+that changed over 2018–2024 (e.g. Connecticut's 2022 planning-region recode) may
+not match the geocoded `county_fips` exactly.
+**Impact.** A small number of county keys may not join to a polygon (rendered
+blank) or vice-versa. At the national choropleth scale this is negligible.
+**Mitigation.** Swap in a matching-vintage county boundary set, or move counties
+to PMTiles, in a follow-up. ZIP3/state are unaffected.
+**Status.** Minor; documented.
+
+---
+
 ## Adding to this doc
 
 When you find a new data limitation while working with the dataset, add an entry **here** before merging the related code change. The entry should have:

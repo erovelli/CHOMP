@@ -1,4 +1,6 @@
 import LayerControl from "./LayerControl";
+import GeoLevelControl from "./GeoLevelControl";
+import MetricControl from "./MetricControl";
 import DetailPanel from "./DetailPanel/index";
 import Tooltip from "./Tooltip";
 import Legend from "./Legend";
@@ -51,12 +53,14 @@ export default function Header() {
                             letterSpacing: "0.02em",
                         }}
                     >
-                        United States · State & ZIP3 Areas
+                        United States · State, County & ZIP3 Areas
                     </span>
                 </div>
             </header>
 
             <LayerControl />
+            <GeoLevelControl />
+            <MetricControl />
             <Legend />
             <Tooltip />
             <DetailPanel />

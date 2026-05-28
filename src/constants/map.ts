@@ -1,4 +1,4 @@
-import type { LayerKey, LayerConfig } from "../lib/types";
+import type { LayerKey, LayerConfig, GeoLevel } from "../lib/types";
 
 // ── Map viewport ──────────────────────────────────────────────
 export const MAP_CENTER: [number, number] = [-98.5, 39.8];
@@ -19,11 +19,28 @@ export const ZIP3_STROKE = "zip3-stroke";
 export const ZIP3_LAYER = "zip3codes";
 export const ZIP3_ID_PROP = "3dig_zip";
 
+// Counties are a GeoJSON source (no PMTiles build tooling available); features
+// are keyed by 5-digit FIPS via the `GEOID` property promoted to the feature id.
+export const COUNTY_SOURCE = "county-source";
+export const COUNTY_FILL = "county-fill";
+export const COUNTY_STROKE = "county-stroke";
+export const COUNTY_ID_PROP = "GEOID";
+export const COUNTY_GEOJSON = "counties.geojson";
+
+// ── Geography levels (map drill-down) ─────────────────────────
+export const GEO_LEVELS: { key: GeoLevel; label: string }[] = [
+    { key: "state", label: "State" },
+    { key: "county", label: "County" },
+    { key: "zip3", label: "ZIP3" },
+];
+
 // ── Data file paths (relative to BASE_URL) ────────────────────
 export const DATA_PATHS = {
     annualState: "data/provider_procedure_category_aggregate_annual_state.json",
+    annualCounty: "data/provider_procedure_category_aggregate_annual_county.json",
     annualZip3: "data/provider_procedure_category_aggregate_annual_zip3.json",
     monthlyState: "data/provider_procedure_category_aggregate_monthly_state.json",
+    monthlyCounty: "data/provider_procedure_category_aggregate_monthly_county.json",
     monthlyZip3: "data/provider_procedure_category_aggregate_monthly_zip3.json",
 } as const;
 
@@ -35,18 +52,22 @@ export const FALLBACK_BG_COLOR = "#f0ede8";
 export const STROKE_COLOR_ACTIVE = "#1a1917";
 export const STROKE_COLOR_DEFAULT_STATES = "#6b7f7d";
 export const STROKE_COLOR_DEFAULT_ZIP3 = "#9a948d";
+export const STROKE_COLOR_DEFAULT_COUNTY = "#9a948d";
 
 // ── Fill opacity (selected / hover / default) ─────────────────
 export const STATES_FILL_OPACITY = { selected: 1.0, hover: 0.95, default: 0.82 } as const;
 export const ZIP3_FILL_OPACITY = { selected: 1.0, hover: 0.9, default: 0.5 } as const;
+export const COUNTY_FILL_OPACITY = { selected: 1.0, hover: 0.9, default: 0.72 } as const;
 
 // ── Line widths (selected / hover / default) ──────────────────
 export const STATES_LINE_WIDTH = { selected: 2, hover: 1.5, default: 0.8 } as const;
 export const ZIP3_LINE_WIDTH = { selected: 2, hover: 1.2, default: 0.3 } as const;
+export const COUNTY_LINE_WIDTH = { selected: 2, hover: 1.2, default: 0.25 } as const;
 
 // ── Line opacity (selected / default) ─────────────────────────
 export const STATES_LINE_OPACITY = { selected: 1, default: 0.6 } as const;
 export const ZIP3_LINE_OPACITY = { selected: 1, default: 0.4 } as const;
+export const COUNTY_LINE_OPACITY = { selected: 1, default: 0.35 } as const;
 
 // ── Category mapping ──────────────────────────────────────────
 export const CATEGORY_TO_KEY: Record<string, LayerKey> = {

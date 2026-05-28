@@ -1,10 +1,20 @@
 import { create } from "zustand";
-import type { LayerKey, RegionDetail } from "./types";
+import type { LayerKey, GeoLevel, Metric, RegionDetail } from "./types";
 import { DEFAULT_YEAR } from "../constants/time";
 
 interface MapState {
     activeLayer: LayerKey;
     setActiveLayer: (layer: LayerKey) => void;
+
+    geoLevel: GeoLevel;
+    setGeoLevel: (level: GeoLevel) => void;
+
+    metric: Metric;
+    setMetric: (metric: Metric) => void;
+
+    // Data-driven choropleth stops for the current slice (for the Legend).
+    colorStops: number[];
+    setColorStops: (stops: number[]) => void;
 
     selectedYear: string;
     setSelectedYear: (year: string) => void;
@@ -41,6 +51,24 @@ interface MapState {
 export const useMapStore = create<MapState>((set) => ({
     activeLayer: "all",
     setActiveLayer: (layer) => set({ activeLayer: layer }),
+
+    geoLevel: "state",
+    // Switching geography invalidates any open region selection (the selected
+    // id won't exist at the new level), so close the detail panel too.
+    setGeoLevel: (level) =>
+        set({
+            geoLevel: level,
+            selectedRegion: null,
+            selectedDetail: null,
+            panelOpen: false,
+            selectedState: null,
+        }),
+
+    metric: "claims",
+    setMetric: (metric) => set({ metric }),
+
+    colorStops: [],
+    setColorStops: (stops) => set({ colorStops: stops }),
 
     selectedYear: DEFAULT_YEAR,
     setSelectedYear: (year) => set({ selectedYear: year, selectedMonth: null }),
