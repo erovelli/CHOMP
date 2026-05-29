@@ -27,6 +27,18 @@ export const COUNTY_STROKE = "county-stroke";
 export const COUNTY_ID_PROP = "GEOID";
 export const COUNTY_GEOJSON = "counties.geojson";
 
+// Non-interactive grey backdrop showing Canada/Mexico/etc. so the US data has
+// regional context. Rendered below every other layer; no feature-state.
+export const WORLD_SOURCE = "world-source";
+export const WORLD_FILL = "world-fill";
+export const WORLD_STROKE = "world-stroke";
+export const WORLD_GEOJSON = "world.geojson";
+export const WORLD_FILL_COLOR = "#d8d4cd";
+export const WORLD_STROKE_COLOR = "#b3aea4";
+export const WORLD_FILL_OPACITY = 0.85;
+export const WORLD_LINE_WIDTH = 0.4;
+export const WORLD_LINE_OPACITY = 0.55;
+
 // ── Geography levels (map drill-down) ─────────────────────────
 export const GEO_LEVELS: { key: GeoLevel; label: string }[] = [
     { key: "state", label: "State" },

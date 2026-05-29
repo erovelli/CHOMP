@@ -37,6 +37,15 @@ import {
     COUNTY_STROKE,
     COUNTY_ID_PROP,
     COUNTY_GEOJSON,
+    WORLD_SOURCE,
+    WORLD_FILL,
+    WORLD_STROKE,
+    WORLD_GEOJSON,
+    WORLD_FILL_COLOR,
+    WORLD_STROKE_COLOR,
+    WORLD_FILL_OPACITY,
+    WORLD_LINE_WIDTH,
+    WORLD_LINE_OPACITY,
     FALLBACK_BG_COLOR,
     STROKE_COLOR_ACTIVE,
     STROKE_COLOR_DEFAULT_STATES,
@@ -66,6 +75,44 @@ const LEVEL_ID_PROP: Record<GeoLevel, string> = {
 };
 
 // ── Layer helpers ────────────────────────────────────────────
+
+// Grey backdrop of non-US countries. Added first so every data layer renders
+// above it. Non-interactive (no handlers, no feature-state, no promoteId).
+function addWorldLayer(map: maplibregl.Map) {
+    const BASE = import.meta.env.BASE_URL;
+
+    if (!map.getSource(WORLD_SOURCE)) {
+        map.addSource(WORLD_SOURCE, {
+            type: "geojson",
+            data: `${BASE}${WORLD_GEOJSON}`,
+        });
+    }
+
+    if (!map.getLayer(WORLD_FILL)) {
+        map.addLayer({
+            id: WORLD_FILL,
+            type: "fill",
+            source: WORLD_SOURCE,
+            paint: {
+                "fill-color": WORLD_FILL_COLOR,
+                "fill-opacity": WORLD_FILL_OPACITY,
+            },
+        });
+    }
+
+    if (!map.getLayer(WORLD_STROKE)) {
+        map.addLayer({
+            id: WORLD_STROKE,
+            type: "line",
+            source: WORLD_SOURCE,
+            paint: {
+                "line-color": WORLD_STROKE_COLOR,
+                "line-width": WORLD_LINE_WIDTH,
+                "line-opacity": WORLD_LINE_OPACITY,
+            },
+        });
+    }
+}
 
 function addStatesLayers(map: maplibregl.Map) {
     const BASE = import.meta.env.BASE_URL;
@@ -851,6 +898,7 @@ export default function MapContainer() {
             map.current.on("load", async () => {
                 if (!map.current) return;
 
+                addWorldLayer(map.current);
                 addStatesLayers(map.current);
                 addCountyLayers(map.current);
                 addZip3Layers(map.current);

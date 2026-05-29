@@ -1,6 +1,7 @@
 import LayerControl from "./LayerControl";
 import GeoLevelControl from "./GeoLevelControl";
 import MetricControl from "./MetricControl";
+import YearControl from "./YearControl";
 import DetailPanel from "./DetailPanel/index";
 import Tooltip from "./Tooltip";
 import Legend from "./Legend";
@@ -61,6 +62,7 @@ export default function Header() {
             <LayerControl />
             <GeoLevelControl />
             <MetricControl />
+            <YearControl />
             <Legend />
             <Tooltip />
             <DetailPanel />
