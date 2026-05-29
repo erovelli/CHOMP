@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Build the procedure-category aggregate NDJSON files from the merged+geocoded CSV.
 
-This is the DuckDB-based equivalent of the Postgres view chain in
-`migrations/aggregate_views/` (006 -> 010). It reads the single merged/geocoded
-claims CSV directly and emits the six NDJSON files the frontend consumes:
+DuckDB aggregator. Reads the single merged/geocoded claims CSV (~23M rows) and
+emits the six NDJSON files the frontend consumes:
 
     provider_procedure_category_aggregate_{annual,monthly}_{state,county,zip3}.json
 
@@ -15,11 +14,12 @@ Grains
 
 State is built from COUNTY sums (pure): the state postal is derived from the
 county FIPS state prefix, so `state total == SUM(its counties)` holds exactly by
-construction. Rows with NULL county_fips (territories per L15, and the ~32k
-geocode failures per L13/L32) are therefore excluded from county AND state
-totals. This is the "pure county sum" rollup. See docs/LIMITATIONS.md.
+construction. Rows with NULL county_fips (the ~32k geocode failures per L13/L32)
+are therefore excluded from county AND state totals. This is the "pure county
+sum" rollup. See docs/LIMITATIONS.md.
 
-The HCPCS -> category mapping is identical to migration 006.
+CATEGORY_CASE below is the single source of truth for the HCPCS → category
+mapping; it must stay in sync with CATEGORY_TO_KEY in src/constants/map.ts.
 
 Usage
 -----
