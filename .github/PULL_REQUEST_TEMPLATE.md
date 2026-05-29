@@ -53,13 +53,12 @@ state why it wasn't taken. If there was no real fork in the road, write
 
 ## Data-pipeline checklist
 
-<!-- Only required for PRs that touch migrations/, scripts/, or public/data/. Delete otherwise. -->
+<!-- Only required for PRs that touch scripts/ or public/data/. Delete otherwise. -->
 
-- [ ] New migration file added under `migrations/` (never edited an existing file)
-- [ ] Matching aggregate view added under `migrations/aggregate_views/` (if applicable)
-- [ ] `scripts/export_views.sh` updated to export any new view
-- [ ] `DATA_PATHS` in `src/constants/map.ts` updated to match new export filename
-- [ ] Re-exported `public/data/*.json` and verified sizes are within budget
+- [ ] `CATEGORY_CASE` in `scripts/build_aggregates.py` updated for any new/renamed category
+- [ ] `CATEGORY_TO_KEY` + `LAYER_CONFIGS` + `LAYER_ORDER` in `src/constants/map.ts` kept in sync
+- [ ] `DATA_PATHS` in `src/constants/map.ts` updated to match any new export filename
+- [ ] Re-ran `python scripts/build_aggregates.py` and verified the 6 output sizes are within budget (no file > 100 MB)
 
 ## Pre-merge checklist
 

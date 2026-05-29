@@ -4,7 +4,7 @@
 
 **An interactive choropleth of U.S. Medicaid dental claims, 2018–2024.**
 
-A full-stack data visualization project that transforms ~60 GB of raw HHS Open Data and NPPES records into a 5 MB interactive map — state- and ZIP3-level utilization across nine dental procedure categories, six years of history, and monthly drill-down.
+A full-stack data visualization project that transforms ~60 GB of raw HHS Open Data and NPPES records into an interactive map — state-, county-, and ZIP3-level utilization across all 12 CDT/ADA dental procedure categories, six years of history, and monthly drill-down.
 
 [**→ Open the live site**](https://erovelli.github.io/medicaid-dent-policy/)
 
@@ -29,19 +29,19 @@ This project does all of that end-to-end, and makes the result explorable in a b
 
 The design is deliberately constrained:
 
-- **ZIP3, not ZIP5.** Coarse enough to protect individual-provider identification, fine enough to see intra-state variation.
-- **Categories, not codes.** Nine clinically meaningful groupings (Diagnostic, Preventive, Restorative, …) instead of the raw HCPCS namespace.
-- **Static hosting, no backend.** The entire interactive experience is a static site — no API, no auth, no server cost. The database is the _build tool_, not a runtime dependency.
+- **State / county / ZIP3, not ZIP5.** Three drill-down levels, all coarse enough to protect individual-provider identification.
+- **Categories, not codes.** All 12 CDT/ADA divisions (Diagnostic, Preventive, Restorative, Endodontics, Periodontics, Prosthodontics removable/fixed, Maxillofacial Prosthetics, Implant Services, Oral & Maxillofacial Surgery, Orthodontics, Adjunctive General) instead of the raw HCPCS namespace.
+- **Static hosting, no backend, no build database.** The entire interactive experience is static — no API, no auth, no server cost. The build pipeline is plain Python + DuckDB; nothing to provision.
 
 ## What it does
 
-|                  |                                                                                                                                                                                          |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Map**          | Full-nation choropleth at two zoom levels: states (PMTiles vector), ZIP3 areas (PMTiles vector). Feature-state driven recoloring — no GeoJSON re-parse on year/category change.          |
-| **Controls**     | Nine procedure-category layers (plus "All"), 2018–2024 year selector, month slider that lazy-loads a 61 MB monthly dataset only on first use.                                            |
-| **Detail panel** | Per-region stats — total claims, beneficiaries served, dollars paid, avg $/claim — and a ranked category breakdown for the selected period.                                              |
-| **Tooltip**      | Pixel-anchored hover readout; respects feature-state hover/selected to drive stroke weights and fills without reconfiguring paint properties.                                            |
-| **Info modal**   | Surfaces the caveats that matter: HHS cell-suppression (<12 claims or <12 beneficiaries/month), interstate variation in Medicaid dental coverage, and NPI/practice-location limitations. |
+|                  |                                                                                                                                                                                                                                                                                                                                    |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Map**          | Full-nation choropleth at three drill-down levels: states (PMTiles), counties (GeoJSON), ZIP3 areas (PMTiles), with non-US countries rendered as a grey backdrop. Feature-state driven recoloring — no GeoJSON re-parse on year/category change. Dynamic quantile color scale that re-fits per (level × year × category × metric). |
+| **Controls**     | All 12 CDT/ADA procedure-category layers (plus "All"), a State/County/ZIP3 geography toggle, a Volume / Per-patient metric toggle, and a year + month time picker. Monthly NDJSON (~16 MB gzip) lazy-loads on first month pick.                                                                                                    |
+| **Detail panel** | Per-region stats — total claims, beneficiaries served, dollars paid, avg $/claim, claims/patient — and a ranked category breakdown for the selected period.                                                                                                                                                                        |
+| **Tooltip**      | Pixel-anchored hover readout; respects feature-state hover/selected to drive stroke weights and fills without reconfiguring paint properties.                                                                                                                                                                                      |
+| **Info modal**   | Surfaces the caveats that matter: HHS cell-suppression (<12 claims or <12 beneficiaries/month), interstate variation in Medicaid dental coverage, and NPI/practice-location limitations.                                                                                                                                           |
 
 ## Architecture at a glance
 
@@ -58,22 +58,20 @@ The design is deliberately constrained:
           │         └────────┬───────────────┘                                   │
           │                  │                                                   │
           │                  ▼                                                   │
-          │      provider_procedure_monthly_geo   ← loaded via COPY,             │
-          │                  │                      D-codes only                 │
+          │      merged_hhs_nppes.csv                                            │
+          │                  │  join_geocoded.py (+ ArcGIS county lookup)        │
           │                  ▼                                                   │
-          │      provider_procedure_category_aggregate  ← categorization         │
-          │                  │                            via code-range CASE    │
-          │                  ├──────────┬──────────┬──────────┐                  │
-          │                  ▼          ▼          ▼          ▼                  │
-          │         monthly_state  annual_state  monthly_zip3  annual_zip3       │
-          │                  │          │          │          │                  │
-          │                  └──────────┴────┬─────┴──────────┘                  │
-          │                                  ▼                                   │
-          │                     scripts/export_views.sh                          │
-          │                        (psql → NDJSON)                               │
+          │      merged_hhs_nppes_geo.csv  (D-codes only, ~23M rows)             │
+          │                  │  build_aggregates.py (DuckDB)                     │
+          │                  │  • CDT category CASE                              │
+          │                  │  • state from county sums                         │
+          │                  ▼                                                   │
+          │           public/data/*.json   ──  6 NDJSON files                    │
+          │           {annual,monthly} × {state,county,zip3}                     │
           │                                                                      │
           └──────────────────────────────────┬───────────────────────────────────┘
-                                             │  4 JSON files, 500 KB – 61 MB
+                                             │  on-load annual ≈ 2.3 MB gz;
+                                             │  monthly lazy ≈ 16 MB gz
                                              ▼
           ┌──────────────────────── RUNTIME (in browser) ────────────────────────┐
           │                                                                      │
@@ -94,28 +92,28 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the long-form write-up, i
 
 ## Stack & rationale
 
-| Layer           | Choice                                           | Why                                                                                                                                                                |
-| --------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Renderer**    | MapLibre GL JS                                   | GPU-accelerated, hardware-composited vector tiles; supports `setFeatureState` for per-feature updates without rebuilding sources.                                  |
-| **Tile format** | [PMTiles](https://protomaps.com/docs/pmtiles) v3 | Single-file vector tiles served over static HTTPS with range requests — no tile server to run.                                                                     |
-| **Basemap**     | Protomaps                                        | Paid-tier vector basemap (key in `.env.local`); gracefully degrades to a blank background when no key is present.                                                  |
-| **Framework**   | React 18 + Vite 5                                | Fast HMR; `React.StrictMode` in dev catches double-mount regressions in the map lifecycle.                                                                         |
-| **Language**    | TypeScript `strict`                              | Every layer is typed end-to-end: `LayerKey` union ↔ `LAYER_CONFIGS` record enforces exhaustiveness at compile time.                                                |
-| **State**       | [Zustand](https://zustand-demo.pmnd.rs/)         | Single small store with selector-hooks; avoids the provider-tree churn a Context-based solution would introduce in a map app that re-renders on every hover event. |
-| **Data shape**  | NDJSON of `{ key: records[] }` objects           | Streamable, append-only, gzips well. The browser consumes all four files through a single `fetchNDJSON` helper.                                                    |
-| **Pipeline**    | Python + PostgreSQL                              | Python runs the HHS×NPPES merge (`merge_hhs_nppes.py`); SQL builds the aggregate views; `export_views.sh` writes the NDJSON exports.                               |
-| **Hosting**     | GitHub Pages (static)                            | Zero-infra. The site is ~6 MB gzipped including both PMTiles archives.                                                                                             |
+| Layer           | Choice                                           | Why                                                                                                                                                                                                                     |
+| --------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Renderer**    | MapLibre GL JS                                   | GPU-accelerated, hardware-composited vector tiles; supports `setFeatureState` for per-feature updates without rebuilding sources.                                                                                       |
+| **Tile format** | [PMTiles](https://protomaps.com/docs/pmtiles) v3 | Single-file vector tiles served over static HTTPS with range requests — no tile server to run.                                                                                                                          |
+| **Basemap**     | Protomaps                                        | Paid-tier vector basemap (key in `.env.local`); gracefully degrades to a blank background when no key is present.                                                                                                       |
+| **Framework**   | React 18 + Vite 5                                | Fast HMR; `React.StrictMode` in dev catches double-mount regressions in the map lifecycle.                                                                                                                              |
+| **Language**    | TypeScript `strict`                              | Every layer is typed end-to-end: `LayerKey` union ↔ `LAYER_CONFIGS` record enforces exhaustiveness at compile time.                                                                                                     |
+| **State**       | [Zustand](https://zustand-demo.pmnd.rs/)         | Single small store with selector-hooks; avoids the provider-tree churn a Context-based solution would introduce in a map app that re-renders on every hover event.                                                      |
+| **Data shape**  | NDJSON of `{ key: records[] }` objects           | Streamable, append-only, gzips well. The browser consumes all four files through a single `fetchNDJSON` helper.                                                                                                         |
+| **Pipeline**    | Python + DuckDB                                  | Python runs the HHS×NPPES merge (`merge_hhs_nppes.py`) and the geocoded-CSV join (`join_geocoded.py`); `build_aggregates.py` runs DuckDB over the merged CSV and writes the six NDJSON files. No database to provision. |
+| **Hosting**     | GitHub Pages (static)                            | Zero-infra. The site is ~6 MB gzipped including both PMTiles archives.                                                                                                                                                  |
 
 ## Engineering highlights
 
 A few decisions worth calling out in a code review:
 
 - **Feature-state paint expressions instead of data-driven filters.** Hover/selection/value are all feature-state fields; the paint expression (`src/lib/mapStyles.ts`) interpolates over those fields. Switching year or category dispatches a single `setFeatureState` loop — no source rebuild, no GL re-upload.
-- **Two-tier loading.** Annual data (~5 MB) is fetched on map `load` so the full-nation view is immediate. Monthly data (~61 MB) is lazy-loaded on first interaction with the month slider, guarded by a `monthlyDataLoaded` flag in the store.
+- **Two-tier loading.** Annual data (~2.3 MB gzip total across state + county + zip3) is fetched on map `load` so the full-nation view is immediate. Monthly data (~16 MB gzip) is lazy-loaded the first time the user picks a specific month, guarded by a `monthlyDataLoaded` flag in the store.
 - **Single source of truth for procedure categories.** `CATEGORY_TO_KEY` in [`src/constants/map.ts`](src/constants/map.ts) maps HHS category strings to the app's `LayerKey` union. `CATEGORY_COLORS` and `LAYER_ORDER` are _derived_ from it — adding a new category is a one-line change.
 - **Refs, not state, for hover and selection IDs.** The map's event handlers run on every mouse move at 60 Hz; routing those through React state would trigger cascading re-renders of the entire tree. Hover/selection are held in `useRef` and written back to MapLibre's feature-state directly.
 - **Constants are colocated.** `src/constants/{map,time,layout,infoModal}.ts` means no magic numbers appear in component files. Every z-index, transition, and API path is nameable and greppable.
-- **Data pipeline mirrors the frontend.** The `provider_procedure_category_aggregate_{annual,monthly}_{state,zip3}` view names map 1:1 to the NDJSON files and to the `DATA_PATHS` constants — the naming discipline is deliberate.
+- **Data pipeline mirrors the frontend.** The `provider_procedure_category_aggregate_{annual,monthly}_{state,county,zip3}` file names map 1:1 to the `DATA_PATHS` constants — the naming discipline is deliberate.
 
 ## Getting started
 
@@ -157,32 +155,27 @@ A Husky pre-commit hook runs `lint-staged` (ESLint + Prettier on staged files). 
 
 ### Rebuild the dataset
 
-The pipeline is mid-redesign — per-enrollee normalization (ACS C27007), a
-zip5 + county + state grain, and DQ-Atlas warnings are in flight. The
-`public/data/` JSON ships from the **current** flow, which is:
+`pip install -r requirements.txt` (adds `duckdb` for the aggregator), then:
 
-1. **Merge** — `python scripts/merge_hhs_nppes.py` streams the HHS claims
-   CSV against the per-month NPPES snapshots, writes
+1. **Merge** — `python scripts/merge_hhs_nppes.py` streams the HHS claims CSV
+   against the per-month NPPES snapshots, writes
    `data/MergedHHS-NPI/merged_hhs_nppes.csv`. Resumable; tracks completed
    months in `.processed_months.txt`. Requires 7-Zip on PATH (NPPES uses
    deflate64).
 2. **Geocode** (collaborator hand-off) —
-   `python scripts/extract_geocoding_input.py` writes a deduplicated
-   address list; the geocoder returns `data/Geocoded/Dental_Provider_Locations.csv`
-   (lat/lon + county FIPS/name); `python scripts/join_geocoded.py` joins
-   those back onto every claim row → `merged_hhs_nppes_geo.csv`.
-3. **Aggregate** — load the merged CSV into
-   `medicaid.provider_procedure_monthly_geo` (defined by
-   `migrations/003_*.sql`; column-name mapping is a known sharp edge —
-   see [`docs/DATA_DICTIONARY.md`](docs/DATA_DICTIONARY.md)) and run the
-   views in `migrations/aggregate_views/`.
-4. **Export** — `bash scripts/export_views.sh public/data` writes the
-   four NDJSON files the frontend consumes.
+   `python scripts/extract_geocoding_input.py` writes a deduplicated address
+   list; the geocoder returns `data/Geocoded/Dental_Provider_Locations.csv`
+   (lat/lon + county FIPS/name); `python scripts/join_geocoded.py` joins those
+   back onto every claim row → `merged_hhs_nppes_geo.csv`.
+3. **Aggregate** — `python scripts/build_aggregates.py` runs DuckDB over the
+   merged CSV and writes the six NDJSON files to `public/data/` in ~10s.
+   `state == SUM(county)` is verified at build time.
+4. **Geometry** — `python scripts/fetch_county_geometry.py` and
+   `python scripts/fetch_world_geometry.py` produce the GeoJSON layers under
+   `public/`. ACS denominators are fetched separately by
+   `scripts/fetch_acs_medicaid.py` and are not yet wired into the aggregations.
 
-`pip install -r requirements.txt` for the Python steps; `$DATABASE_URL`
-for the SQL steps. ACS denominators are fetched separately by
-`scripts/fetch_acs_medicaid.py` and are not yet wired into the
-aggregations.
+No database to provision.
 
 ### Deploy
 
@@ -225,13 +218,16 @@ medicaid-dent-policy/
 ├── public/
 │   ├── states.pmtiles             # U.S. state polygons (vector tiles)
 │   ├── zip3.pmtiles               # ZIP3 polygons (vector tiles)
-│   ├── *.geojson                  # Source geometries (pre-PMTiles)
+│   ├── counties.geojson           # U.S. county polygons (FIPS-keyed)
+│   ├── world.geojson              # Non-US country backdrop (NE 110m)
 │   └── data/*.json                # NDJSON exports consumed at runtime
-├── migrations/                    # Ordered SQL: schema → staging → transforms → views
-│   └── aggregate_views/           # The four export-ready views
 ├── scripts/
-│   ├── export_views.sh            # psql orchestrator
-│   └── sql/*.sql                  # One SELECT per exported JSON file
+│   ├── merge_hhs_nppes.py         # HHS × NPPES inner join (streaming)
+│   ├── join_geocoded.py           # Joins ArcGIS geocoder output back onto claims
+│   ├── build_aggregates.py        # DuckDB → 6 NDJSON files
+│   ├── fetch_county_geometry.py   # plotly counties → public/counties.geojson
+│   ├── fetch_world_geometry.py    # Natural Earth countries → public/world.geojson
+│   └── fetch_acs_medicaid.py      # ACS C27007 denominator (not yet wired)
 ├── docs/                          # ARCHITECTURE, ADRs
 └── .github/                       # Workflows, templates, policies
 ```

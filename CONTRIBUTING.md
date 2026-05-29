@@ -142,23 +142,29 @@ Keep the boundary sharp. A constants file should never import from a component; 
 
 ## Data pipeline changes
 
-SQL lives under `migrations/`, ordered numerically.
+The build-time pipeline is all Python under `scripts/` — there is no database
+to provision and no SQL to run. Aggregation lives in
+[`scripts/build_aggregates.py`](scripts/build_aggregates.py), a DuckDB script
+that reads the merged+geocoded CSV and writes six NDJSON files.
 
-- **Never edit an existing migration.** Add a new one. To supersede an earlier file, the new migration should explain why in its comment header.
-- **Aggregate views** go in `migrations/aggregate_views/`. Each corresponds to exactly one JSON export.
-- **The export script** in `scripts/export_views.sh` must stay in sync with the aggregate views. Adding a view requires adding its export.
-- **Frontend `DATA_PATHS`** in `src/constants/map.ts` must stay in sync with the export filenames.
+- **HCPCS → category mapping** is `CATEGORY_CASE` in
+  [`scripts/build_aggregates.py`](scripts/build_aggregates.py). Adding or
+  renaming a category is a two-place change: update `CATEGORY_CASE` here, and
+  update `CATEGORY_TO_KEY` + `LAYER_CONFIGS` + `LAYER_ORDER` in
+  [`src/constants/map.ts`](src/constants/map.ts).
+- **Frontend `DATA_PATHS`** in `src/constants/map.ts` must stay in sync with
+  the output filenames.
+- Each ingest / merge / geocode-join / fetch step is one script. Add a new
+  script for a new step rather than overloading an existing one.
 
-A data-pipeline PR should touch all three layers (SQL, export script, frontend constant) when adding a new dataset, and none when refactoring a transform internally.
+### Python ingest / enrichment scripts
 
-### Python ingest / enrichment scripts (HHS×NPPES merge, ACS fetch, geocoding)
-
-The build-time data pipeline also includes Python scripts under `scripts/` for ingest, merging, and external API fetches that don't fit a SQL migration:
-
-- [`scripts/merge_hhs_nppes.py`](scripts/merge_hhs_nppes.py) — joins HHS dental claims to monthly NPPES snapshots.
-- [`scripts/fetch_acs_medicaid.py`](scripts/fetch_acs_medicaid.py) — pulls ACS C27007 (Medicaid enrollment) from the Census Data API for county and ZCTA, used as the per-enrollee denominator.
-- [`scripts/extract_geocoding_input.py`](scripts/extract_geocoding_input.py), [`scripts/join_geocoded.py`](scripts/join_geocoded.py) — handoff to and from the geocoding collaborator.
-- [`scripts/analyze_coverage.py`](scripts/analyze_coverage.py), [`scripts/diagnose_drops.py`](scripts/diagnose_drops.py), [`scripts/categorize_servicing_ids.py`](scripts/categorize_servicing_ids.py) — post-merge quality reporting.
+- [`merge_hhs_nppes.py`](scripts/merge_hhs_nppes.py) — joins HHS dental claims to monthly NPPES snapshots.
+- [`extract_geocoding_input.py`](scripts/extract_geocoding_input.py), [`join_geocoded.py`](scripts/join_geocoded.py) — handoff to and from the geocoding collaborator.
+- [`build_aggregates.py`](scripts/build_aggregates.py) — DuckDB aggregator, produces the six NDJSON files.
+- [`fetch_county_geometry.py`](scripts/fetch_county_geometry.py), [`fetch_world_geometry.py`](scripts/fetch_world_geometry.py) — produce the GeoJSON layers under `public/`.
+- [`fetch_acs_medicaid.py`](scripts/fetch_acs_medicaid.py) — pulls ACS C27007 (Medicaid enrollment) for use as a per-enrollee denominator (not yet wired into the aggregations).
+- [`analyze_coverage.py`](scripts/analyze_coverage.py), [`diagnose_drops.py`](scripts/diagnose_drops.py), [`categorize_servicing_ids.py`](scripts/categorize_servicing_ids.py) — post-merge quality reporting.
 
 Conventions for these scripts:
 

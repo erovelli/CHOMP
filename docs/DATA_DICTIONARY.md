@@ -2,7 +2,7 @@
 
 > **Audience:** anyone adding a new data field, debugging a value that looks wrong, or integrating these exports into another downstream tool.
 
-This document is the single source of truth for the shape and semantics of the NDJSON files under [`public/data/`](../public/data/). These files are the contract between the [data pipeline](../migrations/) and the [frontend](../src/). Every field the UI renders traces back to one of these records.
+This document is the single source of truth for the shape and semantics of the NDJSON files under [`public/data/`](../public/data/). These files are the contract between the [data pipeline](../scripts/build_aggregates.py) and the [frontend](../src/). Every field the UI renders traces back to one of these records.
 
 ## Contents
 
@@ -30,14 +30,10 @@ provider_procedure_category_aggregate_{grain}_{geo}.json
 
 **Six files total** (3 geographies × 2 grains). They are produced by
 [`scripts/build_aggregates.py`](../scripts/build_aggregates.py), a DuckDB script
-that reads the merged+geocoded claims CSV directly and applies the same
-HCPCS→category logic as the legacy Postgres view chain in
-[`migrations/aggregate_views/`](../migrations/aggregate_views/) (006). The
-Postgres views remain as the documented SQL equivalent but cover only `state`
-(from NPPES `practice_state`) and `zip3`; the **authoritative builder is now the
-DuckDB script**, which adds the `county` grain and rebuilds `state` from county
-sums (see [Aggregation invariants](#aggregation-invariants)). Adding/renaming an
-output requires updating [`DATA_PATHS`](../src/constants/map.ts) in the same PR.
+that reads the merged+geocoded claims CSV directly and emits all six NDJSON
+files in ~10s. State is rebuilt from county sums (see
+[Aggregation invariants](#aggregation-invariants)). Adding/renaming an output
+requires updating [`DATA_PATHS`](../src/constants/map.ts) in the same PR.
 
 ## NDJSON envelope
 
@@ -49,11 +45,11 @@ Each file is **newline-delimited JSON**: one JSON object per line, no enclosing 
 {"CA": [...]}
 ```
 
-Producer: [`scripts/sql/*.sql`](../scripts/sql/) invoked by [`scripts/export_views.sh`](../scripts/export_views.sh) via `psql -t -A`, which serializes each row as a single JSON line with no post-processing.
+Producer: [`scripts/build_aggregates.py`](../scripts/build_aggregates.py) — DuckDB `string_agg` over `json_object`, one line per region.
 
 Consumer: [`fetchNDJSON`](../src/lib/dataService.ts) splits on `\n`, `JSON.parse`s each line, and merges into an in-memory `Record<regionId, Record[]>` cache.
 
-**Why NDJSON, not JSON?** Gzips better than a wrapping array; streamable if a future iteration moves to incremental load; `psql` emits it with no post-processing.
+**Why NDJSON, not JSON?** Gzips better than a wrapping array, and streamable if a future iteration moves to incremental load.
 
 ## Record schema
 
@@ -108,7 +104,7 @@ Types are mirrored in [`src/lib/types.ts`](../src/lib/types.ts). Changing the sc
 
 ## Categories
 
-The `category` field is derived from the HCPCS D-code range in SQL view [`006_create_procedure_category_aggregate_view.sql`](../migrations/aggregate_views/006_create_procedure_category_aggregate_view.sql):
+The `category` field is derived from the HCPCS D-code range in [`scripts/build_aggregates.py`](../scripts/build_aggregates.py) (`CATEGORY_CASE`):
 
 | Category (string in NDJSON)      | HCPCS range              | Example procedures                               |
 | -------------------------------- | ------------------------ | ------------------------------------------------ |
@@ -126,7 +122,7 @@ The `category` field is derived from the HCPCS D-code range in SQL view [`006_cr
 | `Adjunctive General Services`    | D9000–D9999              | Anesthesia, drug administration, palliative care |
 | `Uncategorized`                  | non-D codes or malformed | Dropped by the UI.                               |
 
-Frontend mapping from these category strings to `LayerKey` values is in [`CATEGORY_TO_KEY`](../src/constants/map.ts). Each of the 12 CDT/ADA divisions has its own selectable UI layer (plus the `all` aggregate, for 13 buttons total) — `Prosthodontics (removable)` and `Prosthodontics (fixed)` are split into separate layers, and `Maxillofacial Prosthetics` and `Implant Services` have their own buttons. `Uncategorized` (non-D HCPCS, e.g. cross-walked medical codes that slip through) is not in `CATEGORY_TO_KEY` and so contributes only to the `all` aggregate. Adding a new category is a two-place change: the SQL CASE in [`scripts/build_aggregates.py`](../scripts/build_aggregates.py) (or migration 006) and `CATEGORY_TO_KEY`.
+Frontend mapping from these category strings to `LayerKey` values is in [`CATEGORY_TO_KEY`](../src/constants/map.ts). Each of the 12 CDT/ADA divisions has its own selectable UI layer (plus the `all` aggregate, for 13 buttons total) — `Prosthodontics (removable)` and `Prosthodontics (fixed)` are split into separate layers, and `Maxillofacial Prosthetics` and `Implant Services` have their own buttons. `Uncategorized` (non-D HCPCS, e.g. cross-walked medical codes that slip through) is not in `CATEGORY_TO_KEY` and so contributes only to the `all` aggregate. Adding a new category is a two-place change: `CATEGORY_CASE` in [`scripts/build_aggregates.py`](../scripts/build_aggregates.py) and `CATEGORY_TO_KEY`.
 
 ## Suppression & null handling
 

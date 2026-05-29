@@ -35,15 +35,15 @@ The "join everything, aggregate, serve over HTTP" problem is deliberately straig
 ```
    ╔═══════════════════╗      ╔═══════════════════╗      ╔═══════════════════╗
    ║    SOURCE DATA    ║─────►║      BUILD        ║─────►║      RUNTIME      ║
-   ║  (external, raw)  ║      ║   (Postgres + sh) ║      ║    (browser)      ║
+   ║  (external, raw)  ║      ║   (Python + DuckDB)║     ║    (browser)      ║
    ╚═══════════════════╝      ╚═══════════════════╝      ╚═══════════════════╝
-          HHS + NPPES              SQL transforms            React + MapLibre
-            +Census                 NDJSON export             Static hosting
+          HHS + NPPES              merge + aggregate       React + MapLibre
+            +Census                 NDJSON export           Static hosting
 ```
 
 There are exactly two runtimes in this project, intentionally decoupled:
 
-- **The build runtime** — a local Postgres database, the SQL under `migrations/`, and `scripts/export_views.sh`. Produces a handful of NDJSON files and PMTiles archives. Runs _on the maintainer's laptop, manually, when source data updates._
+- **The build runtime** — a handful of Python scripts under `scripts/` (the HHS×NPPES merge, geocoded-CSV join, county/world-geometry fetch, ACS denominator fetch) plus [`scripts/build_aggregates.py`](../scripts/build_aggregates.py), a DuckDB script that reads the merged+geocoded CSV and emits the six NDJSON files. Produces those files plus PMTiles + GeoJSON geometry artifacts. Runs _on the maintainer's laptop, manually, when source data updates._
 - **The serving runtime** — React + Vite + MapLibre. Reads only the static artifacts. Runs _in every visitor's browser._
 
 The NDJSON files and `.pmtiles` archives are the **interface contract** between the two. Everything upstream of those artifacts can change without breaking the frontend, and vice versa, as long as the file names and schemas hold.
@@ -55,60 +55,62 @@ This is the single most consequential architectural decision in the project, and
 
 ## 3. Data pipeline
 
-### 3.1 Schema layering
+### 3.1 Build chain
 
-The HHS × NPPES join was originally drafted in SQL (load both sides into
-staging tables, `INSERT ... JOIN ...`). It moved to Python
-([`scripts/merge_hhs_nppes.py`](../scripts/merge_hhs_nppes.py)) because
-the NPPES archives are deflate64-compressed (needs 7-Zip, not stdlib
-zipfile) and a streaming per-month flow is dramatically cheaper than
-loading 84 × ~9M-row vintages into Postgres for a single inner join.
-The merged CSV is loaded directly into
-`medicaid.provider_procedure_monthly_geo`; SQL takes over from there:
+The build runtime is a series of Python scripts under `scripts/`, run manually
+in order on the maintainer's laptop when source data updates. No database; no
+shell glue; each step is a single `python …` invocation that reads one set of
+files and writes another.
 
 ```text
-003_create_provider_procedure_monthly_geo.sql
-                                        ◄─ target table (enriched + geo'd)
-                                          (populated by COPY from the
-                                           Python merge output)
-aggregate_views/
-    006_…_category_aggregate.sql        ◄─ zip5 × year_month × category grain
-    007_…_monthly_state.sql             ◄─ rolled to state × month
-    008_…_annual_state.sql              ◄─ rolled to state × year
-    009_…_monthly_zip3.sql              ◄─ rolled to zip3 × month
-    010_…_annual_zip3.sql               ◄─ rolled to zip3 × year
+HHS Medicaid CSV ┐
+                 ├── merge_hhs_nppes.py ──► merged_hhs_nppes.csv ─┐
+NBER NPPES zips  ┘                                                ├── join_geocoded.py ──► merged_hhs_nppes_geo.csv ──┐
+                                ArcGIS-geocoded addresses ────────┘                                                  │
+                                                                                                                      ▼
+                                                              build_aggregates.py (DuckDB) ──► public/data/*.json
+                                                                                                                      │
+                                              fetch_county_geometry.py ──► public/counties.geojson                    │
+                                              fetch_world_geometry.py  ──► public/world.geojson                       │
+                                              fetch_acs_medicaid.py    ──► ACS denominator CSV (for future per-capita)│
+                                                                                                                      ▼
+                                                                                                              ──── consumed by Vite/React ────
 ```
 
-A few deliberate choices:
+The HHS × NPPES join is done in Python rather than SQL because the NPPES
+archives are deflate64-compressed (needs 7-Zip, not stdlib zipfile) and a
+streaming per-month flow is dramatically cheaper than loading 84 × ~9M-row
+vintages into a database for a single inner join.
 
-- **Views, not materialized views, for aggregates.** These are computed once at export time and never queried by the runtime. Views keep the schema declarative and make the SQL diffable.
-- **HCPCS categorization happens exactly once**, in `006`. Every downstream view reads the `category` column. The HCPCS → category mapping is one CASE expression, mirrored in the frontend's `CATEGORY_TO_KEY` — two copies of the same fact, and that is intentional: the SQL is the source of truth for the backend; the TS is the source of truth for the UI shell.
+### 3.2 DuckDB aggregator
 
-### 3.1a DuckDB builder (authoritative) + county grain
+[`scripts/build_aggregates.py`](../scripts/build_aggregates.py) reads the
+merged+geocoded CSV (~23M rows) and emits **six** NDJSON files —
+`{annual, monthly} × {state, county, zip3}` — in ~10s on a laptop, with no
+database load step.
 
-The Postgres view chain above remains as the documented SQL reference, but the
-**authoritative builder is now [`scripts/build_aggregates.py`](../scripts/build_aggregates.py)** — a DuckDB script that reads `merged_hhs_nppes_geo.csv`
-directly and emits all **six** NDJSON files (`{annual,monthly}` × `{state,county,zip3}`). It was added because (a) the build host has no Postgres provisioned,
-(b) DuckDB aggregates the 23M-row CSV in ~10s with no load step, and (c) the
-geocoded `county_fips` enables a `county` grain the original views never had.
-
-It mirrors the `006` HCPCS→category CASE exactly, then differs in geography:
-
+- HCPCS → category mapping is one DuckDB `CASE` expression, **mirrored in the
+  frontend's `CATEGORY_TO_KEY`** in `src/constants/map.ts`. Two copies of the
+  same fact, deliberately: the build script is the source of truth for the
+  back end; the TS is the source of truth for the UI shell.
 - `county` is keyed on the 5-digit geocoded `county_fips`.
-- `state` is **built from county sums** — postal is derived from `LEFT(county_fips, 2)` via a FIPS→USPS map — so `state == SUM(county)` holds exactly
-  (verified at build time). This replaces the old NPPES-`practice_state` rollup.
-- `zip3` is still `LEFT(practice_zip5, 3)`, which keeps a slightly larger row
-  universe than county/state (see L33 — the levels intentionally do not reconcile).
+- `state` is **built from county sums** — postal is derived from
+  `LEFT(county_fips, 2)` via a FIPS→USPS map — so `state == SUM(county)` holds
+  exactly (verified at build time).
+- `zip3` is `LEFT(practice_zip5, 3)`, which keeps a slightly larger row
+  universe than county/state (see L33 — the levels intentionally do not
+  reconcile).
 
-### 3.2 Export
+Output format: NDJSON, where each line is `{"<region_id>": [<records>…]}` — a
+key-partitioned bundle that [`dataService.fetchNDJSON`](../src/lib/dataService.ts)
+splits and merges into the in-memory cache. NDJSON gzips better than a wrapping
+JSON array and is streamable if a future iteration moves to incremental load.
 
-The legacy SQL path: [`scripts/export_views.sh`](../scripts/export_views.sh) runs `psql -f` invocations, each executing a `SELECT json_build_object(key, rows)` that serializes a view into NDJSON. The DuckDB builder produces the same line shape (`{"<region_id>": [<records>...]}`) using `string_agg` over `json_object`. Either way each line is a key-partitioned bundle — the shape [`dataService.fetchNDJSON`](../src/lib/dataService.ts) consumes.
-
-The NDJSON format was picked because:
-
-- It **gzip-compresses** far better than repeated JSON array boilerplate.
-- It's **streamable** if a future iteration moves to incremental load.
-- `psql -t -A` emits it natively with no post-processing.
+> **Historical note.** Earlier revisions of this project shipped a Postgres
+> view chain (`migrations/aggregate_views/`) plus a `psql`-based
+> `scripts/export_views.sh`. Both were removed once DuckDB became the
+> authoritative builder — Postgres was never provisioned in CI and the SQL was
+> never executed in any environment.
 
 ### 3.3 Cell suppression
 
