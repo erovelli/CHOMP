@@ -11,12 +11,16 @@ import {
 import type { LayerKey, GeoLevel, Metric, RegionDetail } from "../../lib/types";
 import {
     loadAnnualData,
+    loadMonthlyData,
     getStateAnnualData,
     getCountyAnnualData,
     getZip3AnnualData,
     getAnnualDataForLevel,
+    getMonthlyDataForLevel,
     getValueForRegion,
+    getValueForRegionMonthly,
 } from "../../lib/dataService";
+import type { DataRecord, MonthlyDataRecord } from "../../lib/types";
 import {
     MAP_CENTER,
     MAP_ZOOM,
@@ -392,23 +396,38 @@ function setActiveGeoLayer(map: maplibregl.Map, level: GeoLevel) {
 
 // ── Paint per-region values into feature-state (all three levels) ────
 
-function paintValues(map: maplibregl.Map, year: string, activeLayer: LayerKey, metric: Metric) {
-    for (const [id, records] of Object.entries(getStateAnnualData())) {
+// `period` is either a 4-digit year ("2023") for the annual view, or a
+// "YYYY-MM" string ("2023-06") for the monthly view. `monthly` decides which
+// cache + value function to use.
+function paintValues(
+    map: maplibregl.Map,
+    period: string,
+    activeLayer: LayerKey,
+    metric: Metric,
+    monthly: boolean,
+) {
+    const stateData = monthly ? getMonthlyDataForLevel("state") : getStateAnnualData();
+    const countyData = monthly ? getMonthlyDataForLevel("county") : getCountyAnnualData();
+    const zip3Data = monthly ? getMonthlyDataForLevel("zip3") : getZip3AnnualData();
+
+    const valueOf = (records: DataRecord[] | MonthlyDataRecord[]): number =>
+        monthly
+            ? getValueForRegionMonthly(records as MonthlyDataRecord[], period, activeLayer, metric)
+            : getValueForRegion(records as DataRecord[], period, activeLayer, metric);
+
+    for (const [id, records] of Object.entries(stateData)) {
         map.setFeatureState(
             { source: STATES_SOURCE, sourceLayer: STATES_LAYER, id },
-            { value: getValueForRegion(records, year, activeLayer, metric) },
+            { value: valueOf(records) },
         );
     }
-    for (const [id, records] of Object.entries(getCountyAnnualData())) {
-        map.setFeatureState(
-            { source: COUNTY_SOURCE, id },
-            { value: getValueForRegion(records, year, activeLayer, metric) },
-        );
+    for (const [id, records] of Object.entries(countyData)) {
+        map.setFeatureState({ source: COUNTY_SOURCE, id }, { value: valueOf(records) });
     }
-    for (const [id, records] of Object.entries(getZip3AnnualData())) {
+    for (const [id, records] of Object.entries(zip3Data)) {
         map.setFeatureState(
             { source: ZIP3_SOURCE, sourceLayer: ZIP3_LAYER, id },
-            { value: getValueForRegion(records, year, activeLayer, metric) },
+            { value: valueOf(records) },
         );
     }
 }
@@ -428,9 +447,12 @@ export default function MapContainer() {
     const {
         activeLayer,
         selectedYear,
+        selectedMonth,
         selectedRegion,
         geoLevel,
         metric,
+        monthlyDataLoaded,
+        setMonthlyDataLoaded,
         setSelectedRegion,
         setSelectedState,
         setHovered,
@@ -439,10 +461,50 @@ export default function MapContainer() {
     } = useMapStore();
     const activeLayerRef = useRef<LayerKey>(activeLayer);
     const selectedYearRef = useRef<string>(selectedYear);
+    const selectedMonthRef = useRef<string | null>(selectedMonth);
     const metricRef = useRef<Metric>(metric);
     const geoLevelRef = useRef<GeoLevel>(geoLevel);
+    const monthlyLoadedRef = useRef<boolean>(monthlyDataLoaded);
     // Current data-driven color stops, shared with hover/select handlers.
     const stopsRef = useRef<number[]>([]);
+
+    // The map paints monthly values only once the monthly data has actually
+    // loaded; until then it stays on the annual view (so the choropleth never
+    // goes blank while we wait on a ~16 MB gzipped fetch). These helpers all
+    // read from refs, so empty deps keep them referentially stable across
+    // renders (the handler useCallbacks below depend on them).
+    const isMonthlyMode = useCallback((): boolean => {
+        return selectedMonthRef.current !== null && monthlyLoadedRef.current;
+    }, []);
+    const currentPeriod = useCallback((): string => {
+        const m = selectedMonthRef.current;
+        if (m !== null && monthlyLoadedRef.current) {
+            return `${selectedYearRef.current}-${m.padStart(2, "0")}`;
+        }
+        return selectedYearRef.current;
+    }, []);
+    const hoveredValueForLevel = useCallback(
+        (level: GeoLevel, id: string): number => {
+            const monthly = isMonthlyMode();
+            const data = monthly ? getMonthlyDataForLevel(level) : getAnnualDataForLevel(level);
+            const records = data[id];
+            if (!records) return 0;
+            return monthly
+                ? getValueForRegionMonthly(
+                      records as MonthlyDataRecord[],
+                      currentPeriod(),
+                      activeLayerRef.current,
+                      metricRef.current,
+                  )
+                : getValueForRegion(
+                      records as DataRecord[],
+                      currentPeriod(),
+                      activeLayerRef.current,
+                      metricRef.current,
+                  );
+        },
+        [isMonthlyMode, currentPeriod],
+    );
 
     const hoveredRefFor = (lvl: GeoLevel) =>
         lvl === "state" ? hoveredStateRef : lvl === "county" ? hoveredCountyRef : hoveredZip3Ref;
@@ -457,16 +519,25 @@ export default function MapContainer() {
     const applyActiveColors = useCallback(() => {
         if (!map.current) return;
         const active = geoLevelRef.current;
+        const monthly = isMonthlyMode();
+        const period = currentPeriod();
         const levels: GeoLevel[] = ["state", "county", "zip3"];
         for (const level of levels) {
-            const data = getAnnualDataForLevel(level);
+            const data = monthly ? getMonthlyDataForLevel(level) : getAnnualDataForLevel(level);
             const values = Object.values(data).map((recs) =>
-                getValueForRegion(
-                    recs,
-                    selectedYearRef.current,
-                    activeLayerRef.current,
-                    metricRef.current,
-                ),
+                monthly
+                    ? getValueForRegionMonthly(
+                          recs as MonthlyDataRecord[],
+                          period,
+                          activeLayerRef.current,
+                          metricRef.current,
+                      )
+                    : getValueForRegion(
+                          recs as DataRecord[],
+                          period,
+                          activeLayerRef.current,
+                          metricRef.current,
+                      ),
             );
             const stops = quantileStops(values, metricRef.current);
             if (level === active) {
@@ -484,17 +555,44 @@ export default function MapContainer() {
                 ),
             );
         }
-    }, [setColorStops]);
+    }, [setColorStops, currentPeriod, isMonthlyMode]);
 
-    // Repaint values + rescale when category, year, or metric changes.
+    // Repaint values + rescale when category, year, month, monthly-load, or
+    // metric changes. The choropleth shows monthly values once the user has
+    // picked a month AND the monthly NDJSON has finished loading.
     useEffect(() => {
         activeLayerRef.current = activeLayer;
         selectedYearRef.current = selectedYear;
+        selectedMonthRef.current = selectedMonth;
         metricRef.current = metric;
+        monthlyLoadedRef.current = monthlyDataLoaded;
         if (!map.current || !map.current.isStyleLoaded()) return;
-        paintValues(map.current, selectedYear, activeLayer, metric);
+        const monthly = isMonthlyMode();
+        paintValues(map.current, currentPeriod(), activeLayer, metric, monthly);
         applyActiveColors();
-    }, [activeLayer, selectedYear, metric, applyActiveColors]);
+    }, [
+        activeLayer,
+        selectedYear,
+        selectedMonth,
+        metric,
+        monthlyDataLoaded,
+        applyActiveColors,
+        currentPeriod,
+        isMonthlyMode,
+    ]);
+
+    // Lazy-load the monthly NDJSON the first time the user picks a month.
+    useEffect(() => {
+        if (selectedMonth === null) return;
+        if (monthlyDataLoaded) return;
+        let cancelled = false;
+        loadMonthlyData().then(() => {
+            if (!cancelled) setMonthlyDataLoaded(true);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [selectedMonth, monthlyDataLoaded, setMonthlyDataLoaded]);
 
     // Switch the visible geography level and rescale to its distribution.
     useEffect(() => {
@@ -697,15 +795,10 @@ export default function MapContainer() {
                 ),
             );
 
-            const val = getValueForRegion(
-                getStateAnnualData()[postal],
-                selectedYearRef.current,
-                activeLayerRef.current,
-                metricRef.current,
-            );
+            const val = hoveredValueForLevel("state", postal);
             setHovered(postal, val, { x: e.point.x, y: e.point.y });
         },
-        [setHovered],
+        [setHovered, hoveredValueForLevel],
     );
 
     const handleCountyMouseMove = useCallback(
@@ -737,15 +830,10 @@ export default function MapContainer() {
                 ),
             );
 
-            const val = getValueForRegion(
-                getCountyAnnualData()[fips],
-                selectedYearRef.current,
-                activeLayerRef.current,
-                metricRef.current,
-            );
+            const val = hoveredValueForLevel("county", fips);
             setHovered(name || `County ${fips}`, val, { x: e.point.x, y: e.point.y });
         },
-        [setHovered],
+        [setHovered, hoveredValueForLevel],
     );
 
     const handleZip3MouseMove = useCallback(
@@ -774,15 +862,10 @@ export default function MapContainer() {
                 buildColorExpression(zip3, selectedZip3Ref.current, ZIP3_ID_PROP, stopsRef.current),
             );
 
-            const val = getValueForRegion(
-                getZip3AnnualData()[zip3],
-                selectedYearRef.current,
-                activeLayerRef.current,
-                metricRef.current,
-            );
+            const val = hoveredValueForLevel("zip3", zip3);
             setHovered(`ZIP3 ${zip3}`, val, { x: e.point.x, y: e.point.y });
         },
-        [setHovered],
+        [setHovered, hoveredValueForLevel],
     );
 
     const handleStateMouseLeave = useCallback(() => {
@@ -919,9 +1002,10 @@ export default function MapContainer() {
                 await loadAnnualData();
                 paintValues(
                     map.current,
-                    selectedYearRef.current,
+                    currentPeriod(),
                     activeLayerRef.current,
                     metricRef.current,
+                    isMonthlyMode(),
                 );
                 applyActiveColors();
             });
@@ -936,6 +1020,8 @@ export default function MapContainer() {
         };
     }, [
         applyActiveColors,
+        currentPeriod,
+        isMonthlyMode,
         handleStateClick,
         handleStateMouseMove,
         handleStateMouseLeave,

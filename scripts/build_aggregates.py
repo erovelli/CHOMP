@@ -76,7 +76,7 @@ CATEGORY_CASE = """
         WHEN hcpcs_numeric BETWEEN 5900 AND 5999 THEN 'Maxillofacial Prosthetics'
         WHEN hcpcs_numeric BETWEEN 6000 AND 6199 THEN 'Implant Services'
         WHEN hcpcs_numeric BETWEEN 6200 AND 6999 THEN 'Prosthodontics (fixed)'
-        WHEN hcpcs_numeric BETWEEN 7000 AND 7999 THEN 'Oral Surgery'
+        WHEN hcpcs_numeric BETWEEN 7000 AND 7999 THEN 'Oral and Maxillofacial Surgery'
         WHEN hcpcs_numeric BETWEEN 8000 AND 8999 THEN 'Orthodontics'
         WHEN hcpcs_numeric BETWEEN 9000 AND 9999 THEN 'Adjunctive General Services'
         ELSE 'Uncategorized'

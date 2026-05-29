@@ -1,14 +1,20 @@
+// Mirrors the 12 CDT/ADA procedure-category divisions (plus "all"). Splits the
+// previously-collapsed Prosthodontics and surfaces Maxillofacial Prosthetics and
+// Implant Services as their own selectable layers.
 export type LayerKey =
     | "all"
     | "diagnostic"
     | "preventive"
     | "restorative"
-    | "oral_surgery"
-    | "orthodontics"
     | "endodontics"
     | "periodontics"
-    | "adjunctive"
-    | "prosthodontics";
+    | "prosthodontics_removable"
+    | "maxillofacial_prosthetics"
+    | "implant_services"
+    | "prosthodontics_fixed"
+    | "oral_max_surgery"
+    | "orthodontics"
+    | "adjunctive";
 
 /** Geographic aggregation level the map is currently showing. */
 export type GeoLevel = "state" | "county" | "zip3";
