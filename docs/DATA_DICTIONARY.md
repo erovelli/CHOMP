@@ -110,23 +110,23 @@ Types are mirrored in [`src/lib/types.ts`](../src/lib/types.ts). Changing the sc
 
 The `category` field is derived from the HCPCS D-code range in SQL view [`006_create_procedure_category_aggregate_view.sql`](../migrations/aggregate_views/006_create_procedure_category_aggregate_view.sql):
 
-| Category (string in NDJSON)   | HCPCS range              | Example procedures                               |
-| ----------------------------- | ------------------------ | ------------------------------------------------ |
-| `Diagnostic`                  | D0100–D0999              | Exams, radiographs, evaluations                  |
-| `Preventive`                  | D1000–D1999              | Cleanings, fluoride, sealants                    |
-| `Restorative`                 | D2000–D2999              | Fillings, crowns, inlays                         |
-| `Endodontics`                 | D3000–D3999              | Root canals, pulp therapy                        |
-| `Periodontics`                | D4000–D4999              | Gum disease treatment                            |
-| `Prosthodontics (removable)`  | D5000–D5899              | Dentures, partials                               |
-| `Maxillofacial Prosthetics`   | D5900–D5999              | Surgical obturators, implants for facial defects |
-| `Implant Services`            | D6000–D6199              | Surgical implants                                |
-| `Prosthodontics (fixed)`      | D6200–D6999              | Fixed bridges                                    |
-| `Oral Surgery`                | D7000–D7999              | Extractions, surgical procedures                 |
-| `Orthodontics`                | D8000–D8999              | Braces, retainers                                |
-| `Adjunctive General Services` | D9000–D9999              | Anesthesia, drug administration, palliative care |
-| `Uncategorized`               | non-D codes or malformed | Dropped by the UI.                               |
+| Category (string in NDJSON)      | HCPCS range              | Example procedures                               |
+| -------------------------------- | ------------------------ | ------------------------------------------------ |
+| `Diagnostic`                     | D0100–D0999              | Exams, radiographs, evaluations                  |
+| `Preventive`                     | D1000–D1999              | Cleanings, fluoride, sealants                    |
+| `Restorative`                    | D2000–D2999              | Fillings, crowns, inlays                         |
+| `Endodontics`                    | D3000–D3999              | Root canals, pulp therapy                        |
+| `Periodontics`                   | D4000–D4999              | Gum disease treatment                            |
+| `Prosthodontics (removable)`     | D5000–D5899              | Dentures, partials                               |
+| `Maxillofacial Prosthetics`      | D5900–D5999              | Surgical obturators, implants for facial defects |
+| `Implant Services`               | D6000–D6199              | Surgical implants                                |
+| `Prosthodontics (fixed)`         | D6200–D6999              | Fixed bridges                                    |
+| `Oral and Maxillofacial Surgery` | D7000–D7999              | Extractions, surgical procedures                 |
+| `Orthodontics`                   | D8000–D8999              | Braces, retainers                                |
+| `Adjunctive General Services`    | D9000–D9999              | Anesthesia, drug administration, palliative care |
+| `Uncategorized`                  | non-D codes or malformed | Dropped by the UI.                               |
 
-Frontend mapping from these category strings to the nine `LayerKey` values is in [`CATEGORY_TO_KEY`](../src/constants/map.ts). The pipeline's 13 categories collapse to the UI's 9 layers — both `Prosthodontics (removable)` and `Prosthodontics (fixed)` map to the same `prosthodontics` layer. Adding a new category is a two-place change: the SQL CASE and `CATEGORY_TO_KEY`.
+Frontend mapping from these category strings to `LayerKey` values is in [`CATEGORY_TO_KEY`](../src/constants/map.ts). Each of the 12 CDT/ADA divisions has its own selectable UI layer (plus the `all` aggregate, for 13 buttons total) — `Prosthodontics (removable)` and `Prosthodontics (fixed)` are split into separate layers, and `Maxillofacial Prosthetics` and `Implant Services` have their own buttons. `Uncategorized` (non-D HCPCS, e.g. cross-walked medical codes that slip through) is not in `CATEGORY_TO_KEY` and so contributes only to the `all` aggregate. Adding a new category is a two-place change: the SQL CASE in [`scripts/build_aggregates.py`](../scripts/build_aggregates.py) (or migration 006) and `CATEGORY_TO_KEY`.
 
 ## Suppression & null handling
 

@@ -71,7 +71,9 @@ export const useMapStore = create<MapState>((set) => ({
     setColorStops: (stops) => set({ colorStops: stops }),
 
     selectedYear: DEFAULT_YEAR,
-    setSelectedYear: (year) => set({ selectedYear: year, selectedMonth: null }),
+    // Year and month are independently picked from the main menu; switching
+    // year keeps the current month (e.g. Jun 2023 → Jun 2024).
+    setSelectedYear: (year) => set({ selectedYear: year }),
 
     selectedMonth: null,
     setSelectedMonth: (month) => set({ selectedMonth: month }),

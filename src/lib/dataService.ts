@@ -93,6 +93,16 @@ export function getMonthlyRecords(id: string, level: GeoLevel): MonthlyDataRecor
     return cache[id] ?? [];
 }
 
+export function getMonthlyDataForLevel(level: GeoLevel): Record<string, MonthlyDataRecord[]> {
+    if (level === "state") return stateMonthlyCache;
+    if (level === "county") return countyMonthlyCache;
+    return zip3MonthlyCache;
+}
+
+export function isMonthlyLoaded(): boolean {
+    return Object.keys(stateMonthlyCache).length > 0;
+}
+
 // ── Value computation ─────────────────────────────────────────
 
 export function getValueForRegion(
@@ -113,6 +123,25 @@ export function getValueForRegion(
     // ratio: claims per beneficiary = SUM(claims) / SUM(beneficiaries).
     // Exact per-category; for "all" the denominator double-counts patients who
     // used multiple categories, so it slightly understates per-person intensity.
+    const beneficiaries = rows.reduce((sum, r) => sum + r.total_beneficiaries_served, 0);
+    return beneficiaries > 0 ? claims / beneficiaries : 0;
+}
+
+/** Monthly counterpart of getValueForRegion — same shape, filters on year_month. */
+export function getValueForRegionMonthly(
+    records: MonthlyDataRecord[] | undefined,
+    yearMonth: string,
+    activeLayer: LayerKey,
+    metric: Metric = "claims",
+): number {
+    if (!records) return 0;
+    const rows = records.filter(
+        (r) =>
+            r.year_month === yearMonth &&
+            (activeLayer === "all" || CATEGORY_TO_KEY[r.category] === activeLayer),
+    );
+    const claims = rows.reduce((sum, r) => sum + r.total_claims, 0);
+    if (metric === "claims") return claims;
     const beneficiaries = rows.reduce((sum, r) => sum + r.total_beneficiaries_served, 0);
     return beneficiaries > 0 ? claims / beneficiaries : 0;
 }

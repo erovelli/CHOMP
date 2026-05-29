@@ -1,9 +1,9 @@
-import { useState, useCallback, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useMapStore } from "../../../lib/store";
 import type { RegionDetail, MonthlyDataRecord } from "../../../lib/types";
-import { loadMonthlyData, getMonthlyRecords } from "../../../lib/dataService";
+import { getMonthlyRecords } from "../../../lib/dataService";
 import { formatCurrency } from "../../../lib/formatters";
-import { AVAILABLE_YEARS, MONTH_NAMES } from "../../../constants/time";
+import { MONTH_NAMES } from "../../../constants/time";
 import StatCard from "./StatCard";
 import CategoryBreakdown from "./CategoryBreakdown";
 
@@ -14,49 +14,24 @@ export default function PanelContent({
     detail: RegionDetail;
     onClose: () => void;
 }) {
-    const { selectedYear, setSelectedYear, monthlyDataLoaded, setMonthlyDataLoaded } =
-        useMapStore();
-    const [monthSlider, setMonthSlider] = useState(0);
-    const [loadingMonthly, setLoadingMonthly] = useState(false);
+    // Year + month live in the main-menu TimeControl now; the panel just reads
+    // them from the store so the displayed stats follow whatever period the
+    // user picked up there.
+    const { selectedYear, selectedMonth, monthlyDataLoaded } = useMapStore();
+    const isMonthly = selectedMonth !== null;
+    const yearMonth = isMonthly ? `${selectedYear}-${selectedMonth}` : null;
+
     const [monthlyRecords, setMonthlyRecords] = useState<MonthlyDataRecord[]>([]);
-
-    const isMonthly = monthSlider > 0;
-    const yearMonth = isMonthly ? `${selectedYear}-${String(monthSlider).padStart(2, "0")}` : null;
-
-    // Re-fetch monthly records when the selected region changes while in monthly view
     useEffect(() => {
-        if (monthSlider > 0 && monthlyDataLoaded) {
+        if (isMonthly && monthlyDataLoaded) {
             setMonthlyRecords(getMonthlyRecords(detail.id, detail.level));
+        } else {
+            setMonthlyRecords([]);
         }
-    }, [detail.id, detail.level, monthSlider, monthlyDataLoaded]);
+    }, [detail.id, detail.level, isMonthly, monthlyDataLoaded]);
 
-    const handleYearChange = useCallback(
-        (year: string) => {
-            setSelectedYear(year);
-            setMonthSlider(0);
-        },
-        [setSelectedYear],
-    );
+    const loadingMonthly = isMonthly && !monthlyDataLoaded;
 
-    const handleSliderChange = useCallback(
-        async (value: number) => {
-            setMonthSlider(value);
-            if (value === 0) return;
-
-            if (!monthlyDataLoaded) {
-                setLoadingMonthly(true);
-                await loadMonthlyData();
-                setMonthlyDataLoaded(true);
-                setLoadingMonthly(false);
-            }
-
-            const records = getMonthlyRecords(detail.id, detail.level);
-            setMonthlyRecords(records);
-        },
-        [monthlyDataLoaded, setMonthlyDataLoaded, detail.id, detail.level],
-    );
-
-    // Compute display records
     let displayRecords: {
         category: string;
         total_claims: number;
@@ -88,9 +63,10 @@ export default function PanelContent({
     const totalBeneficiaries = displayRecords.reduce((s, r) => s + r.total_beneficiaries_served, 0);
     const totalPaid = displayRecords.reduce((s, r) => s + r.total_amount_paid, 0);
 
-    const periodLabel = isMonthly
-        ? `${MONTH_NAMES[monthSlider - 1]} ${selectedYear}`
-        : `${selectedYear} (Annual)`;
+    const periodLabel =
+        isMonthly && selectedMonth
+            ? `${MONTH_NAMES[Number(selectedMonth) - 1]} ${selectedYear}`
+            : `${selectedYear} (Annual)`;
 
     return (
         <>
@@ -131,6 +107,15 @@ export default function PanelContent({
                 >
                     {detail.name}
                 </h2>
+                <p
+                    style={{
+                        fontSize: 11,
+                        color: "var(--ink-mid)",
+                        marginTop: 4,
+                    }}
+                >
+                    {periodLabel}
+                </p>
                 <button
                     onClick={onClose}
                     style={{
@@ -156,104 +141,6 @@ export default function PanelContent({
 
             {/* Body */}
             <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
-                {/* Year selector */}
-                <div style={{ marginBottom: 16 }}>
-                    <p
-                        style={{
-                            fontSize: 10,
-                            fontWeight: 700,
-                            letterSpacing: "0.1em",
-                            textTransform: "uppercase",
-                            color: "var(--ink-dim)",
-                            marginBottom: 8,
-                        }}
-                    >
-                        Year
-                    </p>
-                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                        {AVAILABLE_YEARS.map((year) => (
-                            <button
-                                key={year}
-                                onClick={() => handleYearChange(year)}
-                                style={{
-                                    padding: "4px 10px",
-                                    fontSize: 12,
-                                    fontWeight: year === selectedYear ? 600 : 400,
-                                    background:
-                                        year === selectedYear
-                                            ? "var(--accent-light)"
-                                            : "var(--surface2)",
-                                    color:
-                                        year === selectedYear ? "var(--accent)" : "var(--ink-mid)",
-                                    border: `1px solid ${year === selectedYear ? "rgba(200,70,10,0.3)" : "var(--border)"}`,
-                                    borderRadius: 3,
-                                    cursor: "pointer",
-                                }}
-                            >
-                                {year}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Month slider */}
-                <div style={{ marginBottom: 20 }}>
-                    <div
-                        style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "baseline",
-                            marginBottom: 6,
-                        }}
-                    >
-                        <p
-                            style={{
-                                fontSize: 10,
-                                fontWeight: 700,
-                                letterSpacing: "0.1em",
-                                textTransform: "uppercase",
-                                color: "var(--ink-dim)",
-                            }}
-                        >
-                            Month
-                        </p>
-                        <span
-                            style={{
-                                fontSize: 11,
-                                fontWeight: 500,
-                                color: isMonthly ? "var(--accent)" : "var(--ink-mid)",
-                            }}
-                        >
-                            {isMonthly ? MONTH_NAMES[monthSlider - 1] : "Annual"}
-                        </span>
-                    </div>
-                    <input
-                        type="range"
-                        min={0}
-                        max={12}
-                        value={monthSlider}
-                        onChange={(e) => handleSliderChange(Number(e.target.value))}
-                        style={{
-                            width: "100%",
-                            accentColor: "var(--accent)",
-                            cursor: "pointer",
-                        }}
-                    />
-                    <div
-                        style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            fontSize: 9,
-                            color: "var(--ink-dim)",
-                            marginTop: 2,
-                        }}
-                    >
-                        <span>Annual</span>
-                        <span>Dec</span>
-                    </div>
-                </div>
-
-                {/* Loading indicator */}
                 {loadingMonthly && (
                     <p
                         style={{
@@ -267,7 +154,6 @@ export default function PanelContent({
                     </p>
                 )}
 
-                {/* Stats + breakdown */}
                 {!loadingMonthly && (
                     <>
                         <div

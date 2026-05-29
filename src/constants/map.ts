@@ -82,20 +82,27 @@ export const ZIP3_LINE_OPACITY = { selected: 1, default: 0.4 } as const;
 export const COUNTY_LINE_OPACITY = { selected: 1, default: 0.35 } as const;
 
 // ── Category mapping ──────────────────────────────────────────
+// Bridges the SQL category strings (built by scripts/build_aggregates.py and
+// migration 006) to the UI LayerKey. Every CDT/ADA category present in the data
+// has its own selectable layer.
 export const CATEGORY_TO_KEY: Record<string, LayerKey> = {
     Diagnostic: "diagnostic",
     Preventive: "preventive",
     Restorative: "restorative",
-    "Oral Surgery": "oral_surgery",
-    Orthodontics: "orthodontics",
     Endodontics: "endodontics",
     Periodontics: "periodontics",
+    "Prosthodontics (removable)": "prosthodontics_removable",
+    "Maxillofacial Prosthetics": "maxillofacial_prosthetics",
+    "Implant Services": "implant_services",
+    "Prosthodontics (fixed)": "prosthodontics_fixed",
+    "Oral and Maxillofacial Surgery": "oral_max_surgery",
+    Orthodontics: "orthodontics",
     "Adjunctive General Services": "adjunctive",
-    "Prosthodontics (removable)": "prosthodontics",
-    "Prosthodontics (fixed)": "prosthodontics",
 };
 
 // ── Layer configs ─────────────────────────────────────────────
+// `min`/`max` are kept for back-compat but no longer drive the choropleth
+// scale — color stops are recomputed dynamically per view (see mapStyles).
 export const LAYER_CONFIGS: Record<LayerKey, LayerConfig> = {
     all: {
         key: "all",
@@ -127,29 +134,11 @@ export const LAYER_CONFIGS: Record<LayerKey, LayerConfig> = {
     restorative: {
         key: "restorative",
         label: "Restorative",
-        description: "Fillings, crowns",
+        description: "Fillings, crowns, inlays",
         unit: "Claims",
         min: 0,
         max: 200_000,
         accent: "#c87d2a",
-    },
-    oral_surgery: {
-        key: "oral_surgery",
-        label: "Oral Surgery",
-        description: "Extractions, surgical procedures",
-        unit: "Claims",
-        min: 0,
-        max: 100_000,
-        accent: "#b03a3a",
-    },
-    orthodontics: {
-        key: "orthodontics",
-        label: "Orthodontics",
-        description: "Braces, retainers",
-        unit: "Claims",
-        min: 0,
-        max: 50_000,
-        accent: "#7a5cb8",
     },
     endodontics: {
         key: "endodontics",
@@ -169,37 +158,86 @@ export const LAYER_CONFIGS: Record<LayerKey, LayerConfig> = {
         max: 10_000,
         accent: "#5c9e7a",
     },
-    adjunctive: {
-        key: "adjunctive",
-        label: "Adjunctive General",
-        description: "Anesthesia, drugs, misc",
-        unit: "Claims",
-        min: 0,
-        max: 80_000,
-        accent: "#8c7853",
-    },
-    prosthodontics: {
-        key: "prosthodontics",
-        label: "Prosthodontics",
-        description: "Dentures, bridges",
+    prosthodontics_removable: {
+        key: "prosthodontics_removable",
+        label: "Prosthodontics (removable)",
+        description: "Dentures, partials",
         unit: "Claims",
         min: 0,
         max: 5_000,
         accent: "#6b8cae",
     },
+    maxillofacial_prosthetics: {
+        key: "maxillofacial_prosthetics",
+        label: "Maxillofacial Prosthetics",
+        description: "Surgical obturators, facial-defect prostheses",
+        unit: "Claims",
+        min: 0,
+        max: 2_000,
+        accent: "#a07ba8",
+    },
+    implant_services: {
+        key: "implant_services",
+        label: "Implant Services",
+        description: "Surgical implants",
+        unit: "Claims",
+        min: 0,
+        max: 5_000,
+        accent: "#4d7a91",
+    },
+    prosthodontics_fixed: {
+        key: "prosthodontics_fixed",
+        label: "Prosthodontics (fixed)",
+        description: "Fixed bridges, retainers",
+        unit: "Claims",
+        min: 0,
+        max: 5_000,
+        accent: "#5e7799",
+    },
+    oral_max_surgery: {
+        key: "oral_max_surgery",
+        label: "Oral & Maxillofacial Surgery",
+        description: "Extractions, surgical procedures",
+        unit: "Claims",
+        min: 0,
+        max: 100_000,
+        accent: "#b03a3a",
+    },
+    orthodontics: {
+        key: "orthodontics",
+        label: "Orthodontics",
+        description: "Braces, retainers",
+        unit: "Claims",
+        min: 0,
+        max: 50_000,
+        accent: "#7a5cb8",
+    },
+    adjunctive: {
+        key: "adjunctive",
+        label: "Adjunctive General Services",
+        description: "Anesthesia, drugs, palliative care",
+        unit: "Claims",
+        min: 0,
+        max: 80_000,
+        accent: "#8c7853",
+    },
 };
 
+// CDT-canonical ordering (I–XII), with "All" pinned to the top.
 export const LAYER_ORDER: LayerKey[] = [
     "all",
     "diagnostic",
     "preventive",
     "restorative",
-    "oral_surgery",
-    "orthodontics",
     "endodontics",
     "periodontics",
+    "prosthodontics_removable",
+    "maxillofacial_prosthetics",
+    "implant_services",
+    "prosthodontics_fixed",
+    "oral_max_surgery",
+    "orthodontics",
     "adjunctive",
-    "prosthodontics",
 ];
 
 /** Derive category→color map from LAYER_CONFIGS via CATEGORY_TO_KEY */
