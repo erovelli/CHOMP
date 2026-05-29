@@ -148,7 +148,6 @@ function addCountyLayers(map: maplibregl.Map) {
             id: COUNTY_FILL,
             type: "fill",
             source: COUNTY_SOURCE,
-            layout: { visibility: "none" },
             paint: {
                 "fill-color": colorExpression as maplibregl.ExpressionSpecification,
                 "fill-opacity": [
@@ -168,7 +167,6 @@ function addCountyLayers(map: maplibregl.Map) {
             id: COUNTY_STROKE,
             type: "line",
             source: COUNTY_SOURCE,
-            layout: { visibility: "none" },
             paint: {
                 "line-color": [
                     "case",
@@ -214,7 +212,6 @@ function addZip3Layers(map: maplibregl.Map) {
             type: "fill",
             source: ZIP3_SOURCE,
             "source-layer": ZIP3_LAYER,
-            layout: { visibility: "none" },
             paint: {
                 "fill-color": colorExpression as maplibregl.ExpressionSpecification,
                 "fill-opacity": [
@@ -235,7 +232,6 @@ function addZip3Layers(map: maplibregl.Map) {
             type: "line",
             source: ZIP3_SOURCE,
             "source-layer": ZIP3_LAYER,
-            layout: { visibility: "none" },
             paint: {
                 "line-color": [
                     "case",
@@ -264,17 +260,86 @@ function addZip3Layers(map: maplibregl.Map) {
     }
 }
 
-// Toggle which geography level's fill+stroke layers are visible.
+// Non-active geography levels stay rendered as a low-opacity backdrop so the
+// map keeps spatial context as the user switches levels (rather than blanking
+// out the other granularities entirely).
+const DIMMED_FILL_OPACITY = 0.12;
+const DIMMED_LINE_OPACITY = 0.18;
+const DIMMED_LINE_WIDTH = 0.25;
+
+const LEVEL_STROKE: Record<GeoLevel, string> = {
+    state: STATES_STROKE,
+    county: COUNTY_STROKE,
+    zip3: ZIP3_STROKE,
+};
+
+function activeFillOpacityExpr(opa: { selected: number; hover: number; default: number }) {
+    return [
+        "case",
+        ["boolean", ["feature-state", "selected"], false],
+        opa.selected,
+        ["boolean", ["feature-state", "hover"], false],
+        opa.hover,
+        opa.default,
+    ];
+}
+
+function activeLineOpacityExpr(opa: { selected: number; default: number }) {
+    return ["case", ["boolean", ["feature-state", "selected"], false], opa.selected, opa.default];
+}
+
+function activeLineWidthExpr(w: { selected: number; hover: number; default: number }) {
+    return [
+        "case",
+        ["boolean", ["feature-state", "selected"], false],
+        w.selected,
+        ["boolean", ["feature-state", "hover"], false],
+        w.hover,
+        w.default,
+    ];
+}
+
+const FILL_OPA_BY_LEVEL = {
+    state: STATES_FILL_OPACITY,
+    county: COUNTY_FILL_OPACITY,
+    zip3: ZIP3_FILL_OPACITY,
+} as const;
+const LINE_OPA_BY_LEVEL = {
+    state: STATES_LINE_OPACITY,
+    county: COUNTY_LINE_OPACITY,
+    zip3: ZIP3_LINE_OPACITY,
+} as const;
+const LINE_W_BY_LEVEL = {
+    state: STATES_LINE_WIDTH,
+    county: COUNTY_LINE_WIDTH,
+    zip3: ZIP3_LINE_WIDTH,
+} as const;
+
+// Promote the chosen level to interactive opacities; dim the others into a
+// low-opacity backdrop. Layers all remain visible.
 function setActiveGeoLayer(map: maplibregl.Map, level: GeoLevel) {
-    const vis: Record<GeoLevel, [string, string]> = {
-        state: [STATES_FILL, STATES_STROKE],
-        county: [COUNTY_FILL, COUNTY_STROKE],
-        zip3: [ZIP3_FILL, ZIP3_STROKE],
-    };
-    for (const [lvl, [fill, stroke]] of Object.entries(vis) as [GeoLevel, [string, string]][]) {
-        const visibility = lvl === level ? "visible" : "none";
-        if (map.getLayer(fill)) map.setLayoutProperty(fill, "visibility", visibility);
-        if (map.getLayer(stroke)) map.setLayoutProperty(stroke, "visibility", visibility);
+    const levels: GeoLevel[] = ["state", "county", "zip3"];
+    for (const lvl of levels) {
+        const fill = LEVEL_FILL[lvl];
+        const stroke = LEVEL_STROKE[lvl];
+        if (!map.getLayer(fill) || !map.getLayer(stroke)) continue;
+        if (lvl === level) {
+            map.setPaintProperty(
+                fill,
+                "fill-opacity",
+                activeFillOpacityExpr(FILL_OPA_BY_LEVEL[lvl]),
+            );
+            map.setPaintProperty(
+                stroke,
+                "line-opacity",
+                activeLineOpacityExpr(LINE_OPA_BY_LEVEL[lvl]),
+            );
+            map.setPaintProperty(stroke, "line-width", activeLineWidthExpr(LINE_W_BY_LEVEL[lvl]));
+        } else {
+            map.setPaintProperty(fill, "fill-opacity", DIMMED_FILL_OPACITY);
+            map.setPaintProperty(stroke, "line-opacity", DIMMED_LINE_OPACITY);
+            map.setPaintProperty(stroke, "line-width", DIMMED_LINE_WIDTH);
+        }
     }
 }
 
@@ -337,34 +402,41 @@ export default function MapContainer() {
     const selectedRefFor = (lvl: GeoLevel) =>
         lvl === "state" ? selectedStateRef : lvl === "county" ? selectedCountyRef : selectedZip3Ref;
 
-    // Recompute the dynamic color scale for the *active* level from the slice
-    // currently on screen (year × category × metric), and re-apply the active
-    // layer's fill-color preserving any hover/selected highlight.
+    // Recompute the dynamic color scale for the active level (drives the Legend
+    // and the interactive fill) and re-apply fill-color on every level — the
+    // non-active levels stay rendered as a dimmed backdrop, so they each need
+    // their OWN level's quantile stops to look like a real choropleth instead
+    // of saturating against the placeholder default stops.
     const applyActiveColors = useCallback(() => {
         if (!map.current) return;
-        const level = geoLevelRef.current;
-        const data = getAnnualDataForLevel(level);
-        const values = Object.values(data).map((recs) =>
-            getValueForRegion(
-                recs,
-                selectedYearRef.current,
-                activeLayerRef.current,
-                metricRef.current,
-            ),
-        );
-        const stops = quantileStops(values, metricRef.current);
-        stopsRef.current = stops;
-        setColorStops(stops);
-        map.current.setPaintProperty(
-            LEVEL_FILL[level],
-            "fill-color",
-            buildColorExpression(
-                hoveredRefFor(level).current,
-                selectedRefFor(level).current,
-                LEVEL_ID_PROP[level],
-                stops,
-            ),
-        );
+        const active = geoLevelRef.current;
+        const levels: GeoLevel[] = ["state", "county", "zip3"];
+        for (const level of levels) {
+            const data = getAnnualDataForLevel(level);
+            const values = Object.values(data).map((recs) =>
+                getValueForRegion(
+                    recs,
+                    selectedYearRef.current,
+                    activeLayerRef.current,
+                    metricRef.current,
+                ),
+            );
+            const stops = quantileStops(values, metricRef.current);
+            if (level === active) {
+                stopsRef.current = stops;
+                setColorStops(stops);
+            }
+            map.current.setPaintProperty(
+                LEVEL_FILL[level],
+                "fill-color",
+                buildColorExpression(
+                    hoveredRefFor(level).current,
+                    selectedRefFor(level).current,
+                    LEVEL_ID_PROP[level],
+                    stops,
+                ),
+            );
+        }
     }, [setColorStops]);
 
     // Repaint values + rescale when category, year, or metric changes.
@@ -420,6 +492,7 @@ export default function MapContainer() {
 
     const handleStateClick = useCallback(
         (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
+            if (geoLevelRef.current !== "state") return;
             if (!e.features?.length || !map.current) return;
             const postal = e.features[0].properties?.[STATES_ID_PROP] as string;
             const name = e.features[0].properties?.name as string;
@@ -468,6 +541,7 @@ export default function MapContainer() {
 
     const handleCountyClick = useCallback(
         (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
+            if (geoLevelRef.current !== "county") return;
             if (!e.features?.length || !map.current) return;
             const fips = e.features[0].properties?.[COUNTY_ID_PROP] as string;
             const name = e.features[0].properties?.name as string;
@@ -508,6 +582,7 @@ export default function MapContainer() {
 
     const handleZip3Click = useCallback(
         (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
+            if (geoLevelRef.current !== "zip3") return;
             if (!e.features?.length || !map.current) return;
             const zip3 = e.features[0].properties?.[ZIP3_ID_PROP] as string;
             if (!zip3) return;
@@ -542,6 +617,7 @@ export default function MapContainer() {
 
     const handleStateMouseMove = useCallback(
         (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
+            if (geoLevelRef.current !== "state") return;
             if (!map.current || !e.features?.length) return;
             map.current.getCanvas().style.cursor = "pointer";
             const postal = e.features[0].properties?.[STATES_ID_PROP] as string;
@@ -587,6 +663,7 @@ export default function MapContainer() {
 
     const handleCountyMouseMove = useCallback(
         (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
+            if (geoLevelRef.current !== "county") return;
             if (!map.current || !e.features?.length) return;
             map.current.getCanvas().style.cursor = "pointer";
             const fips = e.features[0].properties?.[COUNTY_ID_PROP] as string;
@@ -626,6 +703,7 @@ export default function MapContainer() {
 
     const handleZip3MouseMove = useCallback(
         (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
+            if (geoLevelRef.current !== "zip3") return;
             if (!map.current || !e.features?.length) return;
             map.current.getCanvas().style.cursor = "pointer";
             const zip3 = e.features[0].properties?.[ZIP3_ID_PROP] as string;
@@ -661,6 +739,7 @@ export default function MapContainer() {
     );
 
     const handleStateMouseLeave = useCallback(() => {
+        if (geoLevelRef.current !== "state") return;
         if (!map.current) return;
         map.current.getCanvas().style.cursor = "";
 
@@ -680,6 +759,7 @@ export default function MapContainer() {
     }, [setHovered]);
 
     const handleCountyMouseLeave = useCallback(() => {
+        if (geoLevelRef.current !== "county") return;
         if (!map.current) return;
         map.current.getCanvas().style.cursor = "";
 
@@ -699,6 +779,7 @@ export default function MapContainer() {
     }, [setHovered]);
 
     const handleZip3MouseLeave = useCallback(() => {
+        if (geoLevelRef.current !== "zip3") return;
         if (!map.current) return;
         map.current.getCanvas().style.cursor = "";
 
