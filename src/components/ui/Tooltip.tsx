@@ -12,8 +12,10 @@ export default function Tooltip() {
     const valueLabel =
         hoveredValue == null
             ? "—"
-            : metric === "ratio"
-              ? `${formatRatio(hoveredValue)} claims / patient`
+            : metric === "enrollees"
+              ? Number.isFinite(hoveredValue)
+                  ? `${formatRatio(hoveredValue)} claims / Medicaid enrollee`
+                  : "no enrollment data"
               : `${hoveredValue.toLocaleString()} ${cfg.unit}`;
 
     return (

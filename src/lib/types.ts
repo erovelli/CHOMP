@@ -22,9 +22,21 @@ export type GeoLevel = "state" | "county" | "zip3";
 /**
  * What the choropleth color encodes.
  * - `claims`: raw claim volume (a population/size map).
- * - `ratio`: claims per beneficiary (a utilization-intensity map).
+ * - `enrollees`: claims per Medicaid enrollee from ACS C27007 (a penetration map).
+ *
+ * A claims-per-dental-patient-served ratio was previously offered but removed:
+ * the HHS-served denominator is per-category, so the "All Categories" view
+ * double-counted enrollees who used multiple categories and the default number
+ * was structurally biased. ACS C27007 gives a clean, category-independent
+ * denominator at every geo. See git history for the prior implementation.
  */
-export type Metric = "claims" | "ratio";
+export type Metric = "claims" | "enrollees";
+
+/** ACS C27007 endpoint-year Medicaid enrollment for one geography. */
+export interface EnrollmentRecord {
+    year: string;
+    medicaid_enrollees: number;
+}
 
 export interface LayerConfig {
     key: LayerKey;
@@ -36,9 +48,9 @@ export interface LayerConfig {
     accent: string;
 }
 
-// Claims-per-beneficiary (the "Per patient" metric) is derived at runtime as
-// total_claims / total_beneficiaries_served — it is NOT a stored field (see
-// docs/DATA_DICTIONARY.md and the note in scripts/build_aggregates.py).
+// total_beneficiaries_served is shipped in the NDJSON for use in side-panel
+// summaries; it is NOT used as a map metric denominator. See the Metric
+// docstring above for why.
 export interface DataRecord {
     year: string;
     category: string;

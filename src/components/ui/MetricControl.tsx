@@ -4,7 +4,7 @@ import type { Metric } from "../../lib/types";
 
 const METRICS: { key: Metric; label: string }[] = [
     { key: "claims", label: "Volume" },
-    { key: "ratio", label: "Per patient" },
+    { key: "enrollees", label: "Per Medicaid enrollee" },
 ];
 
 // Sits directly under the geography toggle (GeoLevelControl) at top-center.

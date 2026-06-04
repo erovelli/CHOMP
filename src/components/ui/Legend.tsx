@@ -7,8 +7,8 @@ import { Z_INDEX, PANEL_SHADOW } from "../../constants/layout";
 export default function Legend() {
     const { activeLayer, metric, colorStops } = useMapStore();
     const cfg = LAYER_CONFIGS[activeLayer];
-    const fmt = metric === "ratio" ? formatRatio : formatStop;
-    const unit = metric === "ratio" ? "Claims / Patient" : cfg.unit;
+    const fmt = metric === "enrollees" ? formatRatio : formatStop;
+    const unit = metric === "enrollees" ? "Claims / Medicaid enrollee" : cfg.unit;
     const hasStops = colorStops.length > 0;
 
     return (
@@ -71,7 +71,9 @@ export default function Legend() {
                     marginTop: 8,
                 }}
             >
-                Scale adjusts to the current view
+                {metric === "enrollees"
+                    ? "Capped at 95th percentile; outliers saturate"
+                    : "Scale adjusts to the current view"}
             </p>
         </div>
     );

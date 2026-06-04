@@ -28,12 +28,27 @@ provider_procedure_category_aggregate_{grain}_{geo}.json
 | `grain` | `annual` \| `monthly`         | Temporal aggregation level. |
 | `geo`   | `state` \| `county` \| `zip3` | Spatial aggregation level.  |
 
-**Six files total** (3 geographies × 2 grains). They are produced by
+**Six numerator files total** (3 geographies × 2 grains). They are produced by
 [`scripts/build_aggregates.py`](../scripts/build_aggregates.py), a DuckDB script
 that reads the merged+geocoded claims CSV directly and emits all six NDJSON
 files in ~10s. State is rebuilt from county sums (see
 [Aggregation invariants](#aggregation-invariants)). Adding/renaming an output
 requires updating [`DATA_PATHS`](../src/constants/map.ts) in the same PR.
+
+**Plus three denominator files** for the per-enrollee rate metric:
+
+```text
+medicaid_enrollment_{state,county,zip3}.json
+```
+
+These hold ACS C27007 Medicaid enrollment by geography-year (endpoint years
+2018–2024). Produced by
+[`scripts/build_medicaid_enrollment.py`](../scripts/build_medicaid_enrollment.py),
+which reads the two CSVs emitted by
+[`scripts/fetch_acs_medicaid.py`](../scripts/fetch_acs_medicaid.py) and rolls
+county → state (via FIPS→USPS, same map used by `build_aggregates.py`) and
+ZCTA → ZIP3 (first 3 digits of ZCTA). Same NDJSON envelope as the numerator
+files so both flow through the same `fetchNDJSON` parser.
 
 ## NDJSON envelope
 
@@ -79,6 +94,25 @@ interface MonthlyDataRecord {
 
 Types are mirrored in [`src/lib/types.ts`](../src/lib/types.ts). Changing the schema in SQL without updating the TS (and vice versa) will produce a silent runtime error, not a type error — grep for `DataRecord` before shipping schema changes.
 
+### Denominator record schema (`medicaid_enrollment_*.json`)
+
+```ts
+interface EnrollmentRecord {
+  year: string; // "2018" .. "2024" (ACS 5-year endpoint year)
+  medicaid_enrollees: number; // ACS C27007 total Medicaid coverage, civilian noninstitutionalized
+}
+```
+
+Same NDJSON envelope (`{"<id>": [<records>...]}`). Keys:
+
+- `medicaid_enrollment_state.json` → USPS postal (e.g. `"MA"`), summed from county.
+- `medicaid_enrollment_county.json` → 5-digit FIPS GEOID (e.g. `"25025"`).
+- `medicaid_enrollment_zip3.json` → 3-digit string (e.g. `"021"`), summed from ZCTAs sharing the same first 3 digits.
+
+The `year` is the ACS 5-year endpoint year, _not_ a single calendar year.
+"2023" means the pooled 2019–2023 sample. See L22 in
+[LIMITATIONS](LIMITATIONS.md).
+
 ## Field reference
 
 | Field                        | Type     | Units                         | Source                                      | Notes                                                                         |
@@ -92,7 +126,26 @@ Types are mirrored in [`src/lib/types.ts`](../src/lib/types.ts). Changing the sc
 
 `total_*` fields are non-negative integers; `total_amount_paid` is whole USD (not cents).
 
-**Two color metrics (one derived).** The choropleth can encode either `total_claims` (volume — a population/size map) or **claims per beneficiary** (utilization intensity). The ratio is **not a stored field** — it is computed at read time as `total_claims / total_beneficiaries_served` (materializing it pushed `monthly_county` past GitHub's 100 MB file limit for no functional gain). For a single category this is exact; for the UI's "All Categories" view it is `SUM(claims)/SUM(beneficiaries)` across categories, whose denominator double-counts patients active in multiple categories and so slightly understates true per-person intensity (see L33 note).
+**Two color metrics (one derived).** The choropleth can encode either
+`total_claims` (volume — a population/size map) or **claims per Medicaid
+enrollee** (population penetration — a rate map). The rate is computed at
+read time as `total_claims / medicaid_enrollees`, where the denominator is
+the ACS C27007 enrollment record for the same (geography, endpoint-year)
+loaded from the corresponding `medicaid_enrollment_*.json` file (see
+[Denominator record schema](#denominator-record-schema-medicaid_enrollment_json)). For monthly views,
+the rate reuses the endpoint-year denominator across all 12 months
+(ACS is annual only).
+
+The ACS denominator is category-independent — total Medicaid enrollees in
+the geography — so the rate value at "All Categories" is `SUM(claims) /
+enrollees` with no double-counting. A previous "claims per dental
+beneficiary served" ratio (T-MSIS denominator) was removed: that denominator
+was per-category and double-counted patients who used multiple categories,
+structurally biasing the default "All Categories" rate low.
+
+`total_beneficiaries_served` remains in the NDJSON for side-panel and future
+use, but is **not** a map denominator and is not exposed in the per-region
+StatCard grid.
 
 ### Aggregation invariants
 

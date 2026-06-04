@@ -3,7 +3,6 @@ import { CATEGORY_COLORS } from "../../../constants/map";
 interface CategoryRecord {
     category: string;
     total_claims: number;
-    total_beneficiaries_served: number;
     total_amount_paid: number;
 }
 
@@ -86,14 +85,10 @@ export default function CategoryBreakdown({
                                 <div
                                     style={{
                                         display: "flex",
-                                        justifyContent: "space-between",
+                                        justifyContent: "flex-end",
                                         marginTop: 2,
                                     }}
                                 >
-                                    <span style={{ fontSize: 10, color: "var(--ink-dim)" }}>
-                                        {record.total_beneficiaries_served.toLocaleString()}{" "}
-                                        beneficiaries
-                                    </span>
                                     <span style={{ fontSize: 10, color: "var(--ink-dim)" }}>
                                         ${(record.total_amount_paid / 1000).toFixed(0)}k paid
                                     </span>

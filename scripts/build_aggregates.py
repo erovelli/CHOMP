@@ -186,10 +186,14 @@ def write_ndjson(
                         'total_beneficiaries_served', total_beneficiaries_served,
                         'total_claims',               total_claims,
                         'total_amount_paid',          total_amount_paid
-                        -- Note: claims-per-beneficiary is intentionally NOT stored.
-                        -- It is derived in the UI as total_claims / total_beneficiaries
-                        -- (ratio of totals). Materializing it pushed monthly_county
-                        -- past GitHub's 100 MB per-file limit for no functional gain.
+                        -- Note: total_beneficiaries_served is preserved here but is
+                        -- no longer used as a map metric denominator. The "claims
+                        -- per dental beneficiary served" ratio was retired because
+                        -- the field is per-category and double-counts patients who
+                        -- used multiple categories — biasing the "All Categories"
+                        -- rate low. The front-end's rate metric now reads ACS C27007
+                        -- enrollment from medicaid_enrollment_*.json (built by
+                        -- scripts/build_medicaid_enrollment.py). See docs/LIMITATIONS.md L35.
                     ) AS VARCHAR
                 ),
                 ',' ORDER BY period, category

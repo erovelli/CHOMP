@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMapStore } from "../../../lib/store";
 import type { RegionDetail, MonthlyDataRecord } from "../../../lib/types";
-import { getMonthlyRecords } from "../../../lib/dataService";
+import { getMonthlyRecords, getEnrolleesFor } from "../../../lib/dataService";
 import { formatCurrency } from "../../../lib/formatters";
 import { MONTH_NAMES } from "../../../constants/time";
 import StatCard from "./StatCard";
@@ -35,7 +35,6 @@ export default function PanelContent({
     let displayRecords: {
         category: string;
         total_claims: number;
-        total_beneficiaries_served: number;
         total_amount_paid: number;
     }[];
 
@@ -45,7 +44,6 @@ export default function PanelContent({
             .map((r) => ({
                 category: r.category,
                 total_claims: r.total_claims,
-                total_beneficiaries_served: r.total_beneficiaries_served,
                 total_amount_paid: r.total_amount_paid,
             }));
     } else {
@@ -54,14 +52,17 @@ export default function PanelContent({
             .map((r) => ({
                 category: r.category,
                 total_claims: r.total_claims,
-                total_beneficiaries_served: r.total_beneficiaries_served,
                 total_amount_paid: r.total_amount_paid,
             }));
     }
 
     const totalClaims = displayRecords.reduce((s, r) => s + r.total_claims, 0);
-    const totalBeneficiaries = displayRecords.reduce((s, r) => s + r.total_beneficiaries_served, 0);
     const totalPaid = displayRecords.reduce((s, r) => s + r.total_amount_paid, 0);
+    // ACS C27007 endpoint-year enrollment for this geography. Annual only —
+    // monthly views reuse the year's value (matches the map). Using ACS instead
+    // of SUM(total_beneficiaries_served) avoids the per-category double-count
+    // that made the old "Claims / Patient" stat structurally biased low.
+    const medicaidEnrollees = getEnrolleesFor(detail.level, detail.id, selectedYear);
 
     const periodLabel =
         isMonthly && selectedMonth
@@ -166,8 +167,12 @@ export default function PanelContent({
                         >
                             <StatCard value={totalClaims.toLocaleString()} label="Total Claims" />
                             <StatCard
-                                value={totalBeneficiaries.toLocaleString()}
-                                label="Beneficiaries Served"
+                                value={
+                                    medicaidEnrollees != null && medicaidEnrollees > 0
+                                        ? medicaidEnrollees.toLocaleString()
+                                        : "—"
+                                }
+                                label="Medicaid Enrollees"
                             />
                             <StatCard value={formatCurrency(totalPaid)} label="Total Paid" />
                             <StatCard
@@ -180,11 +185,11 @@ export default function PanelContent({
                             />
                             <StatCard
                                 value={
-                                    totalBeneficiaries > 0
-                                        ? (totalClaims / totalBeneficiaries).toFixed(2)
+                                    medicaidEnrollees != null && medicaidEnrollees > 0
+                                        ? (totalClaims / medicaidEnrollees).toFixed(2)
                                         : "—"
                                 }
-                                label="Claims / Patient"
+                                label="Claims / Enrollee"
                             />
                         </div>
 

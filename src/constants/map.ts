@@ -54,6 +54,9 @@ export const DATA_PATHS = {
     monthlyState: "data/provider_procedure_category_aggregate_monthly_state.json",
     monthlyCounty: "data/provider_procedure_category_aggregate_monthly_county.json",
     monthlyZip3: "data/provider_procedure_category_aggregate_monthly_zip3.json",
+    enrollmentState: "data/medicaid_enrollment_state.json",
+    enrollmentCounty: "data/medicaid_enrollment_county.json",
+    enrollmentZip3: "data/medicaid_enrollment_zip3.json",
 } as const;
 
 // ── Protomaps ─────────────────────────────────────────────────

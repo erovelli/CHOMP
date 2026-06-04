@@ -19,6 +19,7 @@ import {
     getMonthlyDataForLevel,
     getValueForRegion,
     getValueForRegionMonthly,
+    getEnrolleesFor,
 } from "../../lib/dataService";
 import type { DataRecord, MonthlyDataRecord } from "../../lib/types";
 import {
@@ -311,12 +312,32 @@ function addZip3Layers(map: maplibregl.Map) {
     }
 }
 
-// Non-active geography levels stay rendered as a low-opacity backdrop so the
-// map keeps spatial context as the user switches levels (rather than blanking
-// out the other granularities entirely).
-const DIMMED_FILL_OPACITY = 0.12;
-const DIMMED_LINE_OPACITY = 0.18;
-const DIMMED_LINE_WIDTH = 0.25;
+// Non-active geography levels are fully hidden — only the level the user
+// selected is rendered.
+const DIMMED_FILL_OPACITY = 0;
+const DIMMED_LINE_OPACITY = 0;
+const DIMMED_LINE_WIDTH = 0;
+
+// Exception: when the user is on County or ZIP3, faint state borders stay
+// visible as spatial context (no fill, just the outline). This is one-way —
+// the State view does NOT show county/zip3 outlines underneath. Values mirror
+// STATES_LINE_OPACITY.default / STATES_LINE_WIDTH.default so the at-rest
+// border looks identical whether the user is on State, County, or ZIP3.
+const CONTEXT_STATE_LINE_OPACITY = STATES_LINE_OPACITY.default;
+const CONTEXT_STATE_LINE_WIDTH = STATES_LINE_WIDTH.default;
+
+// State stroke line-color case expression — extracted so we can restore it
+// when state becomes active again after a context-mode override.
+function activeStateLineColorExpr() {
+    return [
+        "case",
+        ["boolean", ["feature-state", "selected"], false],
+        STROKE_COLOR_ACTIVE,
+        ["boolean", ["feature-state", "hover"], false],
+        STROKE_COLOR_ACTIVE,
+        STROKE_COLOR_DEFAULT_STATES,
+    ];
+}
 
 const LEVEL_STROKE: Record<GeoLevel, string> = {
     state: STATES_STROKE,
@@ -366,8 +387,9 @@ const LINE_W_BY_LEVEL = {
     zip3: ZIP3_LINE_WIDTH,
 } as const;
 
-// Promote the chosen level to interactive opacities; dim the others into a
-// low-opacity backdrop. Layers all remain visible.
+// Promote the chosen level to interactive opacities; hide everything else,
+// except keep faint state borders as spatial context when the user is on
+// County or ZIP3.
 function setActiveGeoLayer(map: maplibregl.Map, level: GeoLevel) {
     const levels: GeoLevel[] = ["state", "county", "zip3"];
     for (const lvl of levels) {
@@ -386,11 +408,31 @@ function setActiveGeoLayer(map: maplibregl.Map, level: GeoLevel) {
                 activeLineOpacityExpr(LINE_OPA_BY_LEVEL[lvl]),
             );
             map.setPaintProperty(stroke, "line-width", activeLineWidthExpr(LINE_W_BY_LEVEL[lvl]));
+            if (lvl === "state") {
+                // Restore the case-expression line-color in case we came back
+                // from context mode (which pinned it to the default constant).
+                map.setPaintProperty(stroke, "line-color", activeStateLineColorExpr());
+            }
+        } else if (lvl === "state") {
+            // Context mode: no fill; outline matches State view's at-rest look
+            // (same opacity, width, and greenish-grey default color).
+            map.setPaintProperty(fill, "fill-opacity", 0);
+            map.setPaintProperty(stroke, "line-opacity", CONTEXT_STATE_LINE_OPACITY);
+            map.setPaintProperty(stroke, "line-width", CONTEXT_STATE_LINE_WIDTH);
+            map.setPaintProperty(stroke, "line-color", STROKE_COLOR_DEFAULT_STATES);
         } else {
             map.setPaintProperty(fill, "fill-opacity", DIMMED_FILL_OPACITY);
             map.setPaintProperty(stroke, "line-opacity", DIMMED_LINE_OPACITY);
             map.setPaintProperty(stroke, "line-width", DIMMED_LINE_WIDTH);
         }
+    }
+    // Make sure the state stroke sits ABOVE the active level's fill so the
+    // context border isn't half-obscured by county/zip3 fill opacity. (Layers
+    // are added world→state→county→zip3, so without this the state stroke is
+    // buried beneath county fills and only shows through over water/no-fill
+    // areas — which is what produced the bold-on-lakes / faint-inland mismatch.)
+    if (map.getLayer(STATES_STROKE)) {
+        map.moveLayer(STATES_STROKE);
     }
 }
 
@@ -410,24 +452,52 @@ function paintValues(
     const countyData = monthly ? getMonthlyDataForLevel("county") : getCountyAnnualData();
     const zip3Data = monthly ? getMonthlyDataForLevel("zip3") : getZip3AnnualData();
 
-    const valueOf = (records: DataRecord[] | MonthlyDataRecord[]): number =>
-        monthly
-            ? getValueForRegionMonthly(records as MonthlyDataRecord[], period, activeLayer, metric)
-            : getValueForRegion(records as DataRecord[], period, activeLayer, metric);
+    // ACS denominator is annual; for monthly mode the period is "YYYY-MM" — use
+    // the year prefix as the ACS endpoint-year lookup key.
+    const enrollmentYear = monthly ? period.slice(0, 4) : period;
+    const needsEnroll = metric === "enrollees";
+    const valueOf = (
+        level: GeoLevel,
+        id: string,
+        records: DataRecord[] | MonthlyDataRecord[],
+    ): number => {
+        const enrollees = needsEnroll ? getEnrolleesFor(level, id, enrollmentYear) : null;
+        return monthly
+            ? getValueForRegionMonthly(
+                  records as MonthlyDataRecord[],
+                  period,
+                  activeLayer,
+                  metric,
+                  enrollees,
+              )
+            : getValueForRegion(records as DataRecord[], period, activeLayer, metric, enrollees);
+    };
 
+    // valueOf can return NaN for the per-enrollee metric when ACS has no
+    // record for the geography (e.g. territories, PO-box ZIPs — see L26/L37).
+    // MapLibre's `interpolate` paint expression doesn't handle NaN gracefully,
+    // so we coerce to 0 at the GPU boundary; the rate-metric's quantileStops
+    // already filters non-positive values out of the scale, so a coerced 0
+    // paints as the lightest band rather than skewing the quantiles. The
+    // value functions themselves still return NaN so tooltip/panel code can
+    // distinguish "no data" from "true zero".
+    const safe = (v: number): number => (Number.isFinite(v) ? v : 0);
     for (const [id, records] of Object.entries(stateData)) {
         map.setFeatureState(
             { source: STATES_SOURCE, sourceLayer: STATES_LAYER, id },
-            { value: valueOf(records) },
+            { value: safe(valueOf("state", id, records)) },
         );
     }
     for (const [id, records] of Object.entries(countyData)) {
-        map.setFeatureState({ source: COUNTY_SOURCE, id }, { value: valueOf(records) });
+        map.setFeatureState(
+            { source: COUNTY_SOURCE, id },
+            { value: safe(valueOf("county", id, records)) },
+        );
     }
     for (const [id, records] of Object.entries(zip3Data)) {
         map.setFeatureState(
             { source: ZIP3_SOURCE, sourceLayer: ZIP3_LAYER, id },
-            { value: valueOf(records) },
+            { value: safe(valueOf("zip3", id, records)) },
         );
     }
 }
@@ -489,18 +559,25 @@ export default function MapContainer() {
             const data = monthly ? getMonthlyDataForLevel(level) : getAnnualDataForLevel(level);
             const records = data[id];
             if (!records) return 0;
+            const period = currentPeriod();
+            const enrollees =
+                metricRef.current === "enrollees"
+                    ? getEnrolleesFor(level, id, monthly ? period.slice(0, 4) : period)
+                    : null;
             return monthly
                 ? getValueForRegionMonthly(
                       records as MonthlyDataRecord[],
-                      currentPeriod(),
+                      period,
                       activeLayerRef.current,
                       metricRef.current,
+                      enrollees,
                   )
                 : getValueForRegion(
                       records as DataRecord[],
-                      currentPeriod(),
+                      period,
                       activeLayerRef.current,
                       metricRef.current,
+                      enrollees,
                   );
         },
         [isMonthlyMode, currentPeriod],
@@ -511,35 +588,61 @@ export default function MapContainer() {
     const selectedRefFor = (lvl: GeoLevel) =>
         lvl === "state" ? selectedStateRef : lvl === "county" ? selectedCountyRef : selectedZip3Ref;
 
-    // Recompute the dynamic color scale for the active level (drives the Legend
-    // and the interactive fill) and re-apply fill-color on every level — the
-    // non-active levels stay rendered as a dimmed backdrop, so they each need
-    // their OWN level's quantile stops to look like a real choropleth instead
-    // of saturating against the placeholder default stops.
+    // Recompute the dynamic color scale and re-apply fill-color per level.
+    //
+    // Scale rule:
+    // - Volume (claims count): per-level quantile stops. Magnitudes differ by
+    //   10–100× across state → county → ZIP3, so a shared scale would wash the
+    //   smaller-grain levels into the light end of the palette.
+    // - Per-enrollee rate: SHARED stops across all three levels, computed on
+    //   the union of values. A rate is unit-free — "1.32 claims / enrollee"
+    //   means the same thing at every level, so color should mean the same
+    //   thing too. The shared scale is also what the Legend reads.
     const applyActiveColors = useCallback(() => {
         if (!map.current) return;
         const active = geoLevelRef.current;
         const monthly = isMonthlyMode();
         const period = currentPeriod();
         const levels: GeoLevel[] = ["state", "county", "zip3"];
+        const enrollmentYear = monthly ? period.slice(0, 4) : period;
+        const needsEnroll = metricRef.current === "enrollees";
+
+        const valuesByLevel: Record<GeoLevel, number[]> = {
+            state: [],
+            county: [],
+            zip3: [],
+        };
         for (const level of levels) {
             const data = monthly ? getMonthlyDataForLevel(level) : getAnnualDataForLevel(level);
-            const values = Object.values(data).map((recs) =>
-                monthly
+            valuesByLevel[level] = Object.entries(data).map(([id, recs]) => {
+                const enrollees = needsEnroll ? getEnrolleesFor(level, id, enrollmentYear) : null;
+                return monthly
                     ? getValueForRegionMonthly(
                           recs as MonthlyDataRecord[],
                           period,
                           activeLayerRef.current,
                           metricRef.current,
+                          enrollees,
                       )
                     : getValueForRegion(
                           recs as DataRecord[],
                           period,
                           activeLayerRef.current,
                           metricRef.current,
-                      ),
-            );
-            const stops = quantileStops(values, metricRef.current);
+                          enrollees,
+                      );
+            });
+        }
+
+        const sharedStops = needsEnroll
+            ? quantileStops(
+                  [...valuesByLevel.state, ...valuesByLevel.county, ...valuesByLevel.zip3],
+                  metricRef.current,
+              )
+            : null;
+
+        for (const level of levels) {
+            const stops = sharedStops ?? quantileStops(valuesByLevel[level], metricRef.current);
             if (level === active) {
                 stopsRef.current = stops;
                 setColorStops(stops);

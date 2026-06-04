@@ -35,13 +35,13 @@ The design is deliberately constrained:
 
 ## What it does
 
-|                  |                                                                                                                                                                                                                                                                                                                                    |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Map**          | Full-nation choropleth at three drill-down levels: states (PMTiles), counties (GeoJSON), ZIP3 areas (PMTiles), with non-US countries rendered as a grey backdrop. Feature-state driven recoloring — no GeoJSON re-parse on year/category change. Dynamic quantile color scale that re-fits per (level × year × category × metric). |
-| **Controls**     | All 12 CDT/ADA procedure-category layers (plus "All"), a State/County/ZIP3 geography toggle, a Volume / Per-patient metric toggle, and a year + month time picker. Monthly NDJSON (~16 MB gzip) lazy-loads on first month pick.                                                                                                    |
-| **Detail panel** | Per-region stats — total claims, beneficiaries served, dollars paid, avg $/claim, claims/patient — and a ranked category breakdown for the selected period.                                                                                                                                                                        |
-| **Tooltip**      | Pixel-anchored hover readout; respects feature-state hover/selected to drive stroke weights and fills without reconfiguring paint properties.                                                                                                                                                                                      |
-| **Info modal**   | Surfaces the caveats that matter: HHS cell-suppression (<12 claims or <12 beneficiaries/month), interstate variation in Medicaid dental coverage, and NPI/practice-location limitations.                                                                                                                                           |
+|                  |                                                                                                                                                                                                                                                                                                                                                                               |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Map**          | Full-nation choropleth at three drill-down levels: states (PMTiles), counties (GeoJSON), ZIP3 areas (PMTiles), with non-US countries rendered as a grey backdrop. Feature-state driven recoloring — no GeoJSON re-parse on year/category change. Dynamic quantile color scale that re-fits per (level × year × category × metric).                                            |
+| **Controls**     | All 12 CDT/ADA procedure-category layers (plus "All"), a State/County/ZIP3 geography toggle, a Volume / Per-Medicaid-enrollee metric toggle, and a year + month time picker. Monthly NDJSON (~16 MB gzip) lazy-loads on first month pick. The per-enrollee rate uses ACS C27007 as the denominator and shares one cross-level color scale, winsorized at the 95th percentile. |
+| **Detail panel** | Per-region stats — total claims, Medicaid enrollees (ACS C27007), dollars paid, avg $/claim, claims/enrollee — and a ranked category breakdown for the selected period.                                                                                                                                                                                                       |
+| **Tooltip**      | Pixel-anchored hover readout; respects feature-state hover/selected to drive stroke weights and fills without reconfiguring paint properties.                                                                                                                                                                                                                                 |
+| **Info modal**   | Surfaces the caveats that matter: HHS cell-suppression (<12 claims or <12 beneficiaries/month), interstate variation in Medicaid dental coverage, and NPI/practice-location limitations.                                                                                                                                                                                      |
 
 ## Architecture at a glance
 
@@ -172,8 +172,15 @@ A Husky pre-commit hook runs `lint-staged` (ESLint + Prettier on staged files). 
    `state == SUM(county)` is verified at build time.
 4. **Geometry** — `python scripts/fetch_county_geometry.py` and
    `python scripts/fetch_world_geometry.py` produce the GeoJSON layers under
-   `public/`. ACS denominators are fetched separately by
-   `scripts/fetch_acs_medicaid.py` and are not yet wired into the aggregations.
+   `public/`.
+5. **ACS denominator** — `python scripts/fetch_acs_medicaid.py` pulls ACS
+   C27007 Medicaid enrollment for county and ZCTA, endpoint years 2018–2024,
+   into `data/ACS medicaid enrollment/`. Then
+   `python scripts/build_medicaid_enrollment.py` rolls those up
+   (county → state via FIPS→USPS, ZCTA → ZIP3 by first 3 digits) and writes
+   three NDJSONs to `public/data/medicaid_enrollment_{state,county,zip3}.json`.
+   These are the denominator the front end reads for the "Per Medicaid
+   enrollee" rate metric.
 
 No database to provision.
 
@@ -227,7 +234,8 @@ medicaid-dent-policy/
 │   ├── build_aggregates.py        # DuckDB → 6 NDJSON files
 │   ├── fetch_county_geometry.py   # plotly counties → public/counties.geojson
 │   ├── fetch_world_geometry.py    # Natural Earth countries → public/world.geojson
-│   └── fetch_acs_medicaid.py      # ACS C27007 denominator (not yet wired)
+│   ├── fetch_acs_medicaid.py      # ACS C27007 → data/ACS medicaid enrollment/
+│   └── build_medicaid_enrollment.py  # ACS roll-up → public/data/medicaid_enrollment_*.json
 ├── docs/                          # ARCHITECTURE, ADRs
 └── .github/                       # Workflows, templates, policies
 ```
@@ -238,7 +246,7 @@ medicaid-dent-policy/
 - [x] **Unit tests.** `vitest` harness with coverage for `formatters`, `dataService.getValueForRegion`, and URL-state round-trips. More coverage to come for store slicing and the detail panel.
 - [ ] **Component tests.** `@testing-library/react` coverage for `DetailPanel`, `LayerControl`, `InfoModal`.
 - [ ] **Visual regression.** Playwright screenshot diffs of the three primary layouts (empty, state-selected, zip3-selected).
-- [ ] **Per-capita normalization.** Join against Census population to render rate-per-10k-enrollees, not raw claim counts.
+- [x] **Per-capita normalization.** ACS C27007 Medicaid enrollment drives the "Per Medicaid enrollee" metric at all three geographies; cross-level shared color scale winsorized at p95.
 - [ ] **Time-series chart.** Spark-line of the selected region + category in the detail panel.
 - [x] **URL-addressable state (partial).** `?layer=preventive&year=2024&month=2024-06` shareable deep links for layer/year/month. Region rehydration is a follow-up — it needs to wait for annual data to load and synthesize a `RegionDetail`.
 - [ ] **Data Version Control.** Pin each `public/data/*.json` export to a dated commit of the source data.
