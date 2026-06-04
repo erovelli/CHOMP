@@ -461,7 +461,7 @@ function paintValues(
         id: string,
         records: DataRecord[] | MonthlyDataRecord[],
     ): number => {
-        const enrollees = needsEnroll ? getEnrolleesFor(level, id, enrollmentYear) : 0;
+        const enrollees = needsEnroll ? getEnrolleesFor(level, id, enrollmentYear) : null;
         return monthly
             ? getValueForRegionMonthly(
                   records as MonthlyDataRecord[],
@@ -473,22 +473,31 @@ function paintValues(
             : getValueForRegion(records as DataRecord[], period, activeLayer, metric, enrollees);
     };
 
+    // valueOf can return NaN for the per-enrollee metric when ACS has no
+    // record for the geography (e.g. territories, PO-box ZIPs — see L26/L37).
+    // MapLibre's `interpolate` paint expression doesn't handle NaN gracefully,
+    // so we coerce to 0 at the GPU boundary; the rate-metric's quantileStops
+    // already filters non-positive values out of the scale, so a coerced 0
+    // paints as the lightest band rather than skewing the quantiles. The
+    // value functions themselves still return NaN so tooltip/panel code can
+    // distinguish "no data" from "true zero".
+    const safe = (v: number): number => (Number.isFinite(v) ? v : 0);
     for (const [id, records] of Object.entries(stateData)) {
         map.setFeatureState(
             { source: STATES_SOURCE, sourceLayer: STATES_LAYER, id },
-            { value: valueOf("state", id, records) },
+            { value: safe(valueOf("state", id, records)) },
         );
     }
     for (const [id, records] of Object.entries(countyData)) {
         map.setFeatureState(
             { source: COUNTY_SOURCE, id },
-            { value: valueOf("county", id, records) },
+            { value: safe(valueOf("county", id, records)) },
         );
     }
     for (const [id, records] of Object.entries(zip3Data)) {
         map.setFeatureState(
             { source: ZIP3_SOURCE, sourceLayer: ZIP3_LAYER, id },
-            { value: valueOf("zip3", id, records) },
+            { value: safe(valueOf("zip3", id, records)) },
         );
     }
 }
@@ -554,7 +563,7 @@ export default function MapContainer() {
             const enrollees =
                 metricRef.current === "enrollees"
                     ? getEnrolleesFor(level, id, monthly ? period.slice(0, 4) : period)
-                    : 0;
+                    : null;
             return monthly
                 ? getValueForRegionMonthly(
                       records as MonthlyDataRecord[],
@@ -606,7 +615,7 @@ export default function MapContainer() {
         for (const level of levels) {
             const data = monthly ? getMonthlyDataForLevel(level) : getAnnualDataForLevel(level);
             valuesByLevel[level] = Object.entries(data).map(([id, recs]) => {
-                const enrollees = needsEnroll ? getEnrolleesFor(level, id, enrollmentYear) : 0;
+                const enrollees = needsEnroll ? getEnrolleesFor(level, id, enrollmentYear) : null;
                 return monthly
                     ? getValueForRegionMonthly(
                           recs as MonthlyDataRecord[],

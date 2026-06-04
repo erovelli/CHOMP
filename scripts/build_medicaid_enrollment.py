@@ -101,13 +101,22 @@ def write_ndjson(
 
 
 def build_state(county: pd.DataFrame) -> pd.DataFrame:
+    # Derive state FIPS from the county GEOID prefix rather than trusting the
+    # CSV `state` field — keeps the rollup keyed off the same identifier that
+    # `build_aggregates.py` uses, so the documented `state == SUM(counties)`
+    # invariant holds by construction. Fail loudly on any unmapped prefix
+    # rather than silently dropping rows (which would create denominator gaps
+    # that the front end would render as zero rates).
     df = county.copy()
-    df["postal"] = df["state"].map(FIPS_TO_USPS)
-    df = df.dropna(subset=["postal"])
-    out = (
-        df.groupby(["postal", "year"], as_index=False)["medicaid_enrollees"]
-        .sum()
-    )
+    df["state_fips"] = df["geoid"].str[:2]
+    df["postal"] = df["state_fips"].map(FIPS_TO_USPS)
+    unmapped = sorted(df.loc[df["postal"].isna(), "state_fips"].dropna().unique())
+    if unmapped:
+        raise ValueError(
+            f"Unmapped state FIPS prefixes in county data: {unmapped}. "
+            f"Extend FIPS_TO_USPS in {Path(__file__).name} before rerunning."
+        )
+    out = df.groupby(["postal", "year"], as_index=False)["medicaid_enrollees"].sum()
     return out
 
 

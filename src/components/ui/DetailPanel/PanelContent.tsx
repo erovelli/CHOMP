@@ -168,7 +168,9 @@ export default function PanelContent({
                             <StatCard value={totalClaims.toLocaleString()} label="Total Claims" />
                             <StatCard
                                 value={
-                                    medicaidEnrollees > 0 ? medicaidEnrollees.toLocaleString() : "—"
+                                    medicaidEnrollees != null && medicaidEnrollees > 0
+                                        ? medicaidEnrollees.toLocaleString()
+                                        : "—"
                                 }
                                 label="Medicaid Enrollees"
                             />
@@ -183,7 +185,7 @@ export default function PanelContent({
                             />
                             <StatCard
                                 value={
-                                    medicaidEnrollees > 0
+                                    medicaidEnrollees != null && medicaidEnrollees > 0
                                         ? (totalClaims / medicaidEnrollees).toFixed(2)
                                         : "—"
                                 }

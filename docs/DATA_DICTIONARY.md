@@ -37,7 +37,7 @@ requires updating [`DATA_PATHS`](../src/constants/map.ts) in the same PR.
 
 **Plus three denominator files** for the per-enrollee rate metric:
 
-```
+```text
 medicaid_enrollment_{state,county,zip3}.json
 ```
 
@@ -132,7 +132,7 @@ enrollee** (population penetration — a rate map). The rate is computed at
 read time as `total_claims / medicaid_enrollees`, where the denominator is
 the ACS C27007 enrollment record for the same (geography, endpoint-year)
 loaded from the corresponding `medicaid_enrollment_*.json` file (see
-[Denominator record schema](#denominator-record-schema)). For monthly views,
+[Denominator record schema](#denominator-record-schema-medicaid_enrollment_json)). For monthly views,
 the rate reuses the endpoint-year denominator across all 12 months
 (ACS is annual only).
 

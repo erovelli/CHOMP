@@ -13,7 +13,9 @@ export default function Tooltip() {
         hoveredValue == null
             ? "—"
             : metric === "enrollees"
-              ? `${formatRatio(hoveredValue)} claims / Medicaid enrollee`
+              ? Number.isFinite(hoveredValue)
+                  ? `${formatRatio(hoveredValue)} claims / Medicaid enrollee`
+                  : "no enrollment data"
               : `${hoveredValue.toLocaleString()} ${cfg.unit}`;
 
     return (
