@@ -285,12 +285,12 @@ The ACS C27007 table — "Medicaid/Means-Tested Public Coverage by Sex by Age" �
 **Mitigation.** State the denominator definition explicitly in any rate analysis ("dental claims per ACS-reported Medicaid enrollee, endpoint year X"). For "share who used dental care," use HHS's `beneficiaries_served_count` over ACS enrollees instead.
 **Status.** Methodological — disclosure required.
 
-### L31 🟨 ACS endpoint-year alignment with claim month (design choice not yet made)
+### L31 ⬜ ACS endpoint-year alignment with claim period
 
-**Issue.** An HHS claim filed in March 2022 could be normalized by any of several ACS endpoint years: the 2022 file (pooled 2018–2022, centered ~2020), the 2024 file (pooled 2020–2024, centered ~2022), or some interpolation. Each choice produces materially different per-capita maps for trailing project years.
-**Impact.** Different reviewers comparing this project's numbers to their own may get different per-capita rates depending on which ACS year the project picked. Without documentation this looks like inconsistency.
-**Mitigation.** Pick a rule and stick to it. Recommended default: for claim year Y, use the ACS endpoint year whose 5-year pool centers closest to Y (i.e., ACS endpoint year = Y + 2). Write up as an ADR before the first per-capita map ships.
-**Status.** Open; flag for ADR.
+**Issue.** An HHS claim filed in 2022 could be normalized by any of several ACS endpoint years: the 2022 file (pooled 2018–2022, centered ~2020), the 2024 file (pooled 2020–2024, centered ~2022), or an interpolation. Each choice produces materially different per-enrollee rates for trailing project years.
+**Resolution.** **Same-year alignment.** For claim year Y, the front end uses ACS endpoint year Y (i.e., claim 2022 ÷ ACS 2022 pooled estimate centered ~2020). This is implemented in [`getEnrolleesFor`](../src/lib/dataService.ts) and exercised by both the map paint loop in [`MapContainer.tsx`](../src/components/map/MapContainer.tsx) and the side-panel `Medicaid Enrollees` / `Claims / Enrollee` stat cards in [`PanelContent.tsx`](../src/components/ui/DetailPanel/PanelContent.tsx). Monthly views reuse the claim year's endpoint value across all 12 months because ACS is annual only.
+**Impact.** Same-year alignment understates 2023–2024 rates slightly (denominator is centered ~2021–2022), but trades off against the rate of choice noise — a Y+2 rule would require the _next_ year's ACS release at every fiscal cycle, blocking publication.
+**Status.** Resolved; documented here in lieu of a standalone ADR.
 
 ---
 
@@ -338,23 +338,16 @@ state/county sources. Note `merged_hhs_nppes_geo.csv` does have territory
 `county_fips` despite L15's earlier expectation that territories geocode to NULL.
 **Status.** Documented.
 
-### L35 ⬜ Choropleth color scale is dynamic (quantile breaks), not fixed
+### L35 ⬜ Choropleth color scale is dynamic; rules differ by metric
 
-**Issue.** Claim magnitudes differ by ~2 orders of magnitude across levels (2023
-medians: state ~1.9M, zip3 ~98k, county ~11k) and again between the two metrics
-(volume vs. claims-per-beneficiary), so any single fixed scale washes most
-regions to one end of the palette.
-**Resolution.** The scale is computed at runtime: `quantileStops()` in
-[`src/lib/mapStyles.ts`](../src/lib/mapStyles.ts) derives 7 stops from the
-quantiles of whatever slice is on screen — geography level × year × category ×
-metric — and the map re-scales on every such change. The Legend reads the same
-stops from the store (`colorStops`).
-**Caveats.** (a) Because the scale is relative, color is **not comparable across
-different views** — the same shade means different absolute values at, say, state
-vs. county, or volume vs. ratio. The Legend always shows the active range. (b) The
-top quantile is clipped at p97 so a single extreme outlier doesn't flatten the
-rest into one bucket; the most-extreme regions therefore share the darkest band.
-**Status.** Implemented (supersedes the earlier fixed-scale approach).
+**Issue.** Claim magnitudes differ by ~2 orders of magnitude across geography levels (2023 medians: state ~1.9M, zip3 ~98k, county ~11k). A single fixed scale washes most regions to one end of the palette. But the per-enrollee rate is unit-free — "1.32 claims per enrollee" means the same thing at any zoom level — so per-level scales would _also_ be wrong for that metric.
+**Resolution.** Scale rules in `quantileStops()` / `applyActiveColors` differ by metric:
+
+- **Volume**: per-level quantile stops. Each level gets its own 7-stop scale computed over the current (year × category) slice. Outliers clipped at p97. Color is _not_ comparable across geography levels.
+- **Per Medicaid enrollee**: a single shared scale across state + county + zip3, computed over the union of all three levels' values for the current (year × category). Outliers winsorized at **p95** — standard practice for published rate choropleths, where long-tail outliers (in this dataset, provider-attribution-inflated ZIP3 hubs — see L37) would otherwise stretch the legend and wash out the rest of the country. Geos above p95 saturate to the darkest band. Color _is_ comparable across geography levels and across the country.
+
+The Legend reads the active stops from the store (`colorStops`) and surfaces a caveat string when the metric is `enrollees` (_"Capped at 95th percentile; outliers saturate"_) versus the volume default (_"Scale adjusts to the current view"_).
+**Status.** Implemented (supersedes the earlier uniform-rule approach).
 
 ### L36 ⬜ County geometry vintage differs from claims
 
@@ -369,6 +362,37 @@ blank) or vice-versa. At the national choropleth scale this is negligible.
 **Mitigation.** Swap in a matching-vintage county boundary set, or move counties
 to PMTiles, in a follow-up. ZIP3/state are unaffected.
 **Status.** Minor; documented.
+
+### L37 🟥 Provider-attribution inflates per-enrollee rates at smaller grains
+
+**Issue.** Claims are geocoded to the **servicing provider's** practice address
+(see L10), not the patient's residence. The per-enrollee denominator from ACS
+counts **enrollees who live in the geography**. Where a geography contains a
+dental hub (FQHC, large group practice, school-based program, mobile-unit
+billing address) serving a wider catchment, the numerator includes patients
+from neighboring counties or states while the denominator does not — the rate
+is inflated. The mirror effect deflates the rate in surrounding rural areas
+whose enrollees travel out for care.
+**Impact.** Per-enrollee values at ZIP3 and small-county grain are skewed
+upward in provider-hub geographies and downward in their catchment areas. At
+the state level the effect mostly cancels within a state but does not cancel
+across state borders. The shared-scale, p95-winsorized color logic
+([L35](#l35--choropleth-color-scale-is-dynamic-rules-differ-by-metric)) was
+designed in part to keep these hubs from dominating the legend — they now
+saturate to the darkest band rather than stretching the scale.
+
+Concrete pattern noticed during review: South Dakota appears markedly lower
+on the per-enrollee map than its neighbors. Three plausible drivers stack in
+the same direction: limited adult Medicaid dental benefit in SD ([L20](#l20--interstate-variation-in-medicaid-dental-coverage)),
+patients crossing state lines to ND/MN providers (attribution drift), and
+ACS over-stating Medicaid enrollment in small-state samples ([L23](#l23--survey-based-medicaid-undercount-vs-administrative-rolls)). The
+provider-attribution piece is L37 specifically.
+
+**Mitigation.** No code-level mitigation in the map (would require a
+patient-residence attribution pass not available in HHS Open Data). Disclose
+in methods notes for any per-enrollee map. The InfoModal carries a one-line
+caveat to that effect.
+**Status.** Structural; documented and surfaced.
 
 ---
 

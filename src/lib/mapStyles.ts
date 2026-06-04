@@ -21,19 +21,32 @@ export const HOVER_COLOR = "#c8f0ed";
 
 /**
  * Data-driven color stops. The choropleth re-scales to whatever slice is on
- * screen — geography level × year × category × metric — so volume and ratio
- * each spread across the full palette instead of saturating dark or washing out
- * light. Stops are quantile breaks of the non-zero values (skewed claim/ratio
- * distributions get good contrast from quantiles rather than linear min→max).
+ * screen — geography level × year × category × metric — so volume and the
+ * per-enrollee rate each spread across the full palette instead of saturating
+ * dark or washing out light. Stops are quantile breaks of the non-zero values
+ * (skewed distributions get good contrast from quantiles rather than linear
+ * min→max).
  */
 export function quantileStops(values: number[], metric: Metric): number[] {
     const v = values.filter((x) => x > 0).sort((a, b) => a - b);
     if (v.length === 0) return [...DEFAULT_STOPS];
 
-    // Quantile positions for the 7 palette steps (slightly clipped at the top so
-    // a single extreme outlier doesn't flatten everyone else into one bucket).
-    const qs = [0, 0.16, 0.33, 0.5, 0.67, 0.84, 0.97];
-    const minGap = metric === "ratio" ? 0.01 : 1;
+    // Quantile positions for the 7 palette steps. The top clip stops a single
+    // extreme outlier from flattening everyone else into one bucket.
+    //
+    // For the per-enrollee rate, we cap at the 95th percentile (winsorization)
+    // — standard practice in published rate choropleths. Provider-attribution
+    // mismatch creates long-tail ZIP3 outliers (regional dental hubs credited
+    // with claims from a wide catchment but with a small resident-enrollee
+    // denominator); without the cap these outliers stretch the legend and
+    // wash out the rest of the country. Geos above the cap saturate to the
+    // darkest color (legend annotates this).
+    //
+    // Volume keeps a looser 0.97 clip because each level has its own scale and
+    // outliers don't bleed across levels.
+    const topClip = metric === "enrollees" ? 0.95 : 0.97;
+    const qs = [0, 0.16, 0.33, 0.5, 0.67, 0.84, topClip];
+    const minGap = metric === "enrollees" ? 0.01 : 1;
 
     const stops: number[] = [];
     for (let i = 0; i < N_STOPS; i++) {

@@ -43,7 +43,7 @@ The "join everything, aggregate, serve over HTTP" problem is deliberately straig
 
 There are exactly two runtimes in this project, intentionally decoupled:
 
-- **The build runtime** — a handful of Python scripts under `scripts/` (the HHS×NPPES merge, geocoded-CSV join, county/world-geometry fetch, ACS denominator fetch) plus [`scripts/build_aggregates.py`](../scripts/build_aggregates.py), a DuckDB script that reads the merged+geocoded CSV and emits the six NDJSON files. Produces those files plus PMTiles + GeoJSON geometry artifacts. Runs _on the maintainer's laptop, manually, when source data updates._
+- **The build runtime** — a handful of Python scripts under `scripts/` (the HHS×NPPES merge, geocoded-CSV join, county/world-geometry fetch, ACS denominator fetch + rollup) plus [`scripts/build_aggregates.py`](../scripts/build_aggregates.py), a DuckDB script that reads the merged+geocoded CSV and emits the six numerator NDJSON files. A second script, [`scripts/build_medicaid_enrollment.py`](../scripts/build_medicaid_enrollment.py), rolls ACS C27007 county/ZCTA enrollment into three denominator NDJSONs that pair with the numerators for the per-enrollee rate metric. Produces those files plus PMTiles + GeoJSON geometry artifacts. Runs _on the maintainer's laptop, manually, when source data updates._
 - **The serving runtime** — React + Vite + MapLibre. Reads only the static artifacts. Runs _in every visitor's browser._
 
 The NDJSON files and `.pmtiles` archives are the **interface contract** between the two. Everything upstream of those artifacts can change without breaking the frontend, and vice versa, as long as the file names and schemas hold.
@@ -68,11 +68,17 @@ HHS Medicaid CSV ┐
 NBER NPPES zips  ┘                                                ├── join_geocoded.py ──► merged_hhs_nppes_geo.csv ──┐
                                 ArcGIS-geocoded addresses ────────┘                                                  │
                                                                                                                       ▼
-                                                              build_aggregates.py (DuckDB) ──► public/data/*.json
+                                                              build_aggregates.py (DuckDB) ──► public/data/provider_*.json (numerator)
                                                                                                                       │
                                               fetch_county_geometry.py ──► public/counties.geojson                    │
                                               fetch_world_geometry.py  ──► public/world.geojson                       │
-                                              fetch_acs_medicaid.py    ──► ACS denominator CSV (for future per-capita)│
+                                              fetch_acs_medicaid.py    ──► data/ACS medicaid enrollment/*.csv         │
+                                                                                            │                         │
+                                                                build_medicaid_enrollment.py ▼                         │
+                                                                  (county→state, ZCTA→ZIP3)                            │
+                                                                            │                                          │
+                                                                            ▼                                          │
+                                                  public/data/medicaid_enrollment_*.json (denominator)                 │
                                                                                                                       ▼
                                                                                                               ──── consumed by Vite/React ────
 ```
@@ -154,12 +160,15 @@ type LayerKey =
   | "diagnostic"
   | "preventive"
   | "restorative"
-  | "oral_surgery"
-  | "orthodontics"
   | "endodontics"
   | "periodontics"
-  | "adjunctive"
-  | "prosthodontics";
+  | "prosthodontics_removable"
+  | "maxillofacial_prosthetics"
+  | "implant_services"
+  | "prosthodontics_fixed"
+  | "oral_max_surgery"
+  | "orthodontics"
+  | "adjunctive";
 ```
 
 `LayerKey` is the spine of the app. `LAYER_CONFIGS: Record<LayerKey, LayerConfig>` and `LAYER_ORDER: LayerKey[]` both reference it, so adding a new category is a single-line change that the compiler propagates through: the `LayerControl`, `Legend`, `Tooltip`, color derivation, and map paint expressions all update without search-and-replace.
@@ -172,11 +181,11 @@ This is the part most worth reading.
 
 Every state polygon and every ZIP3 polygon carries three feature-state fields:
 
-| Field      | Type    | Source       | Meaning                                                                                             |
-| ---------- | ------- | ------------ | --------------------------------------------------------------------------------------------------- |
-| `value`    | number  | Data JSON    | Active metric for the (year, category): total claims (volume) or claims-per-beneficiary (intensity) |
-| `hover`    | boolean | Mouse events | Cursor is over this polygon                                                                         |
-| `selected` | boolean | Click events | Detail panel is open on this polygon                                                                |
+| Field      | Type    | Source       | Meaning                                                                                                                       |
+| ---------- | ------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `value`    | number  | Data JSON    | Active metric for the (year, category): total claims (volume) or claims-per-Medicaid-enrollee (penetration; ACS C27007 denom) |
+| `hover`    | boolean | Mouse events | Cursor is over this polygon                                                                                                   |
+| `selected` | boolean | Click events | Detail panel is open on this polygon                                                                                          |
 
 The paint expression (`buildColorExpression` in [`src/lib/mapStyles.ts`](../src/lib/mapStyles.ts)) collapses these into a `fill-color`:
 
@@ -230,18 +239,21 @@ The store's single interesting piece of logic is in `setSelectedYear`, which cle
 
 ### 7.1 Payload budget
 
-| File                    | Size (raw / gzip) | When loaded                         |
-| ----------------------- | ----------------- | ----------------------------------- |
-| JS bundle               | ~200 KB gzip      | On first load                       |
-| `states.pmtiles`        | ~105 KB           | On map `load`                       |
-| `zip3.pmtiles`          | ~1 MB             | On map `load`                       |
-| `counties.geojson`      | 2.7 MB / 0.85 MB  | On map `load` (county source)       |
-| `…_annual_state.json`   | 0.45 MB / 60 KB   | On map `load`                       |
-| `…_annual_county.json`  | 10 MB / 1.2 MB    | On map `load`                       |
-| `…_annual_zip3.json`    | 5.4 MB / 0.66 MB  | On map `load`                       |
-| `…_monthly_state.json`  | 5.2 MB / 0.6 MB   | On first monthly slider interaction |
-| `…_monthly_county.json` | 99 MB / 10.3 MB   | On first monthly slider interaction |
-| `…_monthly_zip3.json`   | 58 MB / 6.3 MB    | On first monthly slider interaction |
+| File                              | Size (raw / gzip) | When loaded                         |
+| --------------------------------- | ----------------- | ----------------------------------- |
+| JS bundle                         | ~200 KB gzip      | On first load                       |
+| `states.pmtiles`                  | ~105 KB           | On map `load`                       |
+| `zip3.pmtiles`                    | ~1 MB             | On map `load`                       |
+| `counties.geojson`                | 2.7 MB / 0.85 MB  | On map `load` (county source)       |
+| `…_annual_state.json`             | 0.45 MB / 60 KB   | On map `load`                       |
+| `…_annual_county.json`            | 10 MB / 1.2 MB    | On map `load`                       |
+| `…_annual_zip3.json`              | 5.4 MB / 0.66 MB  | On map `load`                       |
+| `medicaid_enrollment_state.json`  | ~10 KB            | On map `load`                       |
+| `medicaid_enrollment_county.json` | ~0.7 MB           | On map `load`                       |
+| `medicaid_enrollment_zip3.json`   | ~0.15 MB          | On map `load`                       |
+| `…_monthly_state.json`            | 5.2 MB / 0.6 MB   | On first monthly slider interaction |
+| `…_monthly_county.json`           | 99 MB / 10.3 MB   | On first monthly slider interaction |
+| `…_monthly_zip3.json`             | 58 MB / 6.3 MB    | On first monthly slider interaction |
 
 Two elephants now: the deferred **monthly ZIP3 (58 MB)** and the new **monthly
 county (99 MB / 10.3 MB gzip)**, the largest artifact in the project. Both are
@@ -262,14 +274,14 @@ PMTiles because the build host lacks tippecanoe/ogr2ogr (see L36).
 
 Options considered and deliberately deferred:
 
-| Trade-off                     | Decision     | Reasoning                                                                                                                                                                    |
-| ----------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Tests                         | No tests yet | The app is ~1k LOC and the shape is still moving. Tests would ossify the current design prematurely; Vitest coverage will be added once the API surface freezes.             |
-| CSS framework                 | None         | Inline styles are fine at this size. Moving to CSS-modules would be a chore-PR, not a value-PR.                                                                              |
-| ADA compliance                | Partial      | Keyboard nav works; focus rings on the picker need work; screen-reader annotations are not there yet. Tracked as a roadmap item.                                             |
-| Per-capita normalization      | Not yet      | Claim counts are directly comparable across ZIP3s of similar population. Adding enrollment as a denominator is a real feature; it needs its own data join and sanity checks. |
-| Server-side rendering         | No           | Static-only was a constraint. A choropleth is not a document; SSR would add complexity for no user win.                                                                      |
-| Incremental hydration of data | No           | Once the monthly files move to PMTiles format, the bulk-load problem goes away.                                                                                              |
+| Trade-off                     | Decision     | Reasoning                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ----------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tests                         | No tests yet | The app is ~1k LOC and the shape is still moving. Tests would ossify the current design prematurely; Vitest coverage will be added once the API surface freezes.                                                                                                                                                                                                                                                                            |
+| CSS framework                 | None         | Inline styles are fine at this size. Moving to CSS-modules would be a chore-PR, not a value-PR.                                                                                                                                                                                                                                                                                                                                             |
+| ADA compliance                | Partial      | Keyboard nav works; focus rings on the picker need work; screen-reader annotations are not there yet. Tracked as a roadmap item.                                                                                                                                                                                                                                                                                                            |
+| Per-capita normalization      | Implemented  | ACS C27007 Medicaid enrollment is the denominator for the "Per Medicaid enrollee" toggle at state/county/ZIP3. Cross-level shared color scale (winsorized at p95) keeps a value of 1.32 painting the same color at every zoom. The earlier T-MSIS "claims per beneficiary served" ratio was removed: its denominator was per-category and double-counted patients at the "All Categories" view, structurally biasing the default ratio low. |
+| Server-side rendering         | No           | Static-only was a constraint. A choropleth is not a document; SSR would add complexity for no user win.                                                                                                                                                                                                                                                                                                                                     |
+| Incremental hydration of data | No           | Once the monthly files move to PMTiles format, the bulk-load problem goes away.                                                                                                                                                                                                                                                                                                                                                             |
 
 ## 9. Architecture Decision Records
 

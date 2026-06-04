@@ -1,4 +1,11 @@
-import type { LayerKey, GeoLevel, Metric, DataRecord, MonthlyDataRecord } from "./types";
+import type {
+    LayerKey,
+    GeoLevel,
+    Metric,
+    DataRecord,
+    MonthlyDataRecord,
+    EnrollmentRecord,
+} from "./types";
 import { CATEGORY_TO_KEY, DATA_PATHS } from "../constants/map";
 
 // ── Module-level caches ───────────────────────────────────────
@@ -8,6 +15,13 @@ let zip3AnnualCache: Record<string, DataRecord[]> = {};
 let stateMonthlyCache: Record<string, MonthlyDataRecord[]> = {};
 let countyMonthlyCache: Record<string, MonthlyDataRecord[]> = {};
 let zip3MonthlyCache: Record<string, MonthlyDataRecord[]> = {};
+// ACS C27007 Medicaid enrollment by geography-year. Endpoint years 2018-2024.
+// Built by scripts/build_medicaid_enrollment.py; rolled up from county (state)
+// and ZCTA (zip3). Same NDJSON shape as the procedure-category aggregates so it
+// flows through the same fetchNDJSON parser.
+let stateEnrollmentCache: Record<string, EnrollmentRecord[]> = {};
+let countyEnrollmentCache: Record<string, EnrollmentRecord[]> = {};
+let zip3EnrollmentCache: Record<string, EnrollmentRecord[]> = {};
 
 // ── NDJSON parser ─────────────────────────────────────────────
 
@@ -32,17 +46,25 @@ async function fetchNDJSON<T>(url: string): Promise<Record<string, T[]>> {
 
 export async function loadAnnualData(): Promise<void> {
     const BASE = import.meta.env.BASE_URL;
-    const [stateData, countyData, zip3Data] = await Promise.all([
-        fetchNDJSON<DataRecord>(`${BASE}${DATA_PATHS.annualState}`),
-        fetchNDJSON<DataRecord>(`${BASE}${DATA_PATHS.annualCounty}`),
-        fetchNDJSON<DataRecord>(`${BASE}${DATA_PATHS.annualZip3}`),
-    ]);
+    const [stateData, countyData, zip3Data, stateEnroll, countyEnroll, zip3Enroll] =
+        await Promise.all([
+            fetchNDJSON<DataRecord>(`${BASE}${DATA_PATHS.annualState}`),
+            fetchNDJSON<DataRecord>(`${BASE}${DATA_PATHS.annualCounty}`),
+            fetchNDJSON<DataRecord>(`${BASE}${DATA_PATHS.annualZip3}`),
+            fetchNDJSON<EnrollmentRecord>(`${BASE}${DATA_PATHS.enrollmentState}`),
+            fetchNDJSON<EnrollmentRecord>(`${BASE}${DATA_PATHS.enrollmentCounty}`),
+            fetchNDJSON<EnrollmentRecord>(`${BASE}${DATA_PATHS.enrollmentZip3}`),
+        ]);
     stateAnnualCache = stateData;
     countyAnnualCache = countyData;
     zip3AnnualCache = zip3Data;
+    stateEnrollmentCache = stateEnroll;
+    countyEnrollmentCache = countyEnroll;
+    zip3EnrollmentCache = zip3Enroll;
     console.log(
         `Loaded annual data: ${Object.keys(stateData).length} states, ` +
-            `${Object.keys(countyData).length} counties, ${Object.keys(zip3Data).length} zip3`,
+            `${Object.keys(countyData).length} counties, ${Object.keys(zip3Data).length} zip3 ` +
+            `(+ ACS enrollment: ${Object.keys(stateEnroll).length}/${Object.keys(countyEnroll).length}/${Object.keys(zip3Enroll).length})`,
     );
 }
 
@@ -103,6 +125,22 @@ export function isMonthlyLoaded(): boolean {
     return Object.keys(stateMonthlyCache).length > 0;
 }
 
+// ── Enrollment lookup ─────────────────────────────────────────
+
+export function getEnrollmentForLevel(level: GeoLevel): Record<string, EnrollmentRecord[]> {
+    if (level === "state") return stateEnrollmentCache;
+    if (level === "county") return countyEnrollmentCache;
+    return zip3EnrollmentCache;
+}
+
+/** ACS endpoint-year medicaid enrollees for (level, id, year). 0 if missing. */
+export function getEnrolleesFor(level: GeoLevel, id: string, year: string): number {
+    const recs = getEnrollmentForLevel(level)[id];
+    if (!recs) return 0;
+    const hit = recs.find((r) => r.year === year);
+    return hit ? hit.medicaid_enrollees : 0;
+}
+
 // ── Value computation ─────────────────────────────────────────
 
 export function getValueForRegion(
@@ -110,6 +148,7 @@ export function getValueForRegion(
     year: string,
     activeLayer: LayerKey,
     metric: Metric = "claims",
+    enrollees: number = 0,
 ): number {
     if (!records) return 0;
     const rows = records.filter(
@@ -119,12 +158,9 @@ export function getValueForRegion(
     );
     const claims = rows.reduce((sum, r) => sum + r.total_claims, 0);
     if (metric === "claims") return claims;
-
-    // ratio: claims per beneficiary = SUM(claims) / SUM(beneficiaries).
-    // Exact per-category; for "all" the denominator double-counts patients who
-    // used multiple categories, so it slightly understates per-person intensity.
-    const beneficiaries = rows.reduce((sum, r) => sum + r.total_beneficiaries_served, 0);
-    return beneficiaries > 0 ? claims / beneficiaries : 0;
+    // enrollees: ACS C27007 denominator — same for every category, no double-
+    // counting at "all".
+    return enrollees > 0 ? claims / enrollees : 0;
 }
 
 /** Monthly counterpart of getValueForRegion — same shape, filters on year_month. */
@@ -133,6 +169,7 @@ export function getValueForRegionMonthly(
     yearMonth: string,
     activeLayer: LayerKey,
     metric: Metric = "claims",
+    enrollees: number = 0,
 ): number {
     if (!records) return 0;
     const rows = records.filter(
@@ -142,6 +179,6 @@ export function getValueForRegionMonthly(
     );
     const claims = rows.reduce((sum, r) => sum + r.total_claims, 0);
     if (metric === "claims") return claims;
-    const beneficiaries = rows.reduce((sum, r) => sum + r.total_beneficiaries_served, 0);
-    return beneficiaries > 0 ? claims / beneficiaries : 0;
+    // enrollees: ACS is annual; reuse the endpoint-year enrollment for every month.
+    return enrollees > 0 ? claims / enrollees : 0;
 }
