@@ -42,6 +42,7 @@ The design is deliberately constrained:
 | **Detail panel** | Per-region stats — total claims, Medicaid enrollees (ACS C27007), dollars paid, avg $/claim, claims/enrollee — and a ranked category breakdown for the selected period.                                                                                                                                                                                                       |
 | **Tooltip**      | Pixel-anchored hover readout; respects feature-state hover/selected to drive stroke weights and fills without reconfiguring paint properties.                                                                                                                                                                                                                                 |
 | **Info modal**   | Surfaces the caveats that matter: HHS cell-suppression (<12 claims or <12 beneficiaries/month), interstate variation in Medicaid dental coverage, and NPI/practice-location limitations.                                                                                                                                                                                      |
+| **Export**       | Header **Export** button opens a modal with three formats: **PNG** (transparent) and **JPEG** (white bg) of a Wikipedia-style synthesized state choropleth — rendered off-screen via `d3-geo` + Canvas (`geoAlbersUsa` for AK/HI, separate `geoMercator` for the PR inset); and **CSV** of the current view (states / counties / ZIP3s × active year × active category).      |
 
 ## Architecture at a glance
 
@@ -204,12 +205,16 @@ medicaid-dent-policy/
 │   ├── components/
 │   │   ├── map/MapContainer.tsx   # Map lifecycle, event handlers, feature-state paint
 │   │   └── ui/
-│   │       ├── Header.tsx
+│   │       ├── Header.tsx         # Top bar + Export button (lazy-loads ExportModal)
 │   │       ├── LayerControl.tsx   # Procedure-category picker
+│   │       ├── GeoLevelControl.tsx # State / County / ZIP3 toggle
+│   │       ├── MetricControl.tsx  # Volume / Per-enrollee toggle
+│   │       ├── TimeControl.tsx    # Year + monthly slider
 │   │       ├── Legend.tsx         # Choropleth scale
 │   │       ├── Tooltip.tsx        # Pixel-anchored hover readout
 │   │       ├── ClickHint.tsx      # Dismissable onboarding nudge
 │   │       ├── InfoModal.tsx      # First-load about/caveats dialog
+│   │       ├── ExportModal.tsx    # PNG / JPEG / CSV save modal (lazy chunk)
 │   │       └── DetailPanel/
 │   │           ├── index.tsx              # Slide-in right-rail
 │   │           ├── PanelContent.tsx       # Year/month controls, stats
@@ -220,14 +225,21 @@ medicaid-dent-policy/
 │   │   ├── dataService.ts         # NDJSON fetch + in-memory caches
 │   │   ├── mapStyles.ts           # Choropleth color expressions
 │   │   ├── formatters.ts          # $1.2M / 450k helpers
-│   │   └── types.ts               # Shared domain types
-│   └── constants/                 # Map, layout, time, modal constants
+│   │   ├── types.ts               # Shared domain types
+│   │   ├── urlState.ts            # ?layer=…&year=…&month=… round-trip
+│   │   ├── useUrlSync.ts          # Sync store ↔ URL search params
+│   │   └── export/                # PNG/JPEG/CSV synthesis (lazy-loaded)
+│   │       ├── colorScale.ts      # Pure-JS port of MapLibre's interpolate(linear)
+│   │       ├── csv.ts             # Current-view CSV builder + downloader
+│   │       └── synthesizeMap.ts   # d3-geo + Canvas state choropleth renderer
+│   └── constants/                 # Map, layout, time, info-modal, state-FIPS constants
 ├── public/
 │   ├── states.pmtiles             # U.S. state polygons (vector tiles)
 │   ├── zip3.pmtiles               # ZIP3 polygons (vector tiles)
 │   ├── counties.geojson           # U.S. county polygons (FIPS-keyed)
 │   ├── world.geojson              # Non-US country backdrop (NE 110m)
-│   └── data/*.json                # NDJSON exports consumed at runtime
+│   ├── data/*.json                # NDJSON exports consumed at runtime
+│   └── data/export/states-10m.json # us-atlas TopoJSON for the synthesized PNG/JPEG export
 ├── scripts/
 │   ├── merge_hhs_nppes.py         # HHS × NPPES inner join (streaming)
 │   ├── join_geocoded.py           # Joins ArcGIS geocoder output back onto claims
@@ -249,6 +261,7 @@ medicaid-dent-policy/
 - [x] **Per-capita normalization.** ACS C27007 Medicaid enrollment drives the "Per Medicaid enrollee" metric at all three geographies; cross-level shared color scale winsorized at p95.
 - [ ] **Time-series chart.** Spark-line of the selected region + category in the detail panel.
 - [x] **URL-addressable state (partial).** `?layer=preventive&year=2024&month=2024-06` shareable deep links for layer/year/month. Region rehydration is a follow-up — it needs to wait for annual data to load and synthesize a `RegionDetail`.
+- [x] **Export.** PNG / JPEG of a Wikipedia-style synthesized state choropleth (rendered off-screen via `d3-geo` + Canvas; `geoAlbersUsa` handles AK/HI; PR in a Mercator inset; non-PR territories shown as color chips), plus a CSV of the current-view per-region totals. See [ADR 0004](docs/adr/0004-synthesized-export-via-d3-geo.md).
 - [ ] **Data Version Control.** Pin each `public/data/*.json` export to a dated commit of the source data.
 
 ## Documentation
@@ -260,7 +273,6 @@ medicaid-dent-policy/
 - [**CONTRIBUTING**](CONTRIBUTING.md) — Workflow, coding standards, commit conventions.
 - [**SECURITY**](SECURITY.md) — Responsible disclosure policy.
 - [**CODE OF CONDUCT**](CODE_OF_CONDUCT.md) — Community standards.
-- [**CHANGELOG**](CHANGELOG.md) — Release notes.
 
 ## Data sources
 

@@ -524,7 +524,6 @@ export default function MapContainer() {
         monthlyDataLoaded,
         setMonthlyDataLoaded,
         setSelectedRegion,
-        setSelectedState,
         setHovered,
         setColorStops,
         dismissHint,
@@ -781,10 +780,9 @@ export default function MapContainer() {
                 records,
             };
             setSelectedRegion(postal, detail);
-            setSelectedState(postal);
             dismissHint();
         },
-        [setSelectedRegion, setSelectedState, dismissHint],
+        [setSelectedRegion, dismissHint],
     );
 
     const handleCountyClick = useCallback(

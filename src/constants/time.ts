@@ -15,6 +15,3 @@ export const MONTH_NAMES = [
     "November",
     "December",
 ];
-
-export const MONTH_SLIDER_MIN = 0;
-export const MONTH_SLIDER_MAX = 12;

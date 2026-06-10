@@ -140,10 +140,6 @@ export function getMonthlyDataForLevel(level: GeoLevel): Record<string, MonthlyD
     return zip3MonthlyCache;
 }
 
-export function isMonthlyLoaded(): boolean {
-    return Object.keys(stateMonthlyCache).length > 0;
-}
-
 // ── Enrollment lookup ─────────────────────────────────────────
 
 export function getEnrollmentForLevel(level: GeoLevel): Record<string, EnrollmentRecord[]> {

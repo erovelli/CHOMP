@@ -131,10 +131,17 @@ HHS suppresses any provider-month-code cell with fewer than 12 claims or 12 uniq
    ├── Header.tsx ──┐
    │                │
    │                ├── LayerControl.tsx      ── reads store.activeLayer
-   │                ├── Legend.tsx            ── reads store.activeLayer
+   │                ├── GeoLevelControl.tsx   ── reads store.geoLevel
+   │                ├── MetricControl.tsx     ── reads store.metric
+   │                ├── TimeControl.tsx       ── reads store.selectedYear/selectedMonth
+   │                ├── Legend.tsx            ── reads store.activeLayer / colorStops
    │                ├── Tooltip.tsx           ── reads store.hovered*
    │                ├── ClickHint.tsx         ── reads store.hintVisible
    │                ├── InfoModal.tsx         ── local state
+   │                ├── ExportModal.tsx       ── lazy chunk; reads store snapshot
+   │                │                            renders synthesized PNG/JPEG via
+   │                │                            lib/export/synthesizeMap.ts and
+   │                │                            current-view CSV via lib/export/csv.ts
    │                └── DetailPanel/
    │                    ├── index.tsx         ── reads store.panelOpen/selectedDetail
    │                    └── PanelContent.tsx  ── reads store.selectedYear
@@ -172,6 +179,22 @@ type LayerKey =
 ```
 
 `LayerKey` is the spine of the app. `LAYER_CONFIGS: Record<LayerKey, LayerConfig>` and `LAYER_ORDER: LayerKey[]` both reference it, so adding a new category is a single-line change that the compiler propagates through: the `LayerControl`, `Legend`, `Tooltip`, color derivation, and map paint expressions all update without search-and-replace.
+
+### 4.3 Export pipeline
+
+The **Export** button in the header opens [`ExportModal`](../src/components/ui/ExportModal.tsx), which produces three deliverables from the same current store snapshot (active layer × year × metric × geo level):
+
+| Format       | Renderer                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **PNG/JPEG** | [`synthesizeMap.ts`](../src/lib/export/synthesizeMap.ts) draws a Wikipedia-style state choropleth to an off-screen Canvas at 1600×1000 via [`d3-geo`](https://github.com/d3/d3-geo). `geoAlbersUsa` handles AK/HI auto-rescale; PR renders through a separate `geoMercator` projection clipped to a lower-right inset; non-PR territories (GU/MP/VI) appear as labeled color chips below the PR inset. **Not** a screenshot of the live MapLibre canvas — synthesized purely from current store + data caches, so the output is deterministic and styleable independently of the basemap. |
+| **CSV**      | [`csv.ts`](../src/lib/export/csv.ts) walks the active-level claims cache and emits one row per region with the documented column order. Uses Papa Parse for quoting/escape. See [DATA_DICTIONARY § Downstream CSV export](DATA_DICTIONARY.md#downstream-csv-export).                                                                                                                                                                                                                                                                                                                      |
+
+Two design decisions kept this small and stayed out of the critical path:
+
+1. **One color-scale source of truth.** The synthesized PNG uses [`colorScale.ts`](../src/lib/export/colorScale.ts), a plain-JS port of MapLibre's `interpolate(linear, value, …stops)` paint expression. The same `quantileStops` helper from [`mapStyles.ts`](../src/lib/mapStyles.ts) feeds both the live choropleth and the export — so the ramp on screen matches the ramp in the saved file exactly.
+2. **Lazy chunk for the deps.** `d3-geo`, `topojson-client`, and `papaparse` together gzip to ~22 KB and are only needed once a user clicks **Export**. `Header.tsx` loads `ExportModal` via `React.lazy`, so those bytes never enter the initial-load bundle. See ADR 0004.
+
+The TopoJSON for the synthesized map ([`public/data/export/states-10m.json`](../public/data/export/states-10m.json), us-atlas v3) is fetched on first Export click and cached for the session. It already contains 56 features — 50 states + DC + PR + the four small territories — so the export doesn't need a second geometry source.
 
 ## 5. Map rendering model
 
@@ -239,21 +262,26 @@ The store's single interesting piece of logic is in `setSelectedYear`, which cle
 
 ### 7.1 Payload budget
 
-| File                              | Size (raw / gzip) | When loaded                         |
-| --------------------------------- | ----------------- | ----------------------------------- |
-| JS bundle                         | ~200 KB gzip      | On first load                       |
-| `states.pmtiles`                  | ~105 KB           | On map `load`                       |
-| `zip3.pmtiles`                    | ~1 MB             | On map `load`                       |
-| `counties.geojson`                | 2.7 MB / 0.85 MB  | On map `load` (county source)       |
-| `…_annual_state.json`             | 0.45 MB / 60 KB   | On map `load`                       |
-| `…_annual_county.json`            | 10 MB / 1.2 MB    | On map `load`                       |
-| `…_annual_zip3.json`              | 5.4 MB / 0.66 MB  | On map `load`                       |
-| `medicaid_enrollment_state.json`  | ~10 KB            | On map `load`                       |
-| `medicaid_enrollment_county.json` | ~0.7 MB           | On map `load`                       |
-| `medicaid_enrollment_zip3.json`   | ~0.15 MB          | On map `load`                       |
-| `…_monthly_state.json`            | 5.2 MB / 0.6 MB   | On first monthly slider interaction |
-| `…_monthly_county.json`           | 99 MB / 10.3 MB   | On first monthly slider interaction |
-| `…_monthly_zip3.json`             | 58 MB / 6.3 MB    | On first monthly slider interaction |
+| File                              | Size (raw / gzip) | When loaded                                          |
+| --------------------------------- | ----------------- | ---------------------------------------------------- |
+| Main JS bundle                    | ~285 KB gzip      | On first load                                        |
+| CSS bundle                        | ~9.5 KB gzip      | On first load                                        |
+| `ExportModal` lazy chunk          | ~22 KB gzip       | On first **Export** button click                     |
+| `data/export/states-10m.json`     | 115 KB / 37 KB    | On first **Export** button click (us-atlas TopoJSON) |
+| `states.pmtiles`                  | ~105 KB           | On map `load`                                        |
+| `zip3.pmtiles`                    | ~1 MB             | On map `load`                                        |
+| `counties.geojson`                | 2.7 MB / 0.85 MB  | On map `load` (county source)                        |
+| `…_annual_state.json`             | 0.45 MB / 60 KB   | On map `load`                                        |
+| `…_annual_county.json`            | 10 MB / 1.2 MB    | On map `load`                                        |
+| `…_annual_zip3.json`              | 5.4 MB / 0.66 MB  | On map `load`                                        |
+| `medicaid_enrollment_state.json`  | ~10 KB            | On map `load`                                        |
+| `medicaid_enrollment_county.json` | ~0.7 MB           | On map `load`                                        |
+| `medicaid_enrollment_zip3.json`   | ~0.15 MB          | On map `load`                                        |
+| `…_monthly_state.json`            | 5.2 MB / 0.6 MB   | On first monthly slider interaction                  |
+| `…_monthly_county.json`           | 99 MB / 10.3 MB   | On first monthly slider interaction                  |
+| `…_monthly_zip3.json`             | 58 MB / 6.3 MB    | On first monthly slider interaction                  |
+
+Bundle budgets live in [`package.json`'s `size-limit` block](../package.json) — initial 300 KB, export chunk 40 KB, CSS 30 KB. CI runs `npm run size` so a regression on any of those fails the build before it merges.
 
 Two elephants now: the deferred **monthly ZIP3 (58 MB)** and the new **monthly
 county (99 MB / 10.3 MB gzip)**, the largest artifact in the project. Both are
@@ -290,5 +318,6 @@ Significant architectural calls are recorded as short ADRs under [`docs/adr/`](a
 - [**ADR 0001**](adr/0001-static-site-no-backend.md) — Static site, no backend.
 - [**ADR 0002**](adr/0002-zip3-monthly-as-pmtiles.md) — Monthly ZIP3 data should move from NDJSON to PMTiles.
 - [**ADR 0003**](adr/0003-feature-state-over-setdata.md) — Use MapLibre feature-state instead of `setData` for dynamic choropleth.
+- [**ADR 0004**](adr/0004-synthesized-export-via-d3-geo.md) — Synthesize the PNG/JPEG export off-screen via `d3-geo` instead of screenshotting the live MapLibre canvas.
 
 ADRs follow the [Michael Nygard template](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions) — short, dated, status-tracked, and immutable once accepted. Superseding an ADR creates a new one rather than editing the old.

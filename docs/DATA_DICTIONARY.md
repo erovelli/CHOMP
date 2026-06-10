@@ -13,7 +13,8 @@ This document is the single source of truth for the shape and semantics of the N
 5. [Categories](#categories)
 6. [Suppression & null handling](#suppression--null-handling)
 7. [Identifier formats](#identifier-formats)
-8. [Versioning](#versioning)
+8. [Downstream CSV export](#downstream-csv-export)
+9. [Versioning](#versioning)
 
 ---
 
@@ -190,6 +191,51 @@ Frontend mapping from these category strings to `LayerKey` values is in [`CATEGO
 - **County:** five-digit county FIPS / GEOID string, zero-padded (`"01001"`, not `1001`). Source: geocoded `county_fips`. Matches the `GEOID` property on [`public/counties.geojson`](../public/counties.geojson) (regenerate with [`scripts/fetch_county_geometry.py`](../scripts/fetch_county_geometry.py)).
 - **ZIP3:** three-digit string, zero-padded (`"021"`, not `21`). Derived by `LEFT(practice_zip5, 3)`. Matches the `3dig_zip` property on `zip3.pmtiles`.
 - **Period:** year as `"YYYY"`; month as `"YYYY-MM"`. Always strings, never numbers — this is deliberate so downstream code can't accidentally do arithmetic on the values.
+
+## Downstream CSV export
+
+The header **Export** button produces a CSV of the current-view per-region
+totals. This is a frontend downstream of the NDJSON contract, not part of the
+contract itself — but the column schema is fixed and is the user-facing
+filename a researcher will cite.
+
+**Filename pattern**
+
+```
+medicaid-dental_<layer>_<period>_<level>.csv
+```
+
+| Slot       | Values                                                                             |
+| ---------- | ---------------------------------------------------------------------------------- |
+| `<layer>`  | `all` or a [LayerKey](../src/lib/types.ts) (e.g. `preventive`, `restorative`)      |
+| `<period>` | Year `"YYYY"` if the user is in annual mode, `"YYYY-MM"` if they've picked a month |
+| `<level>`  | `state` / `county` / `zip3` — the geography the user is currently zoomed to        |
+
+**Columns**
+
+| Column                       | Type   | Notes                                                                                                                                                                                                                             |
+| ---------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `region_id`                  | string | USPS postal / 5-digit FIPS / 3-digit ZIP3 prefix, matching the [identifier formats](#identifier-formats) above.                                                                                                                   |
+| `region_name`                | string | State full name (e.g. `California`) for state-level rows; the GEOID itself for county; `ZIP3 NNN` for ZIP3. County names aren't included to avoid a 2.7 MB GeoJSON property join.                                                 |
+| `level`                      | string | `state` / `county` / `zip3` — same as the filename slot.                                                                                                                                                                          |
+| `year`                       | string | The active period — `"YYYY"` or `"YYYY-MM"`. Despite the column name, this can be a year-month.                                                                                                                                   |
+| `category`                   | string | `All Categories` when the active layer is `all`, otherwise the [LAYER_CONFIGS](../src/constants/map.ts) display label (e.g. `Preventive`).                                                                                        |
+| `total_claims`               | number | Sum across matching rows in the active period.                                                                                                                                                                                    |
+| `total_beneficiaries_served` | number | Sum across matching rows. **For specific categories** this is the per-category beneficiary count, not the category-union — HHS suppresses below the category-level threshold, so the union isn't recoverable from this aggregate. |
+| `total_amount_paid`          | number | Sum, USD whole dollars.                                                                                                                                                                                                           |
+
+Column order is fixed and unit-tested in [`csv.test.ts`](../src/lib/export/csv.test.ts). Downstream spreadsheets can pin to it.
+
+**Aggregation rules**
+
+- Rows are sorted by `region_id` so successive exports of the same view diff
+  cleanly.
+- Rows with all-zero totals (`total_claims`, `total_beneficiaries_served`,
+  `total_amount_paid` all 0) are dropped — they otherwise crowd the export
+  with rows that say "no data here for this category" instead of
+  "no data here at all."
+- Source: the same in-memory NDJSON caches that the live map reads. No extra
+  fetch, no extra cell-suppression beyond what HHS already applied upstream.
 
 ## Versioning
 
