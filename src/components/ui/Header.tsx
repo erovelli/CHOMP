@@ -1,3 +1,4 @@
+import { Suspense, lazy, useCallback, useState } from "react";
 import LayerControl from "./LayerControl";
 import GeoLevelControl from "./GeoLevelControl";
 import MetricControl from "./MetricControl";
@@ -9,7 +10,17 @@ import ClickHint from "./ClickHint";
 import InfoModal from "./InfoModal";
 import { HEADER_HEIGHT, Z_INDEX } from "../../constants/layout";
 
+// Export deps (d3-geo, topojson-client, papaparse) are only needed once the
+// user opens the modal — load them lazily so they stay out of the critical
+// path. The trade-off is a small (~200 ms on broadband) delay between clicking
+// Export and the modal painting; acceptable for a save-action.
+const ExportModal = lazy(() => import("./ExportModal"));
+
 export default function Header() {
+    const [exportOpen, setExportOpen] = useState(false);
+    const openExport = useCallback(() => setExportOpen(true), []);
+    const closeExport = useCallback(() => setExportOpen(false), []);
+
     return (
         <>
             <header
@@ -57,6 +68,36 @@ export default function Header() {
                         United States · State, County & ZIP3 Areas
                     </span>
                 </div>
+                <button
+                    onClick={openExport}
+                    style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        padding: "6px 12px",
+                        background: "var(--surface2)",
+                        border: "1px solid var(--border)",
+                        borderRadius: 4,
+                        cursor: "pointer",
+                        fontFamily: "var(--ff-sans)",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: "var(--ink)",
+                        letterSpacing: "0.01em",
+                        transition: "background 0.12s, border-color 0.12s",
+                    }}
+                    onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.background = "var(--surface)";
+                        (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--accent)";
+                    }}
+                    onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.background = "var(--surface2)";
+                        (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border)";
+                    }}
+                >
+                    <span style={{ fontSize: 13, lineHeight: 1, color: "var(--accent)" }}>↓</span>
+                    Export
+                </button>
             </header>
 
             <LayerControl />
@@ -68,6 +109,11 @@ export default function Header() {
             <DetailPanel />
             <ClickHint />
             <InfoModal />
+            {exportOpen && (
+                <Suspense fallback={null}>
+                    <ExportModal open={exportOpen} onClose={closeExport} />
+                </Suspense>
+            )}
         </>
     );
 }
