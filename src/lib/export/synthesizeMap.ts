@@ -8,12 +8,12 @@ import {
 import { feature } from "topojson-client";
 import type { Topology, GeometryCollection } from "topojson-specification";
 import type { FeatureCollection, Feature, Geometry } from "geojson";
-import type { DataRecord, LayerKey, Metric } from "../types";
+import type { GeoLevel, LayerKey, Metric } from "../types";
 import { CHOROPLETH_COLORS, N_STOPS, quantileStops } from "../mapStyles";
-import { LAYER_CONFIGS } from "../../constants/map";
+import { LAYER_CONFIGS, COUNTY_GEOJSON } from "../../constants/map";
 import { STATE_FIPS_TO_USPS, PR_FIPS, TERRITORY_NON_PR_FIPS } from "../../constants/stateFips";
 import { colorForValue } from "./colorScale";
-import { getValueForRegion, getEnrolleesFor } from "../dataService";
+import { getAnnualDataForLevel, getEnrolleesFor, getValueForRegion } from "../dataService";
 
 // ── Canvas / layout ───────────────────────────────────────────
 //
@@ -35,13 +35,14 @@ const LEGEND = { x: 32, y: 922, w: 360, h: 14 };
 const LEGEND_LABEL_Y = LEGEND.y + LEGEND.h + 16;
 
 // Pacific / Caribbean territories: GU / MP / VI carry claims data but can't be
-// projected by geoAlbersUsa. Render them as labeled color chips below the PR
-// inset so the data slice is still visible on the export.
+// projected by geoAlbersUsa. Rendered as labeled color chips below the PR
+// inset so the data slice stays visible. State-level only — at county/ZIP3 the
+// aggregation level isn't a state postal, so the chip lookup is undefined.
 const TERRITORY_CHIPS = {
     x: PR_INSET.x,
     y: PR_INSET.y + PR_INSET.h + 16,
     chipSize: 14,
-    chipGap: 26, // square + label + gutter
+    chipGap: 26,
 };
 const TERRITORY_POSTALS: readonly string[] = ["GU", "MP", "VI"];
 
@@ -49,7 +50,25 @@ const FOOTER_TEXT = "medicaid-dent-policy · choropleth synthesized via d3-geo";
 const FOOTER_X = 1568;
 const FOOTER_Y = 970;
 
-// ── TopoJSON loader (cached) ─────────────────────────────────
+// Per-level visual tuning. Counties and ZIP3s are denser than states, so the
+// stroke gets thinner and dimmer to avoid swamping the fill.
+const LEVEL_STROKE: Record<GeoLevel, { color: string; width: number }> = {
+    state: { color: "#6b7f7d", width: 0.6 },
+    county: { color: "#9a948d", width: 0.18 },
+    zip3: { color: "#9a948d", width: 0.12 },
+};
+
+// ── Feature loaders (per level, cached module-scope) ──────────
+
+// One row-shape for every level: `id` is the value the claims cache is keyed
+// on (postal / GEOID / 3-digit ZIP3 prefix). PR routing is decided per-level
+// (see splitPr*).
+type LevelFeature = Feature<Geometry, { id: string }>;
+
+interface LevelFeatures {
+    main: LevelFeature[];
+    pr: LevelFeature[];
+}
 
 interface StatesTopology extends Topology {
     objects: {
@@ -57,64 +76,115 @@ interface StatesTopology extends Topology {
     };
 }
 
-type StateFeature = Feature<Geometry, { name: string; fips: string; postal: string }>;
+const featuresCache: Partial<Record<GeoLevel, LevelFeatures>> = {};
+const inflightCache: Partial<Record<GeoLevel, Promise<LevelFeatures>>> = {};
 
-let topologyPromise: Promise<StatesTopology> | null = null;
-let featuresCache: { main: StateFeature[]; pr: StateFeature[] } | null = null;
-
-async function loadTopology(): Promise<StatesTopology> {
-    if (topologyPromise) return topologyPromise;
+async function getStateFeatures(): Promise<LevelFeatures> {
     const BASE = import.meta.env.BASE_URL;
-    topologyPromise = fetch(`${BASE}data/export/states-10m.json`).then(async (res) => {
-        if (!res.ok) {
-            throw new Error(`Failed to load states topology: HTTP ${res.status}`);
-        }
-        return (await res.json()) as StatesTopology;
-    });
-    return topologyPromise;
-}
-
-async function getStateFeatures(): Promise<{ main: StateFeature[]; pr: StateFeature[] }> {
-    if (featuresCache) return featuresCache;
-    const topo = await loadTopology();
+    const res = await fetch(`${BASE}data/export/states-10m.json`);
+    if (!res.ok) throw new Error(`Failed to load states topology: HTTP ${res.status}`);
+    const topo = (await res.json()) as StatesTopology;
     const fc = feature(topo, topo.objects.states) as FeatureCollection<Geometry, { name: string }>;
-    const main: StateFeature[] = [];
-    const pr: StateFeature[] = [];
+    const main: LevelFeature[] = [];
+    const pr: LevelFeature[] = [];
     for (const f of fc.features) {
-        // us-atlas exposes the 2-digit FIPS as the TopoJSON id (string).
         const fips = String(f.id ?? "").padStart(2, "0");
         const postal = STATE_FIPS_TO_USPS[fips];
         if (!postal) continue;
-        // Non-PR Pacific / Caribbean territories: claims data carries them
-        // but geoAlbersUsa projects their coordinates to null. Render them in
-        // the CSV (via stateFips name lookup) and skip the polygon here. To
-        // add them to the synthesized map, give each a dedicated Mercator
-        // inset like PR.
+        // Non-PR Pacific / Caribbean territories: claims data carries them but
+        // geoAlbersUsa nulls their coordinates. Surfaced as chips below.
         if (TERRITORY_NON_PR_FIPS.has(fips)) continue;
-        const enriched: StateFeature = {
+        const enriched: LevelFeature = {
             type: "Feature",
             geometry: f.geometry,
-            properties: { name: f.properties?.name ?? postal, fips, postal },
+            properties: { id: postal },
         };
         if (fips === PR_FIPS) pr.push(enriched);
         else main.push(enriched);
     }
-    featuresCache = { main, pr };
-    return featuresCache;
+    return { main, pr };
+}
+
+async function getCountyFeatures(): Promise<LevelFeatures> {
+    const BASE = import.meta.env.BASE_URL;
+    const res = await fetch(`${BASE}${COUNTY_GEOJSON}`);
+    if (!res.ok) throw new Error(`Failed to load counties geojson: HTTP ${res.status}`);
+    const fc = (await res.json()) as FeatureCollection<Geometry, { GEOID?: string; name?: string }>;
+    const main: LevelFeature[] = [];
+    const pr: LevelFeature[] = [];
+    for (const f of fc.features) {
+        const geoid = f.properties?.GEOID;
+        if (!geoid) continue;
+        const enriched: LevelFeature = {
+            type: "Feature",
+            geometry: f.geometry,
+            properties: { id: geoid },
+        };
+        // PR municipios: 5-digit FIPS starts with "72". Routed to the inset.
+        if (geoid.startsWith(PR_FIPS)) pr.push(enriched);
+        else main.push(enriched);
+    }
+    return { main, pr };
+}
+
+// ZIP3 prefixes that physically belong in (or adjacent to) the PR inset:
+// 006-007 + 009 are Puerto Rico, 008 is the U.S. Virgin Islands. All four sit
+// outside geoAlbersUsa's coverage so they're rendered through the Mercator
+// inset together rather than dropped.
+const PR_ZIP3_PREFIXES = new Set(["006", "007", "008", "009"]);
+
+async function getZip3Features(): Promise<LevelFeatures> {
+    const BASE = import.meta.env.BASE_URL;
+    const res = await fetch(`${BASE}zip3codes.geojson`);
+    if (!res.ok) throw new Error(`Failed to load zip3codes geojson: HTTP ${res.status}`);
+    const fc = (await res.json()) as FeatureCollection<Geometry, { "3dig_zip"?: string }>;
+    const main: LevelFeature[] = [];
+    const pr: LevelFeature[] = [];
+    for (const f of fc.features) {
+        const zip3 = f.properties?.["3dig_zip"];
+        if (!zip3) continue;
+        const enriched: LevelFeature = {
+            type: "Feature",
+            geometry: f.geometry,
+            properties: { id: zip3 },
+        };
+        if (PR_ZIP3_PREFIXES.has(zip3)) pr.push(enriched);
+        else main.push(enriched);
+    }
+    return { main, pr };
+}
+
+async function getFeaturesForLevel(level: GeoLevel): Promise<LevelFeatures> {
+    const cached = featuresCache[level];
+    if (cached) return cached;
+    const inflight = inflightCache[level];
+    if (inflight) return inflight;
+    const loader =
+        level === "state"
+            ? getStateFeatures
+            : level === "county"
+              ? getCountyFeatures
+              : getZip3Features;
+    const promise = loader().then((fs) => {
+        featuresCache[level] = fs;
+        return fs;
+    });
+    inflightCache[level] = promise;
+    try {
+        return await promise;
+    } finally {
+        delete inflightCache[level];
+    }
 }
 
 // ── Render args ──────────────────────────────────────────────
 
 export interface RenderArgs {
     activeLayer: LayerKey;
-    year: string; // 4-digit year; the synthesized map is annual-only by design.
+    year: string;
     metric: Metric;
-    stateAnnualData: Record<string, DataRecord[]>;
-    // Optional pre-computed per-state value override (postal → numeric value).
-    // Lets callers reuse a value table they already built; otherwise the
-    // renderer derives one with `getValueForRegion` + `getEnrolleesFor`.
-    valueByPostal?: Record<string, number>;
-    scale?: number; // 0 < scale ≤ 1; preview defaults to 0.3
+    level: GeoLevel;
+    scale?: number;
 }
 
 // ── Helpers ─────────────────────────────────────────────────
@@ -122,7 +192,7 @@ export interface RenderArgs {
 function fitProjection(
     projection: GeoProjection,
     box: { x: number; y: number; w: number; h: number },
-    features: StateFeature[],
+    features: LevelFeature[],
 ): GeoProjection {
     const fc: FeatureCollection<Geometry> = {
         type: "FeatureCollection",
@@ -142,6 +212,7 @@ function drawTitleBlock(
     layerLabel: string,
     period: string,
     metricLabel: string,
+    levelLabel: string,
 ): void {
     ctx.fillStyle = "#1a1917";
     ctx.font = "600 24px ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif";
@@ -150,11 +221,10 @@ function drawTitleBlock(
     ctx.fillText(`Medicaid Dental Claims · ${layerLabel}`, TITLE_X, TITLE_Y);
     ctx.fillStyle = "#6b6660";
     ctx.font = "400 14px ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif";
-    ctx.fillText(`${period} · ${metricLabel}`, TITLE_X, SUBTITLE_Y);
+    ctx.fillText(`${period} · ${levelLabel} · ${metricLabel}`, TITLE_X, SUBTITLE_Y);
 }
 
 function drawLegend(ctx: CanvasRenderingContext2D, stops: number[], metric: Metric): void {
-    // Bar with 7 palette swatches and stop labels under the inner ticks.
     const segW = LEGEND.w / N_STOPS;
     for (let i = 0; i < N_STOPS; i++) {
         ctx.fillStyle = CHOROPLETH_COLORS[i];
@@ -179,7 +249,6 @@ function drawLegend(ctx: CanvasRenderingContext2D, stops: number[], metric: Metr
         if (v >= 1_000) return `${Math.round(v / 1_000)}k`;
         return String(Math.round(v));
     };
-    // Label the min, midpoint, and max stops so the bar stays uncluttered.
     const labelIdxs = [0, Math.floor(N_STOPS / 2), N_STOPS - 1];
     for (const i of labelIdxs) {
         ctx.fillText(fmt(stops[i] ?? 0), LEGEND.x + (i + 0.5) * segW, LEGEND_LABEL_Y);
@@ -194,8 +263,6 @@ function drawFooter(ctx: CanvasRenderingContext2D): void {
 }
 
 function drawPrInsetFrame(ctx: CanvasRenderingContext2D): void {
-    // A thin frame and "PR" tag so the inset reads as a separate locator
-    // instead of a stray polygon floating off the coast.
     ctx.strokeStyle = "#b3aea4";
     ctx.lineWidth = 0.5;
     ctx.strokeRect(PR_INSET.x, PR_INSET.y, PR_INSET.w, PR_INSET.h);
@@ -235,40 +302,40 @@ function drawTerritoryChips(
     }
 }
 
+const LEVEL_LABEL: Record<GeoLevel, string> = {
+    state: "State level",
+    county: "County level",
+    zip3: "ZIP3 level",
+};
+
 // ── Main render ─────────────────────────────────────────────
 
 /**
- * Render a Wikipedia-style synthesized choropleth to an offscreen canvas. The
- * canvas is dimensioned `REFERENCE_W*scale × REFERENCE_H*scale`; layout coords
- * are written against the reference and a single `ctx.scale(s, s)` makes the
- * preview pass identical to the full-res pass.
+ * Render a Wikipedia-style synthesized choropleth to an offscreen canvas.
+ * The level selects which geometry source to load and which annual cache to
+ * read values from. The 1600×1000 reference layout is unchanged across levels
+ * (county/ZIP3 just paint denser polygons and thinner strokes).
  */
 export async function renderSynthesizedMap(args: RenderArgs): Promise<HTMLCanvasElement> {
-    const { activeLayer, year, metric, stateAnnualData, valueByPostal, scale = 1 } = args;
+    const { activeLayer, year, metric, level, scale = 1 } = args;
 
-    const features = await getStateFeatures();
+    const features = await getFeaturesForLevel(level);
+    const annualData = getAnnualDataForLevel(level);
 
-    // Resolve a value for every state we'll color anywhere on the export:
-    // rendered polygons (main + PR) AND the non-PR territory chips. Stops
-    // come from the same `quantileStops` helper as the runtime so the
-    // exported ramp matches the on-screen ramp.
-    const renderedPostals = new Set<string>();
-    for (const f of features.main) renderedPostals.add(f.properties.postal);
-    for (const f of features.pr) renderedPostals.add(f.properties.postal);
-    const allPostals = new Set<string>([...renderedPostals, ...TERRITORY_POSTALS]);
-
-    const values: number[] = [];
+    // Resolve a value for every feature plus, at state level, the territory
+    // chips. Stops use the same quantileStops as the live map so the export
+    // matches the on-screen ramp by construction.
     const valueFor: Record<string, number> = {};
-    for (const postal of allPostals) {
-        let v: number;
-        if (valueByPostal && postal in valueByPostal) {
-            v = valueByPostal[postal];
-        } else {
-            const enrollees =
-                metric === "enrollees" ? getEnrolleesFor("state", postal, year) : null;
-            v = getValueForRegion(stateAnnualData[postal], year, activeLayer, metric, enrollees);
-        }
-        valueFor[postal] = v;
+    const values: number[] = [];
+    const polygonIds = new Set<string>();
+    for (const f of features.main) polygonIds.add(f.properties.id);
+    for (const f of features.pr) polygonIds.add(f.properties.id);
+    const valuedIds: Iterable<string> =
+        level === "state" ? new Set([...polygonIds, ...TERRITORY_POSTALS]) : polygonIds;
+    for (const id of valuedIds) {
+        const enrollees = metric === "enrollees" ? getEnrolleesFor(level, id, year) : null;
+        const v = getValueForRegion(annualData[id], year, activeLayer, metric, enrollees);
+        valueFor[id] = v;
         if (Number.isFinite(v) && v > 0) values.push(v);
     }
     const stops = quantileStops(values, metric);
@@ -280,45 +347,46 @@ export async function renderSynthesizedMap(args: RenderArgs): Promise<HTMLCanvas
     if (!ctx) throw new Error("2D canvas context unavailable");
     if (scale !== 1) ctx.scale(scale, scale);
 
-    // Main projection: Albers USA, auto-positions AK/HI (PR comes via the
-    // separate Mercator inset below).
+    const strokeStyle = LEVEL_STROKE[level];
+
+    // Main projection: Albers USA — auto-positions AK/HI for state, and the
+    // sub-state polygons within them for county/ZIP3.
     const mainProjection = fitProjection(geoAlbersUsa(), MAP_BOX, features.main);
     const mainPath = geoPath(mainProjection, ctx);
 
     for (const f of features.main) {
-        const fillColor = colorForValue(valueFor[f.properties.postal], stops);
         ctx.beginPath();
         mainPath(f);
-        ctx.fillStyle = fillColor;
+        ctx.fillStyle = colorForValue(valueFor[f.properties.id], stops);
         ctx.fill();
-        ctx.strokeStyle = "#6b7f7d";
-        ctx.lineWidth = 0.6;
+        ctx.strokeStyle = strokeStyle.color;
+        ctx.lineWidth = strokeStyle.width;
         ctx.stroke();
     }
 
-    // PR inset: fit the PR feature to the lower-right box. Frame drawn first
-    // so the polygon paints on top of the frame stroke (cleaner edge).
     drawPrInsetFrame(ctx);
     if (features.pr.length > 0) {
         const prProjection = fitProjection(geoMercator(), PR_INSET, features.pr);
         const prPath = geoPath(prProjection, ctx);
         for (const f of features.pr) {
-            const fillColor = colorForValue(valueFor[f.properties.postal], stops);
             ctx.beginPath();
             prPath(f);
-            ctx.fillStyle = fillColor;
+            ctx.fillStyle = colorForValue(valueFor[f.properties.id], stops);
             ctx.fill();
-            ctx.strokeStyle = "#6b7f7d";
-            ctx.lineWidth = 0.5;
+            ctx.strokeStyle = strokeStyle.color;
+            ctx.lineWidth = Math.min(strokeStyle.width, 0.4);
             ctx.stroke();
         }
     }
 
-    drawTerritoryChips(ctx, valueFor, stops);
+    // Territory chips lookup by USPS postal — not defined at county/ZIP3, so
+    // skip there. The county/ZIP3 polygons for those territories project to
+    // null on AlbersUsa and are silently dropped (documented limitation).
+    if (level === "state") drawTerritoryChips(ctx, valueFor, stops);
 
     const layerLabel = LAYER_CONFIGS[activeLayer]?.label ?? activeLayer;
     const metricLabel = metric === "enrollees" ? "Per Medicaid enrollee" : "Volume";
-    drawTitleBlock(ctx, layerLabel, year, metricLabel);
+    drawTitleBlock(ctx, layerLabel, year, metricLabel, LEVEL_LABEL[level]);
     drawLegend(ctx, stops, metric);
     drawFooter(ctx);
 
@@ -332,9 +400,6 @@ export async function canvasToBlob(
     format: "png" | "jpeg",
 ): Promise<Blob> {
     return new Promise((resolve, reject) => {
-        // For JPEG the brief asks for white background; do the fill in a
-        // throwaway intermediate canvas so the source canvas (used by the
-        // preview) keeps its transparency.
         if (format === "jpeg") {
             const out = document.createElement("canvas");
             out.width = canvas.width;
@@ -361,9 +426,14 @@ export async function canvasToBlob(
     });
 }
 
-export function imageFilename(activeLayer: LayerKey, year: string, format: "png" | "jpeg"): string {
+export function imageFilename(
+    activeLayer: LayerKey,
+    year: string,
+    level: GeoLevel,
+    format: "png" | "jpeg",
+): string {
     const ext = format === "jpeg" ? "jpg" : "png";
-    return `medicaid-dental_${activeLayer}_${year}.${ext}`;
+    return `medicaid-dental_${activeLayer}_${year}_${level}.${ext}`;
 }
 
 export function downloadBlob(filename: string, blob: Blob): void {

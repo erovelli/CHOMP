@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Z_INDEX } from "../../constants/layout";
 import { useMapStore } from "../../lib/store";
-import {
-    getAnnualDataForLevel,
-    getMonthlyDataForLevel,
-    getStateAnnualData,
-} from "../../lib/dataService";
+import { getAnnualDataForLevel, getMonthlyDataForLevel } from "../../lib/dataService";
 import { buildCsvRows, csvFilename, downloadCsv, rowsToCsv } from "../../lib/export/csv";
 import {
     canvasToBlob,
@@ -14,6 +10,13 @@ import {
     renderSynthesizedMap,
 } from "../../lib/export/synthesizeMap";
 import { LAYER_CONFIGS } from "../../constants/map";
+import type { GeoLevel } from "../../lib/types";
+
+const LEVEL_LABEL: Record<GeoLevel, string> = {
+    state: "State-level",
+    county: "County-level",
+    zip3: "ZIP3-level",
+};
 
 interface ExportModalProps {
     open: boolean;
@@ -74,7 +77,7 @@ export default function ExportModal({ open, onClose }: ExportModalProps) {
                     activeLayer,
                     year: selectedYear,
                     metric,
-                    stateAnnualData: getStateAnnualData(),
+                    level: geoLevel,
                     scale: PREVIEW_SCALE,
                 });
                 if (seq !== previewSeqRef.current) return;
@@ -87,7 +90,7 @@ export default function ExportModal({ open, onClose }: ExportModalProps) {
             }
         }, PREVIEW_DEBOUNCE_MS);
         return () => window.clearTimeout(handle);
-    }, [open, activeLayer, selectedYear, metric]);
+    }, [open, activeLayer, selectedYear, metric, geoLevel]);
 
     // The CSV "current view" inherits the user's monthly/annual selection, and
     // the geo level it's currently zoomed to. PNG/JPEG are state-only by spec.
@@ -121,15 +124,15 @@ export default function ExportModal({ open, onClose }: ExportModalProps) {
                     activeLayer,
                     year: selectedYear,
                     metric,
-                    stateAnnualData: getStateAnnualData(),
+                    level: geoLevel,
                 });
                 const blob = await canvasToBlob(canvas, format);
-                downloadBlob(imageFilename(activeLayer, selectedYear, format), blob);
+                downloadBlob(imageFilename(activeLayer, selectedYear, geoLevel, format), blob);
             } finally {
                 setExporting(null);
             }
         },
-        [activeLayer, selectedYear, metric],
+        [activeLayer, selectedYear, metric, geoLevel],
     );
 
     if (!open) return null;
@@ -307,7 +310,7 @@ export default function ExportModal({ open, onClose }: ExportModalProps) {
                     >
                         <ExportButton
                             label="PNG (transparent)"
-                            sub={`State-level choropleth · 1600×1000 · ${layerLabel}, ${selectedYear}`}
+                            sub={`${LEVEL_LABEL[geoLevel]} choropleth · 1600×1000 · ${layerLabel}, ${selectedYear}`}
                             onClick={() => handleExportImage("png")}
                             disabled={exporting !== null}
                             busy={exporting === "png"}

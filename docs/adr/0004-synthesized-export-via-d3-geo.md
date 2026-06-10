@@ -49,9 +49,19 @@ Concretely, [`src/lib/export/synthesizeMap.ts`](../../src/lib/export/synthesizeM
 - Projects the main features with `geoAlbersUsa()`, which positions AK and HI
   automatically. Renders PR via a separate `geoMercator()` clipped to a
   200×140 lower-right inset (Albers USA returns `null` for PR coordinates).
-- Renders GU / MP / VI as labeled color chips under the PR inset — they have
-  claims data but `geoAlbersUsa` projects them to null. AS is in the TopoJSON
-  but not in the claims data, so it doesn't appear.
+  At county level the PR municipios (GEOID prefix `72`) go in the inset; at
+  ZIP3 level the PR/USVI ZIP3s `006`–`009` share the inset.
+- At state level, renders GU / MP / VI as labeled color chips under the PR
+  inset — they have state-level claims data but `geoAlbersUsa` projects
+  them to null. AS is in the TopoJSON but not in the claims data, so it
+  doesn't appear. County/ZIP3 levels skip these chips because the chip
+  lookup is by USPS postal and isn't defined at sub-state grain.
+- Geometry source switches per level: us-atlas TopoJSON for state,
+  `counties.geojson` (3221 features, already shipped) for county,
+  `zip3codes.geojson` (896 features, already shipped) for ZIP3. All three
+  are fetched lazily and cached module-scope; an in-flight guard prevents
+  duplicate concurrent fetches when the modal repaints during the 300 ms
+  preview debounce.
 - Computes each state's value with `getValueForRegion` (same call the live
   choropleth makes) and derives 7-quantile color stops via the same
   `quantileStops` helper in [`mapStyles.ts`](../../src/lib/mapStyles.ts).
@@ -92,10 +102,13 @@ ships as a `React.lazy` chunk — loaded on the first Export click, not on map l
   blank background — no street grid, no city labels, no coastline shading.
   That's a feature for legibility but a regression for users who wanted the
   Protomaps backdrop.
-- **State-only by spec.** The synthesized image renders one geography level
-  (state). Counties and ZIP3s only appear in the CSV. Generalizing the
-  renderer to county/ZIP3 would need a second TopoJSON (~10 MB for counties)
-  and a new layout pass for the legend.
+- **Geometry weight on first county/ZIP3 export.** Counties and ZIP3 levels
+  load `counties.geojson` (2.7 MB / 0.85 MB gz) or `zip3codes.geojson`
+  (8.3 MB / ~2 MB gz) on first click. The files already ship with the site;
+  the browser cache hits after the first fetch. A future iteration could
+  ship a pre-simplified, export-only TopoJSON to cut payload further, but
+  the tooling-light status quo (`tippecanoe`/`ogr2ogr` absent on the build
+  host — see ADR drafts) makes that a follow-up.
 - **Three new runtime dependencies.** `d3-geo`, `topojson-client`,
   `papaparse`. All small, all tree-shake friendly, all live in the lazy
   chunk — but they're still dependencies to track for CVEs.
