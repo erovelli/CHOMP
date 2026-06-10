@@ -54,9 +54,16 @@ const FOOTER_Y = 970;
 // stroke gets thinner and dimmer to avoid swamping the fill.
 const LEVEL_STROKE: Record<GeoLevel, { color: string; width: number }> = {
     state: { color: "#6b7f7d", width: 0.6 },
-    county: { color: "#9a948d", width: 0.18 },
-    zip3: { color: "#9a948d", width: 0.12 },
+    county: { color: "#9a948d", width: 0.2 },
+    zip3: { color: "#7a756d", width: 0.35 },
 };
+
+// Soft cream wash painted under the main-projection polygons so the lightest
+// quantile band (#f7f4ee) stays distinguishable from the page/canvas backdrop.
+// Without this the lowest-claim regions appear to "disappear" into the cream
+// backdrop — which is what made the ZIP3 export look empty in the first
+// rendering pass.
+const MAP_BACKDROP = "#ece7df";
 
 // ── Feature loaders (per level, cached module-scope) ──────────
 
@@ -127,11 +134,20 @@ async function getCountyFeatures(): Promise<LevelFeatures> {
     return { main, pr };
 }
 
-// ZIP3 prefixes that physically belong in (or adjacent to) the PR inset:
-// 006-007 + 009 are Puerto Rico, 008 is the U.S. Virgin Islands. All four sit
-// outside geoAlbersUsa's coverage so they're rendered through the Mercator
-// inset together rather than dropped.
+// ZIP3 prefixes that share the PR inset: 006-007 + 009 are Puerto Rico
+// proper, 008 is the U.S. Virgin Islands. All four sit outside geoAlbersUsa's
+// coverage so they're rendered through the Mercator inset rather than dropped.
 const PR_ZIP3_PREFIXES = new Set(["006", "007", "008", "009"]);
+
+// ZIP3 prefixes that geoAlbersUsa silently projects to null because they lie
+// outside its (continental + AK + HI) coverage envelope. Including them in
+// `features.main` poisons `geoMercator`-equivalent operations on geoAlbersUsa
+// (and visually leaves dead polygons), so they're dropped before fitExtent.
+// 969 = Guam / CNMI / Marshall Islands / Palau / Micronesia / FSM (cluster
+// around lng=144°E). Other Pacific prefixes (960, 961, 967, 968) actually
+// land in California or HI and project fine — verified against the shipped
+// `public/zip3codes.geojson` centroids.
+const ZIP3_OUTSIDE_ALBERS_USA = new Set(["969"]);
 
 async function getZip3Features(): Promise<LevelFeatures> {
     const BASE = import.meta.env.BASE_URL;
@@ -143,6 +159,7 @@ async function getZip3Features(): Promise<LevelFeatures> {
     for (const f of fc.features) {
         const zip3 = f.properties?.["3dig_zip"];
         if (!zip3) continue;
+        if (ZIP3_OUTSIDE_ALBERS_USA.has(zip3)) continue;
         const enriched: LevelFeature = {
             type: "Feature",
             geometry: f.geometry,
@@ -348,6 +365,12 @@ export async function renderSynthesizedMap(args: RenderArgs): Promise<HTMLCanvas
     if (scale !== 1) ctx.scale(scale, scale);
 
     const strokeStyle = LEVEL_STROKE[level];
+
+    // Paint the main-map backdrop first. Without this, lightest-band fills
+    // (#f7f4ee) blend into the page background and the export looks empty,
+    // most visibly at ZIP3 level where most low-claim regions sit in band 0.
+    ctx.fillStyle = MAP_BACKDROP;
+    ctx.fillRect(MAP_BOX.x, MAP_BOX.y, MAP_BOX.w, MAP_BOX.h);
 
     // Main projection: Albers USA — auto-positions AK/HI for state, and the
     // sub-state polygons within them for county/ZIP3.
