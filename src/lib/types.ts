@@ -43,8 +43,6 @@ export interface LayerConfig {
     label: string;
     description: string;
     unit: string;
-    min: number;
-    max: number;
     accent: string;
 }
 

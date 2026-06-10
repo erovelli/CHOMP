@@ -29,11 +29,7 @@ interface MapState {
     selectedDetail: RegionDetail | null;
     setSelectedRegion: (id: string | null, detail: RegionDetail | null) => void;
 
-    selectedState: string | null;
-    setSelectedState: (state: string | null) => void;
-
     panelOpen: boolean;
-    setPanelOpen: (open: boolean) => void;
 
     hoveredRegion: string | null;
     hoveredValue: number | null;
@@ -61,7 +57,6 @@ export const useMapStore = create<MapState>((set) => ({
             selectedRegion: null,
             selectedDetail: null,
             panelOpen: false,
-            selectedState: null,
         }),
 
     metric: "claims",
@@ -90,11 +85,7 @@ export const useMapStore = create<MapState>((set) => ({
             panelOpen: id !== null,
         }),
 
-    selectedState: null,
-    setSelectedState: (state) => set({ selectedState: state }),
-
     panelOpen: false,
-    setPanelOpen: (open) => set({ panelOpen: open }),
 
     hoveredRegion: null,
     hoveredValue: null,

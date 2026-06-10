@@ -104,16 +104,12 @@ export const CATEGORY_TO_KEY: Record<string, LayerKey> = {
 };
 
 // ── Layer configs ─────────────────────────────────────────────
-// `min`/`max` are kept for back-compat but no longer drive the choropleth
-// scale — color stops are recomputed dynamically per view (see mapStyles).
 export const LAYER_CONFIGS: Record<LayerKey, LayerConfig> = {
     all: {
         key: "all",
         label: "All Categories",
         description: "Total across all procedure types",
         unit: "Total Claims",
-        min: 0,
-        max: 2_000_000,
         accent: "#1e8a7e",
     },
     diagnostic: {
@@ -121,8 +117,6 @@ export const LAYER_CONFIGS: Record<LayerKey, LayerConfig> = {
         label: "Diagnostic",
         description: "Exams, x-rays, evaluations",
         unit: "Claims",
-        min: 0,
-        max: 800_000,
         accent: "#4a7fcb",
     },
     preventive: {
@@ -130,8 +124,6 @@ export const LAYER_CONFIGS: Record<LayerKey, LayerConfig> = {
         label: "Preventive",
         description: "Cleanings, fluoride, sealants",
         unit: "Claims",
-        min: 0,
-        max: 600_000,
         accent: "#2ca58d",
     },
     restorative: {
@@ -139,8 +131,6 @@ export const LAYER_CONFIGS: Record<LayerKey, LayerConfig> = {
         label: "Restorative",
         description: "Fillings, crowns, inlays",
         unit: "Claims",
-        min: 0,
-        max: 200_000,
         accent: "#c87d2a",
     },
     endodontics: {
@@ -148,8 +138,6 @@ export const LAYER_CONFIGS: Record<LayerKey, LayerConfig> = {
         label: "Endodontics",
         description: "Root canals, pulp therapy",
         unit: "Claims",
-        min: 0,
-        max: 20_000,
         accent: "#d4694a",
     },
     periodontics: {
@@ -157,8 +145,6 @@ export const LAYER_CONFIGS: Record<LayerKey, LayerConfig> = {
         label: "Periodontics",
         description: "Gum disease treatment",
         unit: "Claims",
-        min: 0,
-        max: 10_000,
         accent: "#5c9e7a",
     },
     prosthodontics_removable: {
@@ -166,8 +152,6 @@ export const LAYER_CONFIGS: Record<LayerKey, LayerConfig> = {
         label: "Prosthodontics (removable)",
         description: "Dentures, partials",
         unit: "Claims",
-        min: 0,
-        max: 5_000,
         accent: "#6b8cae",
     },
     maxillofacial_prosthetics: {
@@ -175,8 +159,6 @@ export const LAYER_CONFIGS: Record<LayerKey, LayerConfig> = {
         label: "Maxillofacial Prosthetics",
         description: "Surgical obturators, facial-defect prostheses",
         unit: "Claims",
-        min: 0,
-        max: 2_000,
         accent: "#a07ba8",
     },
     implant_services: {
@@ -184,8 +166,6 @@ export const LAYER_CONFIGS: Record<LayerKey, LayerConfig> = {
         label: "Implant Services",
         description: "Surgical implants",
         unit: "Claims",
-        min: 0,
-        max: 5_000,
         accent: "#4d7a91",
     },
     prosthodontics_fixed: {
@@ -193,8 +173,6 @@ export const LAYER_CONFIGS: Record<LayerKey, LayerConfig> = {
         label: "Prosthodontics (fixed)",
         description: "Fixed bridges, retainers",
         unit: "Claims",
-        min: 0,
-        max: 5_000,
         accent: "#5e7799",
     },
     oral_max_surgery: {
@@ -202,8 +180,6 @@ export const LAYER_CONFIGS: Record<LayerKey, LayerConfig> = {
         label: "Oral & Maxillofacial Surgery",
         description: "Extractions, surgical procedures",
         unit: "Claims",
-        min: 0,
-        max: 100_000,
         accent: "#b03a3a",
     },
     orthodontics: {
@@ -211,8 +187,6 @@ export const LAYER_CONFIGS: Record<LayerKey, LayerConfig> = {
         label: "Orthodontics",
         description: "Braces, retainers",
         unit: "Claims",
-        min: 0,
-        max: 50_000,
         accent: "#7a5cb8",
     },
     adjunctive: {
@@ -220,8 +194,6 @@ export const LAYER_CONFIGS: Record<LayerKey, LayerConfig> = {
         label: "Adjunctive General Services",
         description: "Anesthesia, drugs, palliative care",
         unit: "Claims",
-        min: 0,
-        max: 80_000,
         accent: "#8c7853",
     },
 };
