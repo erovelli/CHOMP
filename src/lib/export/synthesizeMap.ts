@@ -139,15 +139,17 @@ async function getCountyFeatures(): Promise<LevelFeatures> {
 // coverage so they're rendered through the Mercator inset rather than dropped.
 const PR_ZIP3_PREFIXES = new Set(["006", "007", "008", "009"]);
 
-// ZIP3 prefixes that geoAlbersUsa silently projects to null because they lie
-// outside its (continental + AK + HI) coverage envelope. Including them in
-// `features.main` poisons `geoMercator`-equivalent operations on geoAlbersUsa
-// (and visually leaves dead polygons), so they're dropped before fitExtent.
-// 969 = Guam / CNMI / Marshall Islands / Palau / Micronesia / FSM (cluster
-// around lng=144°E). Other Pacific prefixes (960, 961, 967, 968) actually
-// land in California or HI and project fine — verified against the shipped
-// `public/zip3codes.geojson` centroids.
-const ZIP3_OUTSIDE_ALBERS_USA = new Set(["969"]);
+// ZIP3 prefixes that geoAlbersUsa cannot project cleanly because their
+// MultiPolygon footprint extends outside the (continental + AK + HI) coverage
+// envelope. Including these poisons `fitExtent`'s bounds computation and
+// nukes the entire continental render — verified against the shipped
+// `public/zip3codes.geojson`:
+//   969 — Guam / CNMI / Marshall Islands / Palau / Micronesia / FSM
+//         (bbox lng[144.62, 145.83], all points outside coverage).
+//   967 — Hawaii outer islands + American Samoa
+//         (bbox lat[-14.37, 22.23] — the AS tail at lat=-14 is what breaks it).
+// 960, 961, 968 actually sit in California or Honolulu metro and project fine.
+const ZIP3_OUTSIDE_ALBERS_USA = new Set(["967", "969"]);
 
 async function getZip3Features(): Promise<LevelFeatures> {
     const BASE = import.meta.env.BASE_URL;
@@ -342,20 +344,52 @@ export async function renderSynthesizedMap(args: RenderArgs): Promise<HTMLCanvas
     // Resolve a value for every feature plus, at state level, the territory
     // chips. Stops use the same quantileStops as the live map so the export
     // matches the on-screen ramp by construction.
-    const valueFor: Record<string, number> = {};
-    const values: number[] = [];
-    const polygonIds = new Set<string>();
-    for (const f of features.main) polygonIds.add(f.properties.id);
-    for (const f of features.pr) polygonIds.add(f.properties.id);
-    const valuedIds: Iterable<string> =
-        level === "state" ? new Set([...polygonIds, ...TERRITORY_POSTALS]) : polygonIds;
-    for (const id of valuedIds) {
+    //
+    // Implementation note: the value lookup is keyed on the SAME string the
+    // render loop dereferences (`f.properties.id`). Previously this lived in
+    // a separate Set→record pre-pass and the `valueFor[f.properties.id]`
+    // lookup silently missed for ZIP3 — every continental polygon then
+    // resolved to the lightest band. The single pass below removes the
+    // indirection.
+    const featureValue = (f: LevelFeature): number => {
+        const id = f.properties.id;
         const enrollees = metric === "enrollees" ? getEnrolleesFor(level, id, year) : null;
-        const v = getValueForRegion(annualData[id], year, activeLayer, metric, enrollees);
-        valueFor[id] = v;
+        return getValueForRegion(annualData[id], year, activeLayer, metric, enrollees);
+    };
+
+    const values: number[] = [];
+    for (const f of features.main) {
+        const v = featureValue(f);
         if (Number.isFinite(v) && v > 0) values.push(v);
     }
+    for (const f of features.pr) {
+        const v = featureValue(f);
+        if (Number.isFinite(v) && v > 0) values.push(v);
+    }
+    if (level === "state") {
+        for (const postal of TERRITORY_POSTALS) {
+            const enrollees = metric === "enrollees" ? getEnrolleesFor(level, postal, year) : null;
+            const v = getValueForRegion(annualData[postal], year, activeLayer, metric, enrollees);
+            if (Number.isFinite(v) && v > 0) values.push(v);
+        }
+    }
     const stops = quantileStops(values, metric);
+
+    // Build a value lookup for the chip drawer (state only) so it doesn't
+    // need to recompute.
+    const valueForChip: Record<string, number> = {};
+    if (level === "state") {
+        for (const postal of TERRITORY_POSTALS) {
+            const enrollees = metric === "enrollees" ? getEnrolleesFor(level, postal, year) : null;
+            valueForChip[postal] = getValueForRegion(
+                annualData[postal],
+                year,
+                activeLayer,
+                metric,
+                enrollees,
+            );
+        }
+    }
 
     const canvas = document.createElement("canvas");
     canvas.width = Math.round(REFERENCE_W * scale);
@@ -380,7 +414,7 @@ export async function renderSynthesizedMap(args: RenderArgs): Promise<HTMLCanvas
     for (const f of features.main) {
         ctx.beginPath();
         mainPath(f);
-        ctx.fillStyle = colorForValue(valueFor[f.properties.id], stops);
+        ctx.fillStyle = colorForValue(featureValue(f), stops);
         ctx.fill();
         ctx.strokeStyle = strokeStyle.color;
         ctx.lineWidth = strokeStyle.width;
@@ -394,7 +428,7 @@ export async function renderSynthesizedMap(args: RenderArgs): Promise<HTMLCanvas
         for (const f of features.pr) {
             ctx.beginPath();
             prPath(f);
-            ctx.fillStyle = colorForValue(valueFor[f.properties.id], stops);
+            ctx.fillStyle = colorForValue(featureValue(f), stops);
             ctx.fill();
             ctx.strokeStyle = strokeStyle.color;
             ctx.lineWidth = Math.min(strokeStyle.width, 0.4);
@@ -405,7 +439,7 @@ export async function renderSynthesizedMap(args: RenderArgs): Promise<HTMLCanvas
     // Territory chips lookup by USPS postal — not defined at county/ZIP3, so
     // skip there. The county/ZIP3 polygons for those territories project to
     // null on AlbersUsa and are silently dropped (documented limitation).
-    if (level === "state") drawTerritoryChips(ctx, valueFor, stops);
+    if (level === "state") drawTerritoryChips(ctx, valueForChip, stops);
 
     const layerLabel = LAYER_CONFIGS[activeLayer]?.label ?? activeLayer;
     const metricLabel = metric === "enrollees" ? "Per Medicaid enrollee" : "Volume";
