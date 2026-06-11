@@ -237,7 +237,7 @@ medicaid-dent-policy/
 │   ├── states.pmtiles             # U.S. state polygons (vector tiles)
 │   ├── zip3.pmtiles               # ZIP3 polygons (vector tiles)
 │   ├── counties.geojson           # U.S. county polygons (FIPS-keyed)
-│   ├── world.geojson              # Non-US country backdrop (NE 110m)
+│   ├── world.geojson              # Non-US country backdrop (State Dept World Polygons)
 │   ├── data/*.json                # NDJSON exports consumed at runtime
 │   └── data/export/states-10m.json # us-atlas TopoJSON for the synthesized PNG/JPEG export
 ├── scripts/
@@ -245,7 +245,7 @@ medicaid-dent-policy/
 │   ├── join_geocoded.py           # Joins ArcGIS geocoder output back onto claims
 │   ├── build_aggregates.py        # DuckDB → 6 NDJSON files
 │   ├── fetch_county_geometry.py   # plotly counties → public/counties.geojson
-│   ├── fetch_world_geometry.py    # Natural Earth countries → public/world.geojson
+│   ├── fetch_world_geometry.py    # State Dept World Polygons → public/world.geojson
 │   ├── fetch_acs_medicaid.py      # ACS C27007 → data/ACS medicaid enrollment/
 │   └── build_medicaid_enrollment.py  # ACS roll-up → public/data/medicaid_enrollment_*.json
 ├── docs/                          # ARCHITECTURE, ADRs
@@ -279,13 +279,14 @@ medicaid-dent-policy/
 - **HHS Open Data** — _Medicaid Dental Claims, 2018–2024_ (released 2026-02-08). [data.cms.gov](https://data.cms.gov/)
 - **CMS NPPES** — National Plan and Provider Enumeration System monthly download. [download.cms.gov/nppes](https://download.cms.gov/nppes/NPI_Files.html)
 - **U.S. Census TIGER/Line** — State and ZIP Code Tabulation Area polygons.
+- **U.S. Department of State LSIB / World Polygons** — Non-US country backdrop polygons, from the Office of the Geographer. [geodata.state.gov](https://geodata.state.gov/)
 - **HCPCS D-code categories** — CDT category conventions from the American Dental Association.
 
 > Every source has known caveats — small-cell suppression in HHS, snapshot-cadence gaps in NPPES, territory and address-quality edge cases in geocoding. The full ledger lives in [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md). **Read it before quoting any number from this dataset in a publication or external report.**
 
 ## License
 
-Released under the [MIT License](LICENSE). The underlying HHS, CMS, and Census datasets are public-domain U.S. Government works; please honor the individual terms of use for each source when redistributing.
+Released under the [MIT License](LICENSE). The underlying HHS, CMS, Census, and State Department datasets are public-domain U.S. Government works; please honor the individual terms of use for each source when redistributing.
 
 ---
 
