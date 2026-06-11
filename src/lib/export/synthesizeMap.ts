@@ -1,5 +1,6 @@
 import {
     geoAlbersUsa,
+    geoArea,
     geoMercator,
     geoPath,
     type GeoProjection,
@@ -7,7 +8,7 @@ import {
 } from "d3-geo";
 import { feature } from "topojson-client";
 import type { Topology, GeometryCollection } from "topojson-specification";
-import type { FeatureCollection, Feature, Geometry } from "geojson";
+import type { FeatureCollection, Feature, Geometry, Position } from "geojson";
 import type { GeoLevel, LayerKey, Metric } from "../types";
 import { CHOROPLETH_COLORS, N_STOPS, quantileStops } from "../mapStyles";
 import { LAYER_CONFIGS, COUNTY_GEOJSON } from "../../constants/map";
@@ -60,10 +61,39 @@ const LEVEL_STROKE: Record<GeoLevel, { color: string; width: number }> = {
 
 // Soft cream wash painted under the main-projection polygons so the lightest
 // quantile band (#f7f4ee) stays distinguishable from the page/canvas backdrop.
-// Without this the lowest-claim regions appear to "disappear" into the cream
-// backdrop — which is what made the ZIP3 export look empty in the first
-// rendering pass.
 const MAP_BACKDROP = "#ece7df";
+
+// ── Spherical winding repair ─────────────────────────────────
+//
+// d3-geo interprets polygon rings ON THE SPHERE: a ring wound the "wrong" way
+// is read as the entire globe minus the enclosed area. public/zip3codes.geojson
+// ships every ring in the opposite convention (geoArea reads 4π for all 896
+// features), so without rewinding each ZIP3 fills the whole canvas and the
+// last-drawn polygon's color wins — the empty-cream export bug. The county
+// GeoJSON and the us-atlas TopoJSON are already d3-wound; the rewind is
+// idempotent so it's applied to every GeoJSON-sourced level defensively.
+// (MapLibre is unaffected: GPU tile fills ignore spherical winding, which is
+// why the live ZIP3 choropleth always rendered fine.)
+function rewindRings(rings: Position[][]): Position[][] {
+    return rings.map((ring, i) => {
+        const area = geoArea({ type: "Polygon", coordinates: [ring] });
+        // Exterior rings (i=0) must enclose less than a hemisphere when read
+        // standalone; holes the opposite, since they're wound against their
+        // exterior. 2π steradians = half the sphere's 4π.
+        const wrongWay = i === 0 ? area > 2 * Math.PI : area < 2 * Math.PI;
+        return wrongWay ? [...ring].reverse() : ring;
+    });
+}
+
+function rewindForD3(geom: Geometry): Geometry {
+    if (geom.type === "Polygon") {
+        return { type: "Polygon", coordinates: rewindRings(geom.coordinates) };
+    }
+    if (geom.type === "MultiPolygon") {
+        return { type: "MultiPolygon", coordinates: geom.coordinates.map(rewindRings) };
+    }
+    return geom;
+}
 
 // ── Feature loaders (per level, cached module-scope) ──────────
 
@@ -124,7 +154,7 @@ async function getCountyFeatures(): Promise<LevelFeatures> {
         if (!geoid) continue;
         const enriched: LevelFeature = {
             type: "Feature",
-            geometry: f.geometry,
+            geometry: rewindForD3(f.geometry),
             properties: { id: geoid },
         };
         // PR municipios: 5-digit FIPS starts with "72". Routed to the inset.
@@ -139,17 +169,13 @@ async function getCountyFeatures(): Promise<LevelFeatures> {
 // coverage so they're rendered through the Mercator inset rather than dropped.
 const PR_ZIP3_PREFIXES = new Set(["006", "007", "008", "009"]);
 
-// ZIP3 prefixes that geoAlbersUsa cannot project cleanly because their
-// MultiPolygon footprint extends outside the (continental + AK + HI) coverage
-// envelope. Including these poisons `fitExtent`'s bounds computation and
-// nukes the entire continental render — verified against the shipped
-// `public/zip3codes.geojson`:
-//   969 — Guam / CNMI / Marshall Islands / Palau / Micronesia / FSM
-//         (bbox lng[144.62, 145.83], all points outside coverage).
-//   967 — Hawaii outer islands + American Samoa
-//         (bbox lat[-14.37, 22.23] — the AS tail at lat=-14 is what breaks it).
-// 960, 961, 968 actually sit in California or Honolulu metro and project fine.
-const ZIP3_OUTSIDE_ALBERS_USA = new Set(["967", "969"]);
+// ZIP3 prefixes entirely outside geoAlbersUsa's (continental + AK + HI)
+// coverage: 969 is Guam / CNMI / Marshall Islands / Palau / Micronesia / FSM,
+// clustered around lng 144°E. Every point projects to null, so the feature
+// can never render — dropped for clarity. 967 (Hawaii outer islands) stays:
+// its Maui/Kauai/Big Island polygons render through the Hawaii sub-projection
+// and its American Samoa tail is silently clipped, which is the right outcome.
+const ZIP3_OUTSIDE_ALBERS_USA = new Set(["969"]);
 
 async function getZip3Features(): Promise<LevelFeatures> {
     const BASE = import.meta.env.BASE_URL;
@@ -164,7 +190,7 @@ async function getZip3Features(): Promise<LevelFeatures> {
         if (ZIP3_OUTSIDE_ALBERS_USA.has(zip3)) continue;
         const enriched: LevelFeature = {
             type: "Feature",
-            geometry: f.geometry,
+            geometry: rewindForD3(f.geometry),
             properties: { id: zip3 },
         };
         if (PR_ZIP3_PREFIXES.has(zip3)) pr.push(enriched);
@@ -343,14 +369,9 @@ export async function renderSynthesizedMap(args: RenderArgs): Promise<HTMLCanvas
 
     // Resolve a value for every feature plus, at state level, the territory
     // chips. Stops use the same quantileStops as the live map so the export
-    // matches the on-screen ramp by construction.
-    //
-    // Implementation note: the value lookup is keyed on the SAME string the
-    // render loop dereferences (`f.properties.id`). Previously this lived in
-    // a separate Set→record pre-pass and the `valueFor[f.properties.id]`
-    // lookup silently missed for ZIP3 — every continental polygon then
-    // resolved to the lightest band. The single pass below removes the
-    // indirection.
+    // matches the on-screen ramp by construction. Values are computed inline
+    // from the level's annual cache — no intermediate lookup table to drift
+    // out of sync with the render loop.
     const featureValue = (f: LevelFeature): number => {
         const id = f.properties.id;
         const enrollees = metric === "enrollees" ? getEnrolleesFor(level, id, year) : null;
