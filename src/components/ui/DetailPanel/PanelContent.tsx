@@ -119,6 +119,7 @@ export default function PanelContent({
                 </p>
                 <button
                     onClick={onClose}
+                    aria-label="Close details"
                     style={{
                         position: "absolute",
                         top: 16,

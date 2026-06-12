@@ -22,11 +22,13 @@ import {
     getEnrolleesFor,
 } from "../../lib/dataService";
 import type { DataRecord, MonthlyDataRecord } from "../../lib/types";
+import { MOBILE_MEDIA_QUERY, COARSE_POINTER_QUERY } from "../../constants/layout";
 import {
     MAP_CENTER,
     MAP_ZOOM,
     MAP_MIN_ZOOM,
     MAP_MAX_ZOOM,
+    CONUS_BOUNDS,
     STATES_SOURCE,
     STATES_FILL,
     STATES_STROKE,
@@ -1060,24 +1062,41 @@ export default function MapContainer() {
 
             if (!mapContainer.current) return;
 
+            // Init-time only (no resize handling): the viewport class rarely
+            // changes mid-session, and re-fitting under the user would fight
+            // their pan/zoom.
+            const smallViewport = window.matchMedia(MOBILE_MEDIA_QUERY).matches;
+            const coarsePointer = window.matchMedia(COARSE_POINTER_QUERY).matches;
+
             map.current = new maplibregl.Map({
                 container: mapContainer.current,
                 style,
-                center: MAP_CENTER,
-                zoom: MAP_ZOOM,
+                // The fixed center/zoom crop both seaboards on a portrait
+                // phone — fit the continental US to the actual screen instead.
+                ...(smallViewport
+                    ? { bounds: CONUS_BOUNDS, fitBoundsOptions: { padding: 16 } }
+                    : { center: MAP_CENTER, zoom: MAP_ZOOM }),
                 minZoom: MAP_MIN_ZOOM,
                 maxZoom: MAP_MAX_ZOOM,
                 attributionControl: false,
             });
 
+            // The compass is hidden, so a two-finger rotate/pitch would leave
+            // the map askew with no affordance to reset it.
+            map.current.touchZoomRotate.disableRotation();
+            map.current.touchPitch.disable();
+
             map.current.addControl(
                 new maplibregl.AttributionControl({ compact: true }),
                 "bottom-right",
             );
-            map.current.addControl(
-                new maplibregl.NavigationControl({ showCompass: false }),
-                "bottom-right",
-            );
+            if (!coarsePointer) {
+                // Pinch-zoom covers this on touch devices; skip the buttons.
+                map.current.addControl(
+                    new maplibregl.NavigationControl({ showCompass: false }),
+                    "bottom-right",
+                );
+            }
 
             map.current.on("load", async () => {
                 if (!map.current) return;

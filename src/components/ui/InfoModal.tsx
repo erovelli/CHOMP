@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { Z_INDEX } from "../../constants/layout";
 import { INFO_MODAL_TITLE, INFO_MODAL_BODY, INFO_MODAL_NOTES } from "../../constants/infoModal";
+import { useIsMobile } from "../../lib/useMediaQuery";
 
 export default function InfoModal() {
+    const isMobile = useIsMobile();
     const [visible, setVisible] = useState(true);
 
     const close = useCallback(() => setVisible(false), []);
@@ -30,11 +32,12 @@ export default function InfoModal() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                padding: 24,
+                padding: isMobile ? 12 : 24,
             }}
         >
             <div
                 onClick={(e) => e.stopPropagation()}
+                className="modal-card"
                 style={{
                     position: "relative",
                     background: "var(--surface)",
@@ -43,7 +46,6 @@ export default function InfoModal() {
                     boxShadow: "0 8px 40px rgba(0,0,0,0.18)",
                     width: "100%",
                     maxWidth: 580,
-                    maxHeight: "85vh",
                     display: "flex",
                     flexDirection: "column",
                     overflow: "hidden",
@@ -52,7 +54,7 @@ export default function InfoModal() {
                 {/* Header */}
                 <div
                     style={{
-                        padding: "24px 24px 18px",
+                        padding: isMobile ? "18px 16px 14px" : "24px 24px 18px",
                         borderBottom: "1px solid var(--border)",
                         flexShrink: 0,
                     }}
@@ -111,7 +113,7 @@ export default function InfoModal() {
                     style={{
                         flex: 1,
                         overflowY: "auto",
-                        padding: "20px 24px 28px",
+                        padding: isMobile ? "16px 16px 20px" : "20px 24px 28px",
                         display: "flex",
                         flexDirection: "column",
                         gap: 20,
@@ -191,7 +193,10 @@ export default function InfoModal() {
                 {/* Footer */}
                 <div
                     style={{
-                        padding: "14px 24px",
+                        padding: isMobile ? "12px 16px" : "14px 24px",
+                        paddingBottom: isMobile
+                            ? "calc(12px + env(safe-area-inset-bottom, 0px))"
+                            : undefined,
                         borderTop: "1px solid var(--border)",
                         flexShrink: 0,
                         display: "flex",
@@ -201,7 +206,7 @@ export default function InfoModal() {
                     <button
                         onClick={close}
                         style={{
-                            padding: "7px 20px",
+                            padding: isMobile ? "10px 20px" : "7px 20px",
                             fontSize: 13,
                             fontWeight: 600,
                             fontFamily: "var(--ff-sans)",

@@ -3,8 +3,10 @@ import { LAYER_CONFIGS } from "../../constants/map";
 import { CHOROPLETH_COLORS } from "../../lib/mapStyles";
 import { formatStop, formatRatio } from "../../lib/formatters";
 import { Z_INDEX, PANEL_SHADOW } from "../../constants/layout";
+import { useIsMobile } from "../../lib/useMediaQuery";
 
 export default function Legend() {
+    const isMobile = useIsMobile();
     const { activeLayer, metric, colorStops } = useMapStore();
     const cfg = LAYER_CONFIGS[activeLayer];
     const fmt = metric === "enrollees" ? formatRatio : formatStop;
@@ -15,14 +17,15 @@ export default function Legend() {
         <div
             style={{
                 position: "absolute",
-                bottom: 36,
-                left: 16,
+                bottom: isMobile ? "calc(12px + env(safe-area-inset-bottom, 0px))" : 36,
+                left: isMobile ? 12 : 16,
                 zIndex: Z_INDEX.HEADER,
                 background: "var(--surface)",
                 border: "1px solid var(--border)",
                 borderRadius: 4,
-                padding: "12px 14px",
-                minWidth: 200,
+                padding: isMobile ? "8px 10px" : "12px 14px",
+                minWidth: isMobile ? 150 : 200,
+                maxWidth: isMobile ? "60vw" : undefined,
                 boxShadow: PANEL_SHADOW,
             }}
         >
@@ -64,17 +67,19 @@ export default function Legend() {
                     {hasStops ? `${fmt(colorStops[colorStops.length - 1])}+` : "—"}
                 </span>
             </div>
-            <p
-                style={{
-                    fontSize: 9,
-                    color: "var(--ink-dim)",
-                    marginTop: 8,
-                }}
-            >
-                {metric === "enrollees"
-                    ? "Capped at 95th percentile; outliers saturate"
-                    : "Scale adjusts to the current view"}
-            </p>
+            {!isMobile && (
+                <p
+                    style={{
+                        fontSize: 9,
+                        color: "var(--ink-dim)",
+                        marginTop: 8,
+                    }}
+                >
+                    {metric === "enrollees"
+                        ? "Capped at 95th percentile; outliers saturate"
+                        : "Scale adjusts to the current view"}
+                </p>
+            )}
         </div>
     );
 }
