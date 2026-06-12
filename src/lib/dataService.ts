@@ -6,7 +6,7 @@ import type {
     MonthlyDataRecord,
     EnrollmentRecord,
 } from "./types";
-import { CATEGORY_TO_KEY, DATA_PATHS } from "../constants/map";
+import { CATEGORY_TO_KEY, COUNTY_GEOJSON, DATA_PATHS } from "../constants/map";
 
 // ── Module-level caches ───────────────────────────────────────
 let stateAnnualCache: Record<string, DataRecord[]> = {};
@@ -162,6 +162,40 @@ export function getEnrolleesFor(level: GeoLevel, id: string, year: string): numb
     if (!recs) return null;
     const hit = recs.find((r) => r.year === year);
     return hit ? hit.medicaid_enrollees : null;
+}
+
+// ── County name lookup (subset-export region picker) ──────────
+// counties.geojson (the map's county source) carries a human-readable `name`
+// property ("Autauga County, AL") keyed by 5-digit GEOID. The custom-subset
+// region picker needs those labels. Parse once and memoize; the fetch hits the
+// browser cache after the map's initial county load, so it's effectively free.
+let countyNamesCache: Record<string, string> | null = null;
+let countyNamesPromise: Promise<Record<string, string>> | null = null;
+
+export async function getCountyNames(): Promise<Record<string, string>> {
+    if (countyNamesCache) return countyNamesCache;
+    if (countyNamesPromise) return countyNamesPromise;
+    const BASE = import.meta.env.BASE_URL;
+    countyNamesPromise = (async () => {
+        const res = await fetch(`${BASE}${COUNTY_GEOJSON}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const geo = (await res.json()) as {
+            features?: Array<{ id?: string; properties?: { GEOID?: string; name?: string } }>;
+        };
+        const names: Record<string, string> = {};
+        for (const f of geo.features ?? []) {
+            const id = f.properties?.GEOID ?? f.id;
+            const name = f.properties?.name;
+            if (id && name) names[id] = name;
+        }
+        countyNamesCache = names;
+        return names;
+    })().catch((err) => {
+        // Allow a later retry rather than caching the rejection forever.
+        countyNamesPromise = null;
+        throw err;
+    });
+    return countyNamesPromise;
 }
 
 // ── Value computation ─────────────────────────────────────────

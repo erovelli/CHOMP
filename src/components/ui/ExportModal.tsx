@@ -12,12 +12,19 @@ import {
 } from "../../lib/export/synthesizeMap";
 import { LAYER_CONFIGS } from "../../constants/map";
 import type { GeoLevel } from "../../lib/types";
+import SubsetExportPanel from "./SubsetExportPanel";
 
 const LEVEL_LABEL: Record<GeoLevel, string> = {
     state: "State-level",
     county: "County-level",
     zip3: "ZIP3-level",
 };
+
+type ExportTab = "current" | "custom";
+const TABS: { key: ExportTab; label: string }[] = [
+    { key: "current", label: "Current view" },
+    { key: "custom", label: "Custom dataset" },
+];
 
 interface ExportModalProps {
     open: boolean;
@@ -47,6 +54,7 @@ export default function ExportModal({ open, onClose }: ExportModalProps) {
     const [previewError, setPreviewError] = useState<string | null>(null);
     const [exporting, setExporting] = useState<null | "png" | "jpeg" | "csv">(null);
     const previewSeqRef = useRef(0);
+    const [tab, setTab] = useState<ExportTab>("current");
 
     // Escape to close.
     useEffect(() => {
@@ -69,7 +77,7 @@ export default function ExportModal({ open, onClose }: ExportModalProps) {
     // Debounced preview regeneration. Sequence guards against a late finisher
     // from a prior set of filters overwriting the current preview.
     useEffect(() => {
-        if (!open) return;
+        if (!open || tab !== "current") return;
         setPreviewing(true);
         setPreviewError(null);
         const seq = ++previewSeqRef.current;
@@ -92,7 +100,7 @@ export default function ExportModal({ open, onClose }: ExportModalProps) {
             }
         }, PREVIEW_DEBOUNCE_MS);
         return () => window.clearTimeout(handle);
-    }, [open, activeLayer, selectedYear, metric, geoLevel]);
+    }, [open, tab, activeLayer, selectedYear, metric, geoLevel]);
 
     // The CSV "current view" inherits the user's monthly/annual selection, and
     // the geo level it's currently zoomed to. PNG/JPEG are state-only by spec.
@@ -252,88 +260,133 @@ export default function ExportModal({ open, onClose }: ExportModalProps) {
                         gap: 18,
                     }}
                 >
-                    {/* Preview thumbnail */}
+                    {/* Tab switcher: keeps the existing current-view export
+                        untouched under "Current view" and adds the subset
+                        builder under "Custom dataset". */}
                     <div
                         style={{
-                            border: "1px solid var(--border)",
-                            borderRadius: 4,
+                            display: "inline-flex",
+                            gap: 2,
+                            padding: 3,
                             background: "var(--surface2)",
-                            aspectRatio: "1600 / 1000",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            overflow: "hidden",
-                            position: "relative",
+                            border: "1px solid var(--border)",
+                            borderRadius: 6,
+                            alignSelf: "flex-start",
                         }}
                     >
-                        {previewUrl && (
-                            <img
-                                src={previewUrl}
-                                alt="Synthesized map preview"
-                                style={{
-                                    width: "100%",
-                                    height: "100%",
-                                    objectFit: "contain",
-                                    opacity: previewing ? 0.6 : 1,
-                                    transition: "opacity 0.2s",
-                                }}
-                            />
-                        )}
-                        {!previewUrl && !previewError && (
-                            <span
-                                style={{
-                                    fontFamily: "var(--ff-sans)",
-                                    fontSize: 12,
-                                    color: "var(--ink-dim)",
-                                }}
-                            >
-                                Generating preview…
-                            </span>
-                        )}
-                        {previewError && (
-                            <span
-                                style={{
-                                    fontFamily: "var(--ff-sans)",
-                                    fontSize: 12,
-                                    color: "var(--ink-dim)",
-                                    padding: "0 16px",
-                                    textAlign: "center",
-                                }}
-                            >
-                                Preview unavailable: {previewError}
-                            </span>
-                        )}
+                        {TABS.map((t) => {
+                            const active = t.key === tab;
+                            return (
+                                <button
+                                    key={t.key}
+                                    onClick={() => setTab(t.key)}
+                                    style={{
+                                        padding: "5px 14px",
+                                        fontSize: 12,
+                                        fontFamily: "var(--ff-sans)",
+                                        fontWeight: active ? 600 : 500,
+                                        color: active ? "var(--accent)" : "var(--ink-mid)",
+                                        background: active ? "var(--accent-light)" : "transparent",
+                                        border: "none",
+                                        borderRadius: 4,
+                                        cursor: "pointer",
+                                        transition: "background 0.12s, color 0.12s",
+                                    }}
+                                >
+                                    {t.label}
+                                </button>
+                            );
+                        })}
                     </div>
 
-                    <div
-                        style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: 10,
-                        }}
-                    >
-                        <ExportButton
-                            label="PNG (transparent)"
-                            sub={`${LEVEL_LABEL[geoLevel]} choropleth · 1600×1000 · ${layerLabel}, ${selectedYear}`}
-                            onClick={() => handleExportImage("png")}
-                            disabled={exporting !== null}
-                            busy={exporting === "png"}
-                        />
-                        <ExportButton
-                            label="JPEG (white background)"
-                            sub={`Same as PNG with a white background, lighter weight for email/slides.`}
-                            onClick={() => handleExportImage("jpeg")}
-                            disabled={exporting !== null}
-                            busy={exporting === "jpeg"}
-                        />
-                        <ExportButton
-                            label="CSV"
-                            sub={`Per-region totals at this view · ${csvRowsHint}`}
-                            onClick={handleExportCsv}
-                            disabled={exporting !== null}
-                            busy={exporting === "csv"}
-                        />
-                    </div>
+                    {tab === "custom" && <SubsetExportPanel />}
+
+                    {tab === "current" && (
+                        <>
+                            {/* Preview thumbnail */}
+                            <div
+                                style={{
+                                    border: "1px solid var(--border)",
+                                    borderRadius: 4,
+                                    background: "var(--surface2)",
+                                    aspectRatio: "1600 / 1000",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    overflow: "hidden",
+                                    position: "relative",
+                                }}
+                            >
+                                {previewUrl && (
+                                    <img
+                                        src={previewUrl}
+                                        alt="Synthesized map preview"
+                                        style={{
+                                            width: "100%",
+                                            height: "100%",
+                                            objectFit: "contain",
+                                            opacity: previewing ? 0.6 : 1,
+                                            transition: "opacity 0.2s",
+                                        }}
+                                    />
+                                )}
+                                {!previewUrl && !previewError && (
+                                    <span
+                                        style={{
+                                            fontFamily: "var(--ff-sans)",
+                                            fontSize: 12,
+                                            color: "var(--ink-dim)",
+                                        }}
+                                    >
+                                        Generating preview…
+                                    </span>
+                                )}
+                                {previewError && (
+                                    <span
+                                        style={{
+                                            fontFamily: "var(--ff-sans)",
+                                            fontSize: 12,
+                                            color: "var(--ink-dim)",
+                                            padding: "0 16px",
+                                            textAlign: "center",
+                                        }}
+                                    >
+                                        Preview unavailable: {previewError}
+                                    </span>
+                                )}
+                            </div>
+
+                            <div
+                                style={{
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: 10,
+                                }}
+                            >
+                                <ExportButton
+                                    label="PNG (transparent)"
+                                    sub={`${LEVEL_LABEL[geoLevel]} choropleth · 1600×1000 · ${layerLabel}, ${selectedYear}`}
+                                    onClick={() => handleExportImage("png")}
+                                    disabled={exporting !== null}
+                                    busy={exporting === "png"}
+                                />
+                                <ExportButton
+                                    label="JPEG (white background)"
+                                    sub={`Same as PNG with a white background, lighter weight for email/slides.`}
+                                    onClick={() => handleExportImage("jpeg")}
+                                    disabled={exporting !== null}
+                                    busy={exporting === "jpeg"}
+                                />
+                                <ExportButton
+                                    label="CSV"
+                                    sub={`Per-region totals at this view · ${csvRowsHint}`}
+                                    onClick={handleExportCsv}
+                                    disabled={exporting !== null}
+                                    busy={exporting === "csv"}
+                                />
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
         </div>
