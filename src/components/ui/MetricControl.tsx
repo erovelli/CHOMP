@@ -1,11 +1,6 @@
 import { useMapStore } from "../../lib/store";
 import { Z_INDEX, HEADER_HEIGHT } from "../../constants/layout";
-import type { Metric } from "../../lib/types";
-
-const METRICS: { key: Metric; label: string }[] = [
-    { key: "claims", label: "Volume" },
-    { key: "enrollees", label: "Per Medicaid enrollee" },
-];
+import { METRIC_OPTIONS } from "../../constants/map";
 
 // Sits directly under the geography toggle (GeoLevelControl) at top-center.
 export default function MetricControl() {
@@ -28,7 +23,7 @@ export default function MetricControl() {
                 boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
             }}
         >
-            {METRICS.map(({ key, label }) => {
+            {METRIC_OPTIONS.map(({ key, label }) => {
                 const isActive = key === metric;
                 return (
                     <button

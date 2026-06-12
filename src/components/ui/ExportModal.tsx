@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Z_INDEX } from "../../constants/layout";
+import { useIsMobile } from "../../lib/useMediaQuery";
 import { useMapStore } from "../../lib/store";
 import { getAnnualDataForLevel, getMonthlyDataForLevel } from "../../lib/dataService";
 import { buildCsvRows, csvFilename, downloadCsv, rowsToCsv } from "../../lib/export/csv";
@@ -33,6 +34,7 @@ const PREVIEW_DEBOUNCE_MS = 300;
 const PREVIEW_SCALE = 0.25;
 
 export default function ExportModal({ open, onClose }: ExportModalProps) {
+    const isMobile = useIsMobile();
     const activeLayer = useMapStore((s) => s.activeLayer);
     const selectedYear = useMapStore((s) => s.selectedYear);
     const selectedMonth = useMapStore((s) => s.selectedMonth);
@@ -152,11 +154,12 @@ export default function ExportModal({ open, onClose }: ExportModalProps) {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                padding: 24,
+                padding: isMobile ? 12 : 24,
             }}
         >
             <div
                 onClick={(e) => e.stopPropagation()}
+                className="modal-card"
                 style={{
                     position: "relative",
                     background: "var(--surface)",
@@ -165,7 +168,6 @@ export default function ExportModal({ open, onClose }: ExportModalProps) {
                     boxShadow: "0 8px 40px rgba(0,0,0,0.18)",
                     width: "100%",
                     maxWidth: 640,
-                    maxHeight: "85vh",
                     display: "flex",
                     flexDirection: "column",
                     overflow: "hidden",
@@ -173,7 +175,7 @@ export default function ExportModal({ open, onClose }: ExportModalProps) {
             >
                 <div
                     style={{
-                        padding: "24px 24px 18px",
+                        padding: isMobile ? "18px 16px 14px" : "24px 24px 18px",
                         borderBottom: "1px solid var(--border)",
                         flexShrink: 0,
                     }}
@@ -242,7 +244,9 @@ export default function ExportModal({ open, onClose }: ExportModalProps) {
                     style={{
                         flex: 1,
                         overflowY: "auto",
-                        padding: "20px 24px 24px",
+                        padding: isMobile
+                            ? "16px 16px calc(20px + env(safe-area-inset-bottom, 0px))"
+                            : "20px 24px 24px",
                         display: "flex",
                         flexDirection: "column",
                         gap: 18,

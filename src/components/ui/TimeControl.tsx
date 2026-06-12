@@ -1,25 +1,6 @@
 import { useMapStore } from "../../lib/store";
-import { AVAILABLE_YEARS } from "../../constants/time";
+import { AVAILABLE_YEARS, MONTH_OPTIONS } from "../../constants/time";
 import { Z_INDEX, HEADER_HEIGHT } from "../../constants/layout";
-
-// "All" + 12 months. Picking a month repaints the choropleth with monthly
-// values (lazy-loads the monthly NDJSON on first use). "All" reverts to the
-// annual view.
-const MONTHS: { value: string | null; label: string }[] = [
-    { value: null, label: "All" },
-    { value: "01", label: "Jan" },
-    { value: "02", label: "Feb" },
-    { value: "03", label: "Mar" },
-    { value: "04", label: "Apr" },
-    { value: "05", label: "May" },
-    { value: "06", label: "Jun" },
-    { value: "07", label: "Jul" },
-    { value: "08", label: "Aug" },
-    { value: "09", label: "Sep" },
-    { value: "10", label: "Oct" },
-    { value: "11", label: "Nov" },
-    { value: "12", label: "Dec" },
-];
 
 // Sits below GeoLevelControl + MetricControl. Two stacked rows (year + month)
 // so the three view controls — geography, metric, time — live together.
@@ -64,7 +45,7 @@ export default function TimeControl() {
 
             {/* Month row */}
             <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
-                {MONTHS.map(({ value, label }) => {
+                {MONTH_OPTIONS.map(({ value, label }) => {
                     const isActive = value === selectedMonth;
                     return (
                         <button

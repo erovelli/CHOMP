@@ -7,7 +7,7 @@ export default function App() {
     useUrlSync();
 
     return (
-        <div style={{ position: "relative", width: "100vw", height: "100vh" }}>
+        <div className="app-shell" style={{ position: "relative", width: "100%" }}>
             <Header />
             <div
                 style={{

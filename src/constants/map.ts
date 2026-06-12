@@ -1,10 +1,17 @@
-import type { LayerKey, LayerConfig, GeoLevel } from "../lib/types";
+import type { LayerKey, LayerConfig, GeoLevel, Metric } from "../lib/types";
 
 // ── Map viewport ──────────────────────────────────────────────
 export const MAP_CENTER: [number, number] = [-98.5, 39.8];
 export const MAP_ZOOM = 4;
 export const MAP_MIN_ZOOM = 2;
 export const MAP_MAX_ZOOM = 14;
+
+// Continental-US bounds. Small screens fit the initial view to these instead
+// of MAP_CENTER/MAP_ZOOM, which crop both seaboards on a portrait phone.
+export const CONUS_BOUNDS: [[number, number], [number, number]] = [
+    [-124.9, 24.4],
+    [-66.9, 49.4],
+];
 
 // ── Tile sources & layers ─────────────────────────────────────
 export const STATES_SOURCE = "states-source";
@@ -44,6 +51,12 @@ export const GEO_LEVELS: { key: GeoLevel; label: string }[] = [
     { key: "state", label: "State" },
     { key: "county", label: "County" },
     { key: "zip3", label: "ZIP3" },
+];
+
+// ── Metric toggle (shared by MetricControl and the mobile FilterSheet) ──
+export const METRIC_OPTIONS: { key: Metric; label: string }[] = [
+    { key: "claims", label: "Volume" },
+    { key: "enrollees", label: "Per Medicaid enrollee" },
 ];
 
 // ── Data file paths (relative to BASE_URL) ────────────────────

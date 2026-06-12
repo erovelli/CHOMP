@@ -33,6 +33,38 @@ body,
     font-family: var(--ff-sans);
 }
 
+/* On touch devices, suppress the grey tap flash and the 300 ms double-tap
+   delay so the control chips feel immediate. No effect on desktop. */
+button {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* dvh (visual-viewport height) with a vh fallback for older engines.
+   A duplicate-property fallback can't be expressed in inline styles, so the
+   few height rules that need it live here as utility classes. dvh matters on
+   mobile Safari/Chrome, where 100vh includes the area behind the collapsing
+   browser toolbar and pushes bottom-anchored UI off screen. */
+.app-shell {
+    height: 100vh;
+    height: 100dvh;
+}
+
+.sheet-detail {
+    height: 60vh;
+    height: 60dvh;
+}
+
+.sheet-filters {
+    max-height: 78vh;
+    max-height: 78dvh;
+}
+
+.modal-card {
+    max-height: 85vh;
+    max-height: 85dvh;
+}
+
 /* MapLibre overrides */
 .maplibregl-ctrl-group {
     background: var(--surface) !important;
