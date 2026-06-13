@@ -94,16 +94,6 @@ export default function LayerControl() {
                             >
                                 {cfg.label}
                             </span>
-                            <span
-                                style={{
-                                    display: "block",
-                                    fontSize: 10,
-                                    color: "var(--ink-dim)",
-                                    marginTop: 1,
-                                }}
-                            >
-                                {cfg.description}
-                            </span>
                         </div>
                         <span
                             style={{

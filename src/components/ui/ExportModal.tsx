@@ -364,15 +364,14 @@ export default function ExportModal({ open, onClose }: ExportModalProps) {
                                 }}
                             >
                                 <ExportButton
-                                    label="PNG (transparent)"
+                                    label="PNG"
                                     sub={`${LEVEL_LABEL[geoLevel]} choropleth · 1600×1000 · ${layerLabel}, ${selectedYear}`}
                                     onClick={() => handleExportImage("png")}
                                     disabled={exporting !== null}
                                     busy={exporting === "png"}
                                 />
                                 <ExportButton
-                                    label="JPEG (white background)"
-                                    sub={`Same as PNG with a white background, lighter weight for email/slides.`}
+                                    label="JPEG"
                                     onClick={() => handleExportImage("jpeg")}
                                     disabled={exporting !== null}
                                     busy={exporting === "jpeg"}
@@ -395,7 +394,7 @@ export default function ExportModal({ open, onClose }: ExportModalProps) {
 
 interface ExportButtonProps {
     label: string;
-    sub: string;
+    sub?: string;
     onClick: () => void;
     disabled: boolean;
     busy: boolean;
@@ -442,17 +441,19 @@ function ExportButton({ label, sub, onClick, disabled, busy }: ExportButtonProps
                 >
                     {label}
                 </span>
-                <span
-                    style={{
-                        display: "block",
-                        fontSize: 11,
-                        color: "var(--ink-dim)",
-                        marginTop: 3,
-                        lineHeight: 1.3,
-                    }}
-                >
-                    {sub}
-                </span>
+                {sub && (
+                    <span
+                        style={{
+                            display: "block",
+                            fontSize: 11,
+                            color: "var(--ink-dim)",
+                            marginTop: 3,
+                            lineHeight: 1.3,
+                        }}
+                    >
+                        {sub}
+                    </span>
+                )}
             </div>
             <span
                 style={{
