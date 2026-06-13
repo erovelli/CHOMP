@@ -73,15 +73,6 @@ export default function LayerControl() {
                                     "transparent";
                         }}
                     >
-                        <div
-                            style={{
-                                width: 10,
-                                height: 10,
-                                borderRadius: "50%",
-                                background: cfg.accent,
-                                flexShrink: 0,
-                            }}
-                        />
                         <div style={{ flex: 1 }}>
                             <span
                                 style={{

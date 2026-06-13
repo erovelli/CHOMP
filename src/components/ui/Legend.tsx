@@ -58,12 +58,34 @@ export default function Legend() {
             </p>
             <div
                 style={{
+                    position: "relative",
                     height: 8,
                     borderRadius: 2,
                     marginBottom: 6,
                     background: scaleGradient,
+                    overflow: "hidden",
                 }}
-            />
+            >
+                {/* Hairline dividers at each interior stop. The gradient keeps
+                    the value-accurate ramp; these restore the per-band
+                    separators from the old discrete swatches, sitting exactly
+                    at each quantile break. */}
+                {hasStops &&
+                    span > 0 &&
+                    colorStops.slice(1, -1).map((stop, i) => (
+                        <div
+                            key={i}
+                            style={{
+                                position: "absolute",
+                                top: 0,
+                                bottom: 0,
+                                left: `${((stop - lo) / span) * 100}%`,
+                                width: 1,
+                                background: "var(--surface)",
+                            }}
+                        />
+                    ))}
+            </div>
             <div
                 style={{
                     display: "flex",
