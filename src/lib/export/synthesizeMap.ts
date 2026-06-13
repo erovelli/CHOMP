@@ -48,7 +48,10 @@ const TERRITORY_CHIPS = {
 const TERRITORY_POSTALS: readonly string[] = ["GU", "MP", "VI"];
 
 const FOOTER_TEXT = "medicaid-dent-policy · choropleth synthesized via d3-geo";
+const SOURCE_TEXT =
+    "Data: HHS Medicaid Dental Claims 2018–2024 · CMS NPPES · ACS C27007 · U.S. Census TIGER/Line";
 const FOOTER_X = 1568;
+const SOURCE_Y = 954;
 const FOOTER_Y = 970;
 
 // Per-level visual tuning. Counties and ZIP3s are denser than states, so the
@@ -304,6 +307,8 @@ function drawFooter(ctx: CanvasRenderingContext2D): void {
     ctx.fillStyle = "#9a948d";
     ctx.font = "400 11px ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif";
     ctx.textAlign = "right";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText(SOURCE_TEXT, FOOTER_X, SOURCE_Y);
     ctx.fillText(FOOTER_TEXT, FOOTER_X, FOOTER_Y);
 }
 

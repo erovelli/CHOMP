@@ -13,6 +13,21 @@ export default function Legend() {
     const unit = metric === "enrollees" ? "Claims / Medicaid enrollee" : cfg.unit;
     const hasStops = colorStops.length > 0;
 
+    // Mirror the map's `interpolate(["linear"], value, …)` paint expression:
+    // position each palette color at its stop's place on a linear value axis,
+    // so the color at any point in the key is the color the map actually paints
+    // for that value. The stops are quantile breaks (unevenly spaced in value),
+    // so the previous even-width swatches misrepresented where each color falls.
+    const lo = hasStops ? colorStops[0] : 0;
+    const hi = hasStops ? colorStops[colorStops.length - 1] : 0;
+    const span = hi - lo;
+    const scaleGradient =
+        hasStops && span > 0
+            ? `linear-gradient(to right, ${CHOROPLETH_COLORS.map(
+                  (c, i) => `${c} ${(((colorStops[i] - lo) / span) * 100).toFixed(2)}%`,
+              ).join(", ")})`
+            : `linear-gradient(to right, ${CHOROPLETH_COLORS.join(", ")})`;
+
     return (
         <div
             style={{
@@ -43,17 +58,12 @@ export default function Legend() {
             </p>
             <div
                 style={{
-                    display: "flex",
                     height: 8,
                     borderRadius: 2,
-                    overflow: "hidden",
                     marginBottom: 6,
+                    background: scaleGradient,
                 }}
-            >
-                {CHOROPLETH_COLORS.map((color) => (
-                    <div key={color} style={{ flex: 1, background: color }} />
-                ))}
-            </div>
+            />
             <div
                 style={{
                     display: "flex",
