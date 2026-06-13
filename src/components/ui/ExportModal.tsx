@@ -7,6 +7,9 @@ import { buildCsvRows, csvFilename, downloadCsv, rowsToCsv } from "../../lib/exp
 import {
     canvasToBlob,
     downloadBlob,
+    EXPORT_H,
+    EXPORT_SCALE,
+    EXPORT_W,
     imageFilename,
     renderSynthesizedMap,
 } from "../../lib/export/synthesizeMap";
@@ -135,6 +138,7 @@ export default function ExportModal({ open, onClose }: ExportModalProps) {
                     year: selectedYear,
                     metric,
                     level: geoLevel,
+                    scale: EXPORT_SCALE,
                 });
                 const blob = await canvasToBlob(canvas, format);
                 downloadBlob(imageFilename(activeLayer, selectedYear, geoLevel, format), blob);
@@ -365,7 +369,7 @@ export default function ExportModal({ open, onClose }: ExportModalProps) {
                             >
                                 <ExportButton
                                     label="PNG"
-                                    sub={`${LEVEL_LABEL[geoLevel]} choropleth · 1600×1000 · ${layerLabel}, ${selectedYear}`}
+                                    sub={`${LEVEL_LABEL[geoLevel]} choropleth · ${EXPORT_W}×${EXPORT_H} · ${layerLabel}, ${selectedYear}`}
                                     onClick={() => handleExportImage("png")}
                                     disabled={exporting !== null}
                                     busy={exporting === "png"}

@@ -25,6 +25,17 @@ import { getAnnualDataForLevel, getEnrolleesFor, getValueForRegion } from "../da
 const REFERENCE_W = 1600;
 const REFERENCE_H = 1000;
 
+// Highest-resolution downloadable export. The whole figure (d3-geo polygons +
+// canvas text) is vector-redrawn through a single ctx.scale(s, s), so a larger
+// scale yields a genuinely sharper image rather than an upscale of pixels.
+// 3× is the largest whole multiple that stays under the most conservative
+// cross-browser canvas-area ceiling — Safari (desktop & iOS) caps a canvas at
+// 2^24 ≈ 16.7 MP, above which toBlob silently returns a blank/null result.
+// 1600×1000 × 3 = 4800×3000 = 14.4 MP, comfortably below that cap.
+export const EXPORT_SCALE = 3;
+export const EXPORT_W = REFERENCE_W * EXPORT_SCALE;
+export const EXPORT_H = REFERENCE_H * EXPORT_SCALE;
+
 const TITLE_X = 32;
 const TITLE_Y = 48;
 const SUBTITLE_Y = 78;
