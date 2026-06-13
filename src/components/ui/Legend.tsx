@@ -13,21 +13,6 @@ export default function Legend() {
     const unit = metric === "enrollees" ? "Claims / Medicaid enrollee" : cfg.unit;
     const hasStops = colorStops.length > 0;
 
-    // Mirror the map's `interpolate(["linear"], value, …)` paint expression:
-    // position each palette color at its stop's place on a linear value axis,
-    // so the color at any point in the key is the color the map actually paints
-    // for that value. The stops are quantile breaks (unevenly spaced in value),
-    // so the previous even-width swatches misrepresented where each color falls.
-    const lo = hasStops ? colorStops[0] : 0;
-    const hi = hasStops ? colorStops[colorStops.length - 1] : 0;
-    const span = hi - lo;
-    const scaleGradient =
-        hasStops && span > 0
-            ? `linear-gradient(to right, ${CHOROPLETH_COLORS.map(
-                  (c, i) => `${c} ${(((colorStops[i] - lo) / span) * 100).toFixed(2)}%`,
-              ).join(", ")})`
-            : `linear-gradient(to right, ${CHOROPLETH_COLORS.join(", ")})`;
-
     return (
         <div
             style={{
@@ -58,33 +43,16 @@ export default function Legend() {
             </p>
             <div
                 style={{
-                    position: "relative",
+                    display: "flex",
                     height: 8,
                     borderRadius: 2,
-                    marginBottom: 6,
-                    background: scaleGradient,
                     overflow: "hidden",
+                    marginBottom: 6,
                 }}
             >
-                {/* Hairline dividers at each interior stop. The gradient keeps
-                    the value-accurate ramp; these restore the per-band
-                    separators from the old discrete swatches, sitting exactly
-                    at each quantile break. */}
-                {hasStops &&
-                    span > 0 &&
-                    colorStops.slice(1, -1).map((stop, i) => (
-                        <div
-                            key={i}
-                            style={{
-                                position: "absolute",
-                                top: 0,
-                                bottom: 0,
-                                left: `${((stop - lo) / span) * 100}%`,
-                                width: 1,
-                                background: "var(--surface)",
-                            }}
-                        />
-                    ))}
+                {CHOROPLETH_COLORS.map((color) => (
+                    <div key={color} style={{ flex: 1, background: color }} />
+                ))}
             </div>
             <div
                 style={{
