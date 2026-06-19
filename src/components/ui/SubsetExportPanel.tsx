@@ -48,12 +48,12 @@ function toggle<T>(set: Set<T>, value: T): Set<T> {
 
 export default function SubsetExportPanel() {
     const setMonthlyDataLoaded = useMapStore((s) => s.setMonthlyDataLoaded);
+    const monthlyDataLoaded = useMapStore((s) => s.monthlyDataLoaded);
 
     const [level, setLevel] = useState<GeoLevel>("state");
     const [grain, setGrain] = useState<Grain>("annual");
 
     const [selectedYears, setSelectedYears] = useState<Set<string>>(new Set(AVAILABLE_YEARS));
-    const [availableMonths, setAvailableMonths] = useState<string[]>([]);
     const [selectedMonths, setSelectedMonths] = useState<Set<string>>(new Set());
 
     const [selectedCategories, setSelectedCategories] = useState<Set<LayerKey>>(
@@ -65,7 +65,6 @@ export default function SubsetExportPanel() {
     const [regionSearch, setRegionSearch] = useState("");
     const [countyNames, setCountyNames] = useState<Record<string, string>>({});
 
-    const [monthlyLoading, setMonthlyLoading] = useState(false);
     const [monthlyError, setMonthlyError] = useState<string | null>(null);
     const [generating, setGenerating] = useState(false);
     const [confirmLarge, setConfirmLarge] = useState(false);
@@ -77,11 +76,50 @@ export default function SubsetExportPanel() {
         return Object.keys(getAnnualDataForLevel(level)).sort();
     }, [level]);
 
+    // Available months are a synchronous read off the monthly cache once it has
+    // loaded, so derive them rather than mirroring into state from the effect
+    // below. Re-derives when the monthly dataset finishes loading.
+    const availableMonths = useMemo(() => {
+        if (grain !== "monthly" || !monthlyDataLoaded) return [];
+        const ready = getMonthlyDataForLevel(level);
+        return Object.keys(ready).length > 0 ? availableMonthlyPeriods(ready) : [];
+    }, [grain, level, monthlyDataLoaded]);
+
+    // We're fetching the monthly dataset iff the monthly grain is active, the
+    // data hasn't arrived yet (no months derived), and the last attempt didn't
+    // error — so loading is derivable rather than a mirrored state flag.
+    const monthlyLoading =
+        grain === "monthly" && availableMonths.length === 0 && monthlyError === null;
+
     // Reset the region selection (default: all) whenever the level changes.
-    useEffect(() => {
+    // Handled during render off the change in `regionUniverse` (the documented
+    // alternative to a setState-in-effect).
+    const [prevRegionUniverse, setPrevRegionUniverse] = useState(regionUniverse);
+    if (prevRegionUniverse !== regionUniverse) {
+        setPrevRegionUniverse(regionUniverse);
         setSelectedRegions(new Set(regionUniverse));
         setRegionSearch("");
-    }, [regionUniverse]);
+    }
+
+    // Default the month selection to "all" the first time months become
+    // available (and not again after, so a user's narrowing survives). Done
+    // during render off the change in `availableMonths`, same as above.
+    const [prevAvailableMonths, setPrevAvailableMonths] = useState(availableMonths);
+    if (prevAvailableMonths !== availableMonths) {
+        setPrevAvailableMonths(availableMonths);
+        if (availableMonths.length > 0 && selectedMonths.size === 0) {
+            setSelectedMonths(new Set(availableMonths));
+        }
+    }
+
+    // Clear a stale monthly-load error when the grain or level changes, so a
+    // fresh attempt shows the loading state again instead of the old error.
+    const monthlyKey = `${grain}:${level}`;
+    const [prevMonthlyKey, setPrevMonthlyKey] = useState(monthlyKey);
+    if (prevMonthlyKey !== monthlyKey) {
+        setPrevMonthlyKey(monthlyKey);
+        if (monthlyError !== null) setMonthlyError(null);
+    }
 
     // County labels for the picker — lazy, memoized in dataService.
     useEffect(() => {
@@ -99,38 +137,24 @@ export default function SubsetExportPanel() {
         };
     }, [level]);
 
-    // Monthly grain needs the lazy ~16 MB monthly dataset. Load once, then
-    // default to every available month.
+    // Monthly grain needs the lazy ~16 MB monthly dataset. Kick off the load
+    // once if it hasn't arrived; loading/error are surfaced via the derived
+    // `monthlyLoading` above and `monthlyError` state, so the only state this
+    // effect drives is the post-fetch external-system signal inside `.then`.
     useEffect(() => {
-        if (grain !== "monthly") return;
+        if (grain !== "monthly" || monthlyDataLoaded) return;
         let cancelled = false;
-        const ready = getMonthlyDataForLevel(level);
-        if (Object.keys(ready).length > 0) {
-            const months = availableMonthlyPeriods(ready);
-            setAvailableMonths(months);
-            setSelectedMonths((prev) => (prev.size ? prev : new Set(months)));
-            return;
-        }
-        setMonthlyLoading(true);
-        setMonthlyError(null);
         loadMonthlyData()
             .then(() => {
-                if (cancelled) return;
-                setMonthlyDataLoaded(true);
-                const months = availableMonthlyPeriods(getMonthlyDataForLevel(level));
-                setAvailableMonths(months);
-                setSelectedMonths(new Set(months));
+                if (!cancelled) setMonthlyDataLoaded(true);
             })
             .catch((err) => {
                 if (!cancelled) setMonthlyError(err instanceof Error ? err.message : String(err));
-            })
-            .finally(() => {
-                if (!cancelled) setMonthlyLoading(false);
             });
         return () => {
             cancelled = true;
         };
-    }, [grain, level, setMonthlyDataLoaded]);
+    }, [grain, monthlyDataLoaded, setMonthlyDataLoaded]);
 
     const regionLabel = useCallback(
         (id: string) => {

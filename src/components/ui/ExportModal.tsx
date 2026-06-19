@@ -69,22 +69,29 @@ export default function ExportModal({ open, onClose }: ExportModalProps) {
         return () => window.removeEventListener("keydown", onKey);
     }, [open, onClose]);
 
-    // Reset preview when modal opens fresh so a stale dataURL doesn't flash.
-    useEffect(() => {
+    // Reset preview when the modal closes so a stale dataURL doesn't flash on
+    // the next open. Done during render off the open→closed transition (the
+    // documented alternative to a setState-in-effect) rather than in an effect.
+    const [wasOpen, setWasOpen] = useState(open);
+    if (wasOpen !== open) {
+        setWasOpen(open);
         if (!open) {
             setPreviewUrl(null);
             setPreviewError(null);
         }
-    }, [open]);
+    }
 
     // Debounced preview regeneration. Sequence guards against a late finisher
     // from a prior set of filters overwriting the current preview.
     useEffect(() => {
         if (!open || tab !== "current") return;
-        setPreviewing(true);
-        setPreviewError(null);
         const seq = ++previewSeqRef.current;
         const handle = window.setTimeout(async () => {
+            // Flip into the "previewing" state inside the debounced callback
+            // rather than synchronously in the effect body, so a rapid burst of
+            // filter changes doesn't thrash render state before the render runs.
+            setPreviewing(true);
+            setPreviewError(null);
             try {
                 const canvas = await renderSynthesizedMap({
                     activeLayer,

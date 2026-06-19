@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { useMapStore } from "../../../lib/store";
 import type { RegionDetail, MonthlyDataRecord } from "../../../lib/types";
 import { getMonthlyRecords, getEnrolleesFor } from "../../../lib/dataService";
@@ -21,14 +21,12 @@ export default function PanelContent({
     const isMonthly = selectedMonth !== null;
     const yearMonth = isMonthly ? `${selectedYear}-${selectedMonth}` : null;
 
-    const [monthlyRecords, setMonthlyRecords] = useState<MonthlyDataRecord[]>([]);
-    useEffect(() => {
-        if (isMonthly && monthlyDataLoaded) {
-            setMonthlyRecords(getMonthlyRecords(detail.id, detail.level));
-        } else {
-            setMonthlyRecords([]);
-        }
-    }, [detail.id, detail.level, isMonthly, monthlyDataLoaded]);
+    // Monthly records are a synchronous lookup from the already-loaded cache, so
+    // derive them during render rather than mirroring into state via an effect.
+    const monthlyRecords = useMemo<MonthlyDataRecord[]>(
+        () => (isMonthly && monthlyDataLoaded ? getMonthlyRecords(detail.id, detail.level) : []),
+        [detail.id, detail.level, isMonthly, monthlyDataLoaded],
+    );
 
     const loadingMonthly = isMonthly && !monthlyDataLoaded;
 
