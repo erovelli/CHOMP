@@ -3,7 +3,11 @@ import { useSheetDrag } from "../../lib/useSheetDrag";
 // Grab handle for bottom sheets: dragging it resizes the sheet between
 // SHEET_MIN_HEIGHT and most of the viewport. Purely a resize affordance —
 // dismissing stays on the backdrop / Done / ✕ paths.
-export default function SheetHandle({ sheetRef }: { sheetRef: React.RefObject<HTMLDivElement> }) {
+export default function SheetHandle({
+    sheetRef,
+}: {
+    sheetRef: React.RefObject<HTMLDivElement | null>;
+}) {
     const dragHandlers = useSheetDrag(sheetRef);
 
     return (

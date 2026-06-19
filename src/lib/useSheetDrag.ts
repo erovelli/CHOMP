@@ -14,7 +14,7 @@ interface DragState {
  * SHEET_MIN_HEIGHT and SHEET_MAX_VIEWPORT_FRACTION of the viewport. Dragging
  * never dismisses the sheet — closing stays on the backdrop/Done/Escape paths.
  */
-export function useSheetDrag(sheetRef: React.RefObject<HTMLDivElement>) {
+export function useSheetDrag(sheetRef: React.RefObject<HTMLDivElement | null>) {
     const dragRef = useRef<DragState | null>(null);
 
     // If the viewport shrinks (rotation, split view) while a dragged height is
