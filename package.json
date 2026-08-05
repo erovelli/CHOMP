@@ -31,6 +31,11 @@
       "prettier --write"
     ]
   },
+  "overrides": {
+    "esbuild": "0.28.1",
+    "tmp": "0.2.7",
+    "uuid": "11.1.1"
+  },
   "dependencies": {
     "d3-geo": "^3.1.1",
     "maplibre-gl": "^5.19.0",
@@ -43,6 +48,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@lhci/cli": "0.15.1",
     "@types/d3-geo": "^3.1.0",
     "@types/papaparse": "^5.3.15",
     "@types/topojson-client": "^3.1.5",

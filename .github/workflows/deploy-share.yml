@@ -1,0 +1,367 @@
+# Deploy to Harvard SHARE (cPanel shared hosting) over SSH.
+#
+# Target: https://molar.share.library.harvard.edu, served from the domain root.
+# The cPanel account name and docroot are NOT recorded here — they are sensitive and
+# live only in the SSH_HOST / SSH_PATH secrets. Do not paste either into this file,
+# into commit messages, or into log output. The public hostname above is fine.
+# SSH_KNOWN_HOSTS contains the host key entry copied from a trusted, out-of-band
+# source; never replace it with the output of ssh-keyscan from inside this workflow.
+#
+# Non-obvious constraints, all of which cost real debugging time:
+#
+#   * SSH_HOST is stored as "user@host" — the account name is already inside it.
+#     Do not prepend a user. The known_hosts lookup strips everything up to and
+#     including the "@". Because the secret's value is the full "user@host" string,
+#     GitHub only masks it in logs when it appears in full; the bare account name on
+#     its own would print in the clear, so the steps below never emit it.
+#
+#   * A cPanel deploy key must be AUTHORIZED under SSH Access > Manage SSH Keys, not
+#     merely uploaded. An unauthorized key fails with exactly the same "Permission
+#     denied (publickey)" as a wrong username, so the error message will not tell you
+#     which of the two is wrong. Check authorization first.
+#
+#   * .htaccess on the server is server-managed and edited by hand there. It holds the
+#     cPanel ea-php82 handler block, "DirectoryIndex index.html default.html", and the
+#     hand-installed gzip-rewrite and pmtiles rules. It is excluded from the rsync and
+#     must never be overwritten from the repo.
+#
+#   * BASE_PATH is "/" here (domain root) and "/medicaid-dent-policy/" for GitHub
+#     Pages, which is also the vite.config.ts fallback. A plain `npm run build` here
+#     silently produces a Pages-based site where every asset 404s, so the build is
+#     asserted below rather than trusted.
+name: Deploy to SHARE
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run rsync with --dry-run (no files written, no live verification)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: share-deploy
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  build:
+    name: Build for SHARE
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build
+        env:
+          BASE_PATH: /
+          VITE_PROTOMAPS_API_KEY: ${{ secrets.VITE_PROTOMAPS_API_KEY }}
+        run: npm run build
+
+      - name: Assert base path is the domain root
+        run: |
+          set -euo pipefail
+
+          if ! grep -q 'src="/assets/' dist/index.html; then
+            echo "::error::dist/index.html does not reference /assets/ — BASE_PATH did not take effect."
+            echo "Script tags found:"
+            grep -o '<script[^>]*>' dist/index.html || true
+            exit 1
+          fi
+
+          # Match the slash-delimited base path, not the bare repo name: the export
+          # footer in src/lib/export/synthesizeMap.ts contains the literal string
+          # "medicaid-dent-policy · …", so a bare grep would fail every correct build.
+          # A real leak always emits "/medicaid-dent-policy/" (fetch URLs, pmtiles://
+          # URLs, the modulepreload prefix).
+          if grep -rq '/medicaid-dent-policy/' dist/assets/; then
+            echo "::error::Pages base path leaked into dist/assets/ — every asset would 404 on SHARE."
+            grep -rl '/medicaid-dent-policy/' dist/assets/ || true
+            exit 1
+          fi
+
+          echo "Base path OK: dist/index.html references /assets/ and no Pages path remains."
+
+      # Must run after the build: Vite wipes dist/, so pre-existing .gz files are lost,
+      # and gzipping beforehand would leave .gz siblings whose content hashes no longer
+      # match the rebuilt assets. Both the original and the .gz ship; the hand-installed
+      # .htaccess rewrite lets Apache serve the .gz to clients that accept gzip.
+      - name: Pre-compress text assets
+        run: |
+          set -euo pipefail
+          find dist \
+            -type f \
+            -size +4k \
+            \( -name '*.json' -o -name '*.geojson' -o -name '*.ndjson' \
+               -o -name '*.js' -o -name '*.css' -o -name '*.svg' \) \
+            -print0 \
+            | xargs -0 -P 4 -n 1 gzip -9 -k -f
+          echo "Compressed $(find dist -name '*.gz' -type f | wc -l) files."
+          du -sh dist
+
+      - name: Upload deployment artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: share-dist-${{ github.sha }}
+          path: dist
+          retention-days: 1
+          if-no-files-found: error
+
+  deploy:
+    name: Deploy to SHARE
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: share
+    permissions:
+      actions: read
+
+    steps:
+      # This privileged job never checks out application code or runs package scripts.
+      # It only validates and transfers the artifact produced by the unprivileged job.
+      - name: Download deployment artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: share-dist-${{ github.sha }}
+          path: dist
+
+      - name: Validate deployment artifact
+        run: |
+          set -euo pipefail
+          [ -f dist/index.html ] || { echo "::error::Deployment artifact has no index.html."; exit 1; }
+
+          if find dist -type l -print -quit | grep -q .; then
+            echo "::error::Deployment artifact contains a symbolic link; refusing to deploy it."
+            exit 1
+          fi
+
+          echo "Deployment artifact contains only regular files and directories."
+
+      - name: Validate deployment configuration
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PATH: ${{ secrets.SSH_PATH }}
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$SSH_HOST" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9.-]*$ ]]; then
+            echo "::error::SSH_HOST must use the form user@host with no shell metacharacters."
+            exit 1
+          fi
+
+          if [[ ! "$SSH_PORT" =~ ^[0-9]+$ ]] || (( 10#$SSH_PORT < 1 || 10#$SSH_PORT > 65535 )); then
+            echo "::error::SSH_PORT must be an integer between 1 and 65535."
+            exit 1
+          fi
+
+          if [[ ! "$SSH_PATH" =~ ^/[A-Za-z0-9._/-]+$ ]] \
+            || [ "$SSH_PATH" = "/" ] \
+            || [[ "$SSH_PATH" == */../* ]] \
+            || [[ "$SSH_PATH" == */.. ]] \
+            || [[ "$SSH_PATH" == */./* ]]; then
+            echo "::error::SSH_PATH must be a non-root absolute path with no shell metacharacters."
+            exit 1
+          fi
+
+          echo "Deployment configuration format is valid."
+
+      - name: Install pinned host key
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          # SSH_HOST is stored as user@host; known_hosts contains only the host part.
+          host="${SSH_HOST##*@}"
+          known_host="$host"
+          if [ "$SSH_PORT" != "22" ]; then
+            known_host="[$host]:$SSH_PORT"
+          fi
+
+          # Normalize secrets pasted with CRLFs, then confirm the trusted material has
+          # an entry for exactly the host and port this job is about to contact. This
+          # check also supports hashed known_hosts entries.
+          printf '%s\n' "$SSH_KNOWN_HOSTS" | tr -d '\r' > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+          if ! ssh-keygen -F "$known_host" -f ~/.ssh/known_hosts >/dev/null; then
+            echo "::error::SSH_KNOWN_HOSTS has no trusted key for the configured SSH host and port."
+            exit 1
+          fi
+          echo "Trusted host key installed."
+
+      # The key is 2048-bit RSA and may carry a passphrase. ssh-add reads encrypted
+      # key passphrases from a TTY or SSH_ASKPASS, never stdin, so use a tiny askpass
+      # helper whose only secret input is the inherited SSH_PASSPHRASE environment
+      # variable. The helper and private key are removed even if ssh-add fails.
+      - name: Load deploy key into ssh-agent
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_PASSPHRASE: ${{ secrets.SSH_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+
+          [ -n "$SSH_PRIVATE_KEY" ] || { echo "::error::SSH_PRIVATE_KEY is empty."; exit 1; }
+
+          deploy_key="$RUNNER_TEMP/share_deploy_key"
+          askpass="$RUNNER_TEMP/share_ssh_askpass"
+          cleanup() {
+            rm -f -- "$deploy_key" "$askpass"
+          }
+          trap cleanup EXIT
+
+          # Keys pasted into the GitHub secrets UI often carry CRLF line endings;
+          # ssh-add rejects those with an unhelpful "invalid format" error.
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > "$deploy_key"
+          chmod 600 "$deploy_key"
+
+          printf '%s\n' \
+            '#!/bin/sh' \
+            'printf "%s\n" "$SSH_PASSPHRASE"' \
+            > "$askpass"
+          chmod 700 "$askpass"
+
+          eval "$(ssh-agent -s)" >/dev/null
+          DISPLAY=:0 SSH_ASKPASS="$askpass" SSH_ASKPASS_REQUIRE=force \
+            ssh-add "$deploy_key" </dev/null
+
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> "$GITHUB_ENV"
+
+          ssh-add -l >/dev/null
+          echo "Deploy key loaded."
+
+      - name: Preflight
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PATH: ${{ secrets.SSH_PATH }}
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+        run: |
+          set -euo pipefail
+          ssh -p "$SSH_PORT" \
+            -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=30 \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o GlobalKnownHostsFile=/dev/null \
+            "$SSH_HOST" "SSH_PATH='$SSH_PATH' bash -s" <<'EOF'
+          set -euo pipefail
+
+          echo "Authenticated OK"
+
+          [ -d "$SSH_PATH" ] || { echo "::error::Docroot does not exist (see SSH_PATH)."; exit 1; }
+          echo "Docroot OK"
+
+          # .htaccess is excluded from the sync, so if it ever vanishes the deploy would
+          # succeed while the live site breaks (no DirectoryIndex, no gzip/pmtiles rules).
+          [ -f "$SSH_PATH/.htaccess" ] || { echo "::error::.htaccess is missing from the docroot. It is server-managed and excluded from the sync; restore it on the server before deploying."; exit 1; }
+          echo ".htaccess OK"
+
+          command -v rsync >/dev/null || { echo "::error::rsync not found on the server."; exit 1; }
+          echo "rsync OK"
+          EOF
+
+      - name: Rsync to SHARE
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PATH: ${{ secrets.SSH_PATH }}
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+        run: |
+          set -euo pipefail
+
+          dry_run_flag=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            dry_run_flag="--dry-run"
+            echo "::notice::Dry run — no files will be written."
+          fi
+
+          rsync -rlv --delete --partial --stats --timeout=120 \
+            --compress --skip-compress=gz/pmtiles/png/jpg/jpeg/webp/woff/woff2 \
+            $dry_run_flag \
+            -e "ssh -p $SSH_PORT -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=30 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts -o GlobalKnownHostsFile=/dev/null" \
+            --exclude='.htaccess' \
+            --exclude='.well-known/' \
+            --exclude='cgi-bin/' \
+            --exclude='.cpanel/' \
+            --exclude='_errorpages/' \
+            --exclude='.git*' \
+            dist/ "$SSH_HOST:$SSH_PATH/"
+
+      # Static files on Apache are live the instant rsync finishes — no propagation wait.
+      - name: Verify live site
+        if: ${{ inputs.dry_run != true }}
+        env:
+          SITE_URL: https://molar.share.library.harvard.edu
+        run: |
+          set -euo pipefail
+          failed=0
+
+          echo "--- GET / ---"
+          status=$(curl -sS -o /dev/null -w '%{http_code}' --retry 3 --retry-delay 5 "$SITE_URL/")
+          if [ "$status" = "200" ]; then
+            echo "OK: / returned 200"
+          else
+            echo "::error::GET / returned $status, expected 200."
+            failed=1
+          fi
+
+          echo "--- entry bundle matches this build ---"
+          bundle=$(grep -o 'assets/index-[A-Za-z0-9_-]*\.js' dist/index.html | head -n1)
+          if [ -z "$bundle" ]; then
+            echo "::error::Could not extract assets/index-<hash>.js from local dist/index.html."
+            failed=1
+          elif curl -sS "$SITE_URL/" | grep -q "$bundle"; then
+            echo "OK: live index.html references $bundle"
+          else
+            echo "::error::Live index.html does not reference $bundle — the deploy may not have landed."
+            failed=1
+          fi
+
+          echo "--- gzip rewrite ---"
+          encoding=$(curl -sS -o /dev/null -D - -H 'Accept-Encoding: gzip' \
+            "$SITE_URL/data/medicaid_enrollment_state.json" \
+            | tr -d '\r' | grep -i '^content-encoding:' | awk '{print $2}' || true)
+          if [ "$encoding" = "gzip" ]; then
+            echo "OK: gzip rewrite is serving pre-compressed assets"
+          else
+            # Warn only: without the rewrite the site still works, just uncompressed.
+            echo "::warning::/data/medicaid_enrollment_state.json came back with content-encoding '${encoding:-none}', expected gzip. Check the .htaccess gzip rewrite."
+          fi
+
+          echo "--- range requests (PMTiles) ---"
+          status=$(curl -sS -o /dev/null -w '%{http_code}' -r 0-99 "$SITE_URL/states.pmtiles")
+          if [ "$status" = "206" ]; then
+            echo "OK: /states.pmtiles returned 206 for a range request"
+          else
+            # Hard failure: PMTiles needs range requests; the map will not render without them.
+            echo "::error::Range request to /states.pmtiles returned $status, expected 206. PMTiles requires range requests — the map will not render."
+            failed=1
+          fi
+
+          exit $failed
+
+      - name: Unload deploy key
+        if: always()
+        run: ssh-add -D || true
