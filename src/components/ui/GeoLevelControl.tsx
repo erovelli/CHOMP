@@ -7,19 +7,15 @@ export default function GeoLevelControl() {
 
     return (
         <div
+            className="chomp-segmented chomp-segmented--row"
+            role="group"
+            aria-label="Geography"
             style={{
                 position: "absolute",
                 top: HEADER_HEIGHT + 16,
                 left: "50%",
                 transform: "translateX(-50%)",
                 zIndex: Z_INDEX.HEADER,
-                display: "flex",
-                gap: 2,
-                padding: 3,
-                background: "var(--surface)",
-                border: "1px solid var(--border)",
-                borderRadius: 6,
-                boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
             }}
         >
             {GEO_LEVELS.map(({ key, label }) => {
@@ -28,17 +24,8 @@ export default function GeoLevelControl() {
                     <button
                         key={key}
                         onClick={() => setGeoLevel(key)}
-                        style={{
-                            padding: "5px 14px",
-                            fontSize: 12,
-                            fontWeight: isActive ? 600 : 500,
-                            color: isActive ? "var(--accent)" : "var(--ink-mid)",
-                            background: isActive ? "var(--accent-light)" : "transparent",
-                            border: "none",
-                            borderRadius: 4,
-                            cursor: "pointer",
-                            transition: "background 0.12s, color 0.12s",
-                        }}
+                        className="chomp-segmented__btn"
+                        aria-pressed={isActive}
                     >
                         {label}
                     </button>

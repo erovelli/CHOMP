@@ -11,31 +11,24 @@ export default function TimeControl() {
 
     return (
         <div
+            className="chomp-segmented chomp-segmented--stack"
             style={{
                 position: "absolute",
                 top: HEADER_HEIGHT + 16 + 80,
                 left: "50%",
                 transform: "translateX(-50%)",
                 zIndex: Z_INDEX.HEADER,
-                display: "flex",
-                flexDirection: "column",
-                gap: 4,
-                padding: 4,
-                background: "var(--surface)",
-                border: "1px solid var(--border)",
-                borderRadius: 6,
-                boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
             }}
         >
-            {/* Year row */}
-            <div style={{ display: "flex", gap: 2 }}>
+            <div style={{ display: "flex", gap: 1 }} role="group" aria-label="Year">
                 {AVAILABLE_YEARS.map((year) => {
                     const isActive = year === selectedYear;
                     return (
                         <button
                             key={year}
                             onClick={() => setSelectedYear(year)}
-                            style={buttonStyle(isActive, 11)}
+                            className="chomp-segmented__btn chomp-segmented__btn--compact"
+                            aria-pressed={isActive}
                         >
                             {year}
                         </button>
@@ -43,15 +36,19 @@ export default function TimeControl() {
                 })}
             </div>
 
-            {/* Month row */}
-            <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
+            <div
+                style={{ display: "flex", gap: 1, alignItems: "center" }}
+                role="group"
+                aria-label="Month"
+            >
                 {MONTH_OPTIONS.map(({ value, label }) => {
                     const isActive = value === selectedMonth;
                     return (
                         <button
                             key={label}
                             onClick={() => setSelectedMonth(value)}
-                            style={buttonStyle(isActive, 7)}
+                            className="chomp-segmented__btn chomp-segmented__btn--compact"
+                            aria-pressed={isActive}
                         >
                             {label}
                         </button>
@@ -60,7 +57,7 @@ export default function TimeControl() {
                 {loadingMonthly && (
                     <span
                         style={{
-                            marginLeft: 6,
+                            marginLeft: 8,
                             fontSize: 10,
                             color: "var(--ink-dim)",
                             whiteSpace: "nowrap",
@@ -72,18 +69,4 @@ export default function TimeControl() {
             </div>
         </div>
     );
-}
-
-function buttonStyle(isActive: boolean, padX: number): React.CSSProperties {
-    return {
-        padding: `4px ${padX}px`,
-        fontSize: 11,
-        fontWeight: isActive ? 600 : 500,
-        color: isActive ? "var(--accent)" : "var(--ink-mid)",
-        background: isActive ? "var(--accent-light)" : "transparent",
-        border: "none",
-        borderRadius: 4,
-        cursor: "pointer",
-        transition: "background 0.12s, color 0.12s",
-    };
 }

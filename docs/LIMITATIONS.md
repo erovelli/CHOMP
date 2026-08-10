@@ -2,7 +2,7 @@
 
 > **Living document.** Add an entry here every time we discover a new data-quality issue, a structural exclusion, or a methodological caveat. Future analyses (and reviewers) should be able to look at this file once and understand the universe of caveats. See [Adding to this doc](#adding-to-this-doc) at the bottom.
 
-This is a comprehensive list of limitations that affect the merged and geocoded dataset used by the Medicaid Dental Utilization Atlas. Each entry has a short ID for cross-reference in code comments, methods sections, and reviewer responses.
+This is a comprehensive list of limitations that affect the merged and geocoded dataset used by CHOMP (Claims History of Oral Healthcare Medicaid Procedures). Each entry has a short ID for cross-reference in code comments, methods sections, and reviewer responses.
 
 **Severity legend:**
 

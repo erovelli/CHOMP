@@ -19,7 +19,9 @@
     --accent-light: #e3efec;
     --ff-sans: "Libre Franklin", sans-serif;
     --ff-serif: "Source Serif 4", serif;
-    --ff-mono: "IBM Plex Mono", monospace;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --dur-fast: 120ms;
+    --dur-base: 200ms;
 }
 
 html,
@@ -38,6 +40,675 @@ body,
 button {
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
+}
+
+/* Keyboard focus. Mouse users get the button's own hover treatment; keyboard
+   users get a ring that reads on both surface and accent-colored buttons. */
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 3px;
+}
+
+/* Numbers in stats, legends, and axis labels don't shift width between digits. */
+.tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+}
+
+/* Header action button. CSS-driven hover so it works on keyboard focus as well
+   as pointer, and so we can use var-eased transitions instead of shipping
+   duplicate inline onMouseEnter/onMouseLeave handlers per button. */
+.chomp-header-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    min-height: 34px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: var(--ff-sans);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink);
+    letter-spacing: 0.01em;
+    transition:
+        background var(--dur-fast) var(--ease-out),
+        border-color var(--dur-fast) var(--ease-out),
+        color var(--dur-fast) var(--ease-out);
+}
+.chomp-header-btn:hover,
+.chomp-header-btn:focus-visible {
+    background: var(--surface);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+.chomp-header-btn__icon {
+    display: inline-flex;
+    color: var(--accent);
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   Full-viewport About page. Sits below the header, covers the map. Subtle
+   slide+fade on mount only (no exit animation — unmounts cleanly). Content
+   column caps at 720px, generous top padding — editorial layout, not app.
+   Pattern references: Pearl subsites, NYT interactive project splashes.
+   ────────────────────────────────────────────────────────────────────── */
+.chomp-about-page {
+    animation: chomp-about-in 320ms var(--ease-out);
+}
+@keyframes chomp-about-in {
+    from {
+        opacity: 0;
+        transform: translateX(24px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+.chomp-about-page__content {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 56px 32px 96px;
+}
+.chomp-about-page__title {
+    font-family: var(--ff-serif);
+    font-size: 44px;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    line-height: 1.08;
+    color: var(--ink);
+    margin-bottom: 28px;
+}
+.chomp-about-page__lede {
+    font-family: var(--ff-serif);
+    font-size: 20px;
+    font-weight: 400;
+    line-height: 1.55;
+    color: var(--ink);
+    margin-bottom: 36px;
+    max-width: 60ch;
+}
+.chomp-about-page__sections {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
+.chomp-about-page__paragraph {
+    font-family: var(--ff-serif);
+    font-size: 16px;
+    line-height: 1.75;
+    color: var(--ink-mid);
+    max-width: 62ch;
+}
+.chomp-about-page__heading {
+    font-family: var(--ff-serif);
+    font-size: 22px;
+    font-weight: 500;
+    letter-spacing: -0.005em;
+    color: var(--ink);
+    margin-bottom: 16px;
+}
+.chomp-about-page__rule {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 0;
+}
+.chomp-about-page__list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-width: 62ch;
+}
+.chomp-about-page__list-item {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    font-family: var(--ff-serif);
+    font-size: 15px;
+    line-height: 1.65;
+}
+.chomp-about-page__list-marker {
+    flex-shrink: 0;
+    margin-top: 0.65em;
+    width: 16px;
+    height: 1px;
+    background: var(--border-dark);
+}
+.chomp-about-page__link-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.chomp-about-page__people {
+    list-style: none;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 32px 24px;
+    margin-top: 4px;
+    max-width: 640px;
+}
+.chomp-about-page__cta {
+    margin-top: 48px;
+    padding-top: 32px;
+    border-top: 1px solid var(--border);
+}
+.chomp-avatar--large {
+    width: 108px;
+    height: 108px;
+}
+
+@media (max-width: 640px) {
+    .chomp-about-page__content {
+        padding: 32px 20px 72px;
+    }
+    .chomp-about-page__title {
+        font-size: 30px;
+    }
+    .chomp-about-page__lede {
+        font-size: 17px;
+    }
+}
+
+/* Modal close chip — same treatment; keyboard users get a visible target. */
+.chomp-close-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    cursor: pointer;
+    color: var(--ink-mid);
+    transition:
+        background var(--dur-fast) var(--ease-out),
+        color var(--dur-fast) var(--ease-out),
+        border-color var(--dur-fast) var(--ease-out);
+}
+.chomp-close-btn:hover,
+.chomp-close-btn:focus-visible {
+    background: var(--surface);
+    color: var(--ink);
+    border-color: var(--border-dark);
+}
+
+/* Header nav link. Same rhythm as the action buttons but no border chrome —
+   text-first, underline animates in on hover so the accent belongs to the
+   primary Export action rather than to routine wayfinding. */
+.chomp-nav-link {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 10px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-family: var(--ff-sans);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink-mid);
+    letter-spacing: 0.005em;
+    text-decoration: none;
+    line-height: 1;
+    transition: color var(--dur-fast) var(--ease-out);
+}
+.chomp-nav-link::after {
+    content: "";
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: -2px;
+    height: 1.5px;
+    background: currentColor;
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform var(--dur-base) var(--ease-out);
+}
+.chomp-nav-link:hover,
+.chomp-nav-link:focus-visible {
+    color: var(--ink);
+}
+.chomp-nav-link:hover::after,
+.chomp-nav-link:focus-visible::after {
+    transform: scaleX(1);
+}
+.chomp-nav-link[aria-current="page"] {
+    color: var(--ink);
+    font-weight: 600;
+}
+.chomp-nav-link[aria-current="page"]::after {
+    transform: scaleX(1);
+    background: var(--accent);
+}
+.chomp-nav-link__glyph {
+    margin-left: 4px;
+    display: inline-flex;
+    color: var(--ink-dim);
+}
+
+/* Modal tab strip — sub-nav for switching between the About pages without
+   closing the modal. Editorial: text + 1px accent underline on the active
+   tab, no background chrome. */
+.chomp-modal-tab {
+    position: relative;
+    padding: 12px 6px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-family: var(--ff-sans);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.005em;
+    line-height: 1;
+    color: var(--ink-dim);
+    transition: color var(--dur-fast) var(--ease-out);
+}
+.chomp-modal-tab::after {
+    content: "";
+    position: absolute;
+    left: 6px;
+    right: 6px;
+    bottom: -1px;
+    height: 1.5px;
+    background: var(--accent);
+    transform: scaleX(0);
+    transform-origin: center;
+    transition: transform var(--dur-base) var(--ease-out);
+}
+.chomp-modal-tab:hover {
+    color: var(--ink);
+}
+.chomp-modal-tab[aria-current="page"] {
+    color: var(--ink);
+    font-weight: 600;
+}
+.chomp-modal-tab[aria-current="page"]::after {
+    transform: scaleX(1);
+}
+
+/* Inline link — a body-text hyperlink that reads as part of the reading
+   flow rather than as a dashboard card. External glyph sits after the label
+   with a small gap. Editorial pattern (NYT, The Pudding, Our World in Data). */
+.chomp-link-inline {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+    padding: 6px 0;
+    color: var(--ink);
+    text-decoration: none;
+    font-family: var(--ff-serif);
+    font-size: 15px;
+    line-height: 1.5;
+    border-bottom: 1px solid var(--border-dark);
+    transition:
+        color var(--dur-fast) var(--ease-out),
+        border-color var(--dur-fast) var(--ease-out);
+}
+.chomp-link-inline:hover,
+.chomp-link-inline:focus-visible {
+    color: var(--accent);
+    border-color: var(--accent);
+    outline: none;
+}
+.chomp-link-inline__glyph {
+    color: var(--ink-dim);
+    flex-shrink: 0;
+    align-self: center;
+    transition: color var(--dur-fast) var(--ease-out);
+}
+.chomp-link-inline:hover .chomp-link-inline__glyph,
+.chomp-link-inline:focus-visible .chomp-link-inline__glyph {
+    color: var(--accent);
+}
+
+/* Team member: circular photo above the name, both centered. Photo is a
+   plain surface2 circle when no image is provided (placeholder). Grid handled
+   by the parent. */
+.chomp-teammate {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    text-align: center;
+}
+.chomp-avatar {
+    width: 84px;
+    height: 84px;
+    border-radius: 50%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+}
+.chomp-teammate__name {
+    font-family: var(--ff-sans);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink);
+    line-height: 1.3;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   Left rail — single considered control panel that replaces the four
+   floating widgets on desktop. Pattern used by NYT interactives, The
+   Pudding, Kontinentalist, Reuters Graphics: one grouped card with small
+   editorial section headings, vertical radio lists for short options, chip
+   grids for long ones, and category dots for the color-mapped layer picker.
+
+   Deliberate design choices:
+   - Section headings are all-caps sans in ink-dim — magazine section cue.
+   - Radio items communicate selection via a 2px accent bar on the left
+     edge + bold ink text, not a filled pill. Reserves the accent color.
+   - Chips are text-first with a subtle surface2 pill for the active state.
+   - Category rows carry a colored dot (the layer's accent) that stays even
+     when inactive — the palette itself is information.
+   ────────────────────────────────────────────────────────────────────── */
+.chomp-rail-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.chomp-rail-scroll {
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+.chomp-rail-group {
+    padding: 16px 18px 18px;
+    border-bottom: 1px solid var(--border);
+}
+.chomp-rail-group:last-child {
+    border-bottom: none;
+}
+.chomp-rail-heading {
+    font-family: var(--ff-sans);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+}
+.chomp-rail-heading__value {
+    font-family: var(--ff-sans);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+    line-height: 1;
+}
+.chomp-rail-heading__value--muted {
+    color: var(--ink-dim);
+    font-weight: 500;
+}
+.chomp-rail-radio {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 6px 8px;
+    margin: 0 -8px;
+    background: transparent;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    text-align: left;
+    font-family: var(--ff-sans);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink-mid);
+    line-height: 1.25;
+    transition:
+        background var(--dur-fast) var(--ease-out),
+        color var(--dur-fast) var(--ease-out);
+}
+.chomp-rail-radio:hover {
+    color: var(--ink);
+    background: var(--surface2);
+}
+.chomp-rail-radio[aria-checked="true"] {
+    color: var(--ink);
+    font-weight: 600;
+}
+.chomp-rail-radio__label {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Reset chip (e.g. "All months" that returns the month slider to the null
+   state). Bordered pill so it reads clearly as an interactive control —
+   the earlier text-only treatment was mistaken for caption copy. Still
+   monochrome; pressed state uses surface2 fill + bold, not the accent
+   color, to keep the rail's palette discipline. */
+.chomp-rail-reset {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: var(--ff-sans);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.005em;
+    color: var(--ink-mid);
+    line-height: 1.1;
+    transition:
+        background var(--dur-fast) var(--ease-out),
+        color var(--dur-fast) var(--ease-out),
+        border-color var(--dur-fast) var(--ease-out);
+}
+.chomp-rail-reset:hover {
+    color: var(--ink);
+    border-color: var(--border-dark);
+    background: var(--surface2);
+}
+.chomp-rail-reset[aria-pressed="true"] {
+    color: var(--ink);
+    font-weight: 600;
+    background: var(--surface2);
+    border-color: var(--border-dark);
+}
+.chomp-rail-reset[aria-pressed="true"]::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--ink);
+    flex-shrink: 0;
+}
+
+/* Wrapper that centers the reset chip below the slider so it doesn't hang
+   at the left edge. */
+.chomp-rail-reset-row {
+    display: flex;
+    justify-content: center;
+    margin-top: 10px;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   Range slider (year / month). Thin track + dark thumb + subtle endpoints.
+   No tick marks (they added noise without information — the thumb position
+   and endpoint labels already answer "where am I in the range"). Track and
+   thumb sit in the monochrome-neutral system; no accent color inside the
+   rail.
+   ────────────────────────────────────────────────────────────────────── */
+.chomp-rail-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 20px;
+    background: transparent;
+    cursor: pointer;
+    outline: none;
+    padding: 0;
+    margin: 0;
+}
+.chomp-rail-slider::-webkit-slider-runnable-track {
+    height: 2px;
+    background: var(--border);
+    border-radius: 1px;
+}
+.chomp-rail-slider::-moz-range-track {
+    height: 2px;
+    background: var(--border);
+    border-radius: 1px;
+    border: none;
+}
+.chomp-rail-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--ink);
+    border: 2px solid var(--surface);
+    box-shadow: 0 0 0 1px var(--border-dark);
+    margin-top: -5px;
+    transition:
+        transform var(--dur-fast) var(--ease-out),
+        box-shadow var(--dur-fast) var(--ease-out);
+}
+.chomp-rail-slider::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--ink);
+    border: 2px solid var(--surface);
+    box-shadow: 0 0 0 1px var(--border-dark);
+    transition:
+        transform var(--dur-fast) var(--ease-out),
+        box-shadow var(--dur-fast) var(--ease-out);
+}
+.chomp-rail-slider:hover::-webkit-slider-thumb,
+.chomp-rail-slider:focus-visible::-webkit-slider-thumb {
+    transform: scale(1.2);
+}
+.chomp-rail-slider:hover::-moz-range-thumb,
+.chomp-rail-slider:focus-visible::-moz-range-thumb {
+    transform: scale(1.2);
+}
+.chomp-rail-slider:disabled {
+    cursor: default;
+    opacity: 0.35;
+}
+.chomp-rail-slider-track {
+    position: relative;
+    padding: 4px 6px 0;
+}
+.chomp-rail-slider-endpoints {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 4px;
+    padding: 0 2px;
+    font-family: var(--ff-sans);
+    font-size: 10px;
+    letter-spacing: 0.02em;
+    color: var(--ink-dim);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   Segmented control — retained for the mobile bottom sheet (FilterSheet)
+   which still uses horizontal chip clusters at touch-target sizes.
+   Desktop no longer uses this; see .chomp-rail-* above.
+   ────────────────────────────────────────────────────────────────────── */
+.chomp-segmented {
+    display: flex;
+    gap: 1px;
+    padding: 3px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+}
+.chomp-segmented--stack {
+    flex-direction: column;
+    gap: 2px;
+}
+.chomp-segmented--row {
+    align-items: center;
+    gap: 1px;
+}
+.chomp-segmented__btn {
+    padding: 6px 12px;
+    background: transparent;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-family: var(--ff-sans);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.005em;
+    color: var(--ink-mid);
+    line-height: 1.1;
+    transition:
+        background var(--dur-fast) var(--ease-out),
+        color var(--dur-fast) var(--ease-out);
+    white-space: nowrap;
+}
+.chomp-segmented__btn:hover {
+    color: var(--ink);
+    background: var(--surface2);
+}
+.chomp-segmented__btn[aria-pressed="true"] {
+    color: var(--ink);
+    font-weight: 600;
+    background: var(--surface2);
+    box-shadow: inset 0 0 0 1px var(--border);
+}
+.chomp-segmented__btn--compact {
+    padding: 5px 8px;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+}
+.chomp-segmented__divider {
+    align-self: stretch;
+    width: 1px;
+    background: var(--border);
+    margin: 4px 2px;
+}
+
+/* Modal primary action — accent-owned; hover deepens rather than colorshifts,
+   so it's clear it's the same button under pressure. */
+.chomp-primary-btn {
+    font-family: var(--ff-sans);
+    background: var(--accent);
+    color: #fff;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    cursor: pointer;
+    letter-spacing: 0.01em;
+    transition:
+        filter var(--dur-fast) var(--ease-out),
+        box-shadow var(--dur-fast) var(--ease-out);
+}
+.chomp-primary-btn:hover,
+.chomp-primary-btn:focus-visible {
+    filter: brightness(1.08);
+    box-shadow: 0 2px 10px rgba(13, 107, 96, 0.28);
 }
 
 /* dvh (visual-viewport height) with a vh fallback for older engines.

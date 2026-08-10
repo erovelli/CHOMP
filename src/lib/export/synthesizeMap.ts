@@ -58,7 +58,7 @@ const TERRITORY_CHIPS = {
 };
 const TERRITORY_POSTALS: readonly string[] = ["GU", "MP", "VI"];
 
-const FOOTER_TEXT = "medicaid-dent-policy · choropleth synthesized via d3-geo";
+const FOOTER_TEXT = "CHOMP · choropleth synthesized via d3-geo";
 const SOURCE_TEXT =
     "Data: HHS Medicaid Dental Claims 2018–2024 · CMS NPPES · ACS C27007 · U.S. Census TIGER/Line";
 const FOOTER_X = 1568;
@@ -277,7 +277,7 @@ function drawTitleBlock(
     ctx.font = "600 24px ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif";
     ctx.textAlign = "left";
     ctx.textBaseline = "alphabetic";
-    ctx.fillText(`Medicaid Dental Claims · ${layerLabel}`, TITLE_X, TITLE_Y);
+    ctx.fillText(`CHOMP · ${layerLabel}`, TITLE_X, TITLE_Y);
     ctx.fillStyle = "#6b6660";
     ctx.font = "400 14px ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif";
     ctx.fillText(`${period} · ${levelLabel} · ${metricLabel}`, TITLE_X, SUBTITLE_Y);
@@ -527,7 +527,7 @@ export function imageFilename(
     format: "png" | "jpeg",
 ): string {
     const ext = format === "jpeg" ? "jpg" : "png";
-    return `medicaid-dental_${activeLayer}_${year}_${level}.${ext}`;
+    return `chomp_${activeLayer}_${year}_${level}.${ext}`;
 }
 
 export function downloadBlob(filename: string, blob: Blob): void {
