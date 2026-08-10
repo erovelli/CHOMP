@@ -1,4 +1,5 @@
 import { CATEGORY_COLORS } from "../../../constants/map";
+import { formatCurrency } from "../../../lib/formatters";
 
 interface CategoryRecord {
     category: string;
@@ -90,7 +91,7 @@ export default function CategoryBreakdown({
                                     }}
                                 >
                                     <span style={{ fontSize: 10, color: "var(--ink-dim)" }}>
-                                        ${(record.total_amount_paid / 1000).toFixed(0)}k paid
+                                        {formatCurrency(record.total_amount_paid)} paid
                                     </span>
                                 </div>
                             </div>

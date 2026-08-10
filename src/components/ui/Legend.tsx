@@ -18,7 +18,7 @@ export default function Legend() {
             style={{
                 position: "absolute",
                 bottom: isMobile ? "calc(12px + env(safe-area-inset-bottom, 0px))" : 36,
-                left: isMobile ? 12 : 16,
+                left: isMobile ? 12 : 276,
                 zIndex: Z_INDEX.HEADER,
                 background: "var(--surface)",
                 border: "1px solid var(--border)",
@@ -60,10 +60,10 @@ export default function Legend() {
                     justifyContent: "space-between",
                 }}
             >
-                <span style={{ fontSize: 10, color: "var(--ink-dim)" }}>
+                <span className="tnum" style={{ fontSize: 10, color: "var(--ink-dim)" }}>
                     {hasStops ? fmt(colorStops[0]) : "—"}
                 </span>
-                <span style={{ fontSize: 10, color: "var(--ink-dim)" }}>
+                <span className="tnum" style={{ fontSize: 10, color: "var(--ink-dim)" }}>
                     {hasStops ? `${fmt(colorStops[colorStops.length - 1])}+` : "—"}
                 </span>
             </div>

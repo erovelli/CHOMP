@@ -1,8 +1,8 @@
 <div align="center">
 
-# Medicaid Dental Utilization Atlas
+# CHOMP
 
-**An interactive choropleth of U.S. Medicaid dental claims, 2018–2024.**
+**Claims History of Oral Healthcare Medicaid Procedures — an interactive choropleth of U.S. Medicaid dental claims, 2018–2024.**
 
 A full-stack data visualization project that transforms ~60 GB of raw HHS Open Data and NPPES records into an interactive map — state-, county-, and ZIP3-level utilization across all 12 CDT/ADA dental procedure categories, six years of history, and monthly drill-down.
 

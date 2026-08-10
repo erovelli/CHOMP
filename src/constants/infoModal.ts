@@ -1,7 +1,7 @@
-export const INFO_MODAL_TITLE = "Medicaid Dental Claim Data Visualization";
+export const INFO_MODAL_TITLE = "CHOMP · Claims History of Oral Healthcare Medicaid Procedures";
 
 export const INFO_MODAL_BODY =
-    "This site illustrates the 2018–2024 Medicaid dental claims data released by Health and Human " +
+    "CHOMP illustrates the 2018–2024 Medicaid dental claims data released by Health and Human " +
     "Services (HHS) Open Data on February 8th, 2026. We used the National Plan and Provider " +
     "Enumeration System (NPPES) to connect each claim to a ZIP3, enabling a geographical view " +
     "of the data. Medicaid dental coverage varies from state-to-state, with some states covering " +
