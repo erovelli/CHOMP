@@ -50,7 +50,7 @@ The NDJSON files and `.pmtiles` archives are the **interface contract** between 
 
 This is the single most consequential architectural decision in the project, and it flows from two constraints:
 
-1. **Cost.** Zero-dollar hosting was a hard requirement.
+1. **Operations.** Production on Harvard SHARE and staging on GitHub Pages both serve the same static bundle, so there is no application server to provision or operate.
 2. **Privacy.** The source data is public but a live backend would expose query patterns that the suppression rules (<12 claims / <12 beneficiaries per cell) are designed to prevent. Pre-aggregating at build time means only the published aggregations are accessible.
 
 ## 3. Data pipeline

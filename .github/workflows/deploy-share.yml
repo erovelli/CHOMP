@@ -1,6 +1,6 @@
 # Deploy to Harvard SHARE (cPanel shared hosting) over SSH.
 #
-# Target: https://molar.share.library.harvard.edu, served from the domain root.
+# Production target: https://chomp.share.library.harvard.edu/, served from the domain root.
 # The cPanel account name and docroot are NOT recorded here — they are sensitive and
 # live only in the SSH_HOST / SSH_PATH secrets. Do not paste either into this file,
 # into commit messages, or into log output. The public hostname above is fine.
@@ -25,11 +25,11 @@
 #     hand-installed gzip-rewrite and pmtiles rules. It is excluded from the rsync and
 #     must never be overwritten from the repo.
 #
-#   * BASE_PATH is "/" here (domain root) and "/medicaid-dent-policy/" for GitHub
-#     Pages, which is also the vite.config.ts fallback. A plain `npm run build` here
+#   * BASE_PATH is "/" here (domain root) and "/CHOMP/" for the GitHub Pages
+#     staging site, which is also the vite.config.ts fallback. A plain `npm run build` here
 #     silently produces a Pages-based site where every asset 404s, so the build is
 #     asserted below rather than trusted.
-name: Deploy to SHARE
+name: Deploy production to Harvard SHARE
 
 on:
   push:
@@ -49,7 +49,7 @@ permissions: {}
 
 jobs:
   build:
-    name: Build for SHARE
+    name: Build for Harvard production
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -87,14 +87,11 @@ jobs:
             exit 1
           fi
 
-          # Match the slash-delimited base path, not the bare repo name: the export
-          # footer in src/lib/export/synthesizeMap.ts contains the literal string
-          # "medicaid-dent-policy · …", so a bare grep would fail every correct build.
-          # A real leak always emits "/medicaid-dent-policy/" (fetch URLs, pmtiles://
-          # URLs, the modulepreload prefix).
-          if grep -rq '/medicaid-dent-policy/' dist/assets/; then
-            echo "::error::Pages base path leaked into dist/assets/ — every asset would 404 on SHARE."
-            grep -rl '/medicaid-dent-policy/' dist/assets/ || true
+          # A staging-path leak emits "/CHOMP/" in fetch URLs, pmtiles:// URLs, or
+          # modulepreload prefixes. Those URLs would 404 at the production domain root.
+          if grep -rq '/CHOMP/' dist/assets/; then
+            echo "::error::Staging base path leaked into dist/assets/ — every asset would 404 in production."
+            grep -rl '/CHOMP/' dist/assets/ || true
             exit 1
           fi
 
@@ -126,7 +123,7 @@ jobs:
           if-no-files-found: error
 
   deploy:
-    name: Deploy to SHARE
+    name: Deploy to Harvard production
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -275,7 +272,7 @@ jobs:
           echo "Docroot OK"
 
           # .htaccess is excluded from the sync, so if it ever vanishes the deploy would
-          # succeed while the live site breaks (no DirectoryIndex, no gzip/pmtiles rules).
+          # succeed while the Harvard production site breaks (no DirectoryIndex, no gzip/pmtiles rules).
           [ -f "$SSH_PATH/.htaccess" ] || { echo "::error::.htaccess is missing from the docroot. It is server-managed and excluded from the sync; restore it on the server before deploying."; exit 1; }
           echo ".htaccess OK"
 
@@ -310,10 +307,10 @@ jobs:
             dist/ "$SSH_HOST:$SSH_PATH/"
 
       # Static files on Apache are live the instant rsync finishes — no propagation wait.
-      - name: Verify live site
+      - name: Verify Harvard production site
         if: ${{ inputs.dry_run != true }}
         env:
-          SITE_URL: https://molar.share.library.harvard.edu
+          SITE_URL: https://chomp.share.library.harvard.edu
         run: |
           set -euo pipefail
           failed=0

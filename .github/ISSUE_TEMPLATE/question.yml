@@ -7,8 +7,8 @@ body:
     attributes:
       value: |
         Most "why is it built this way" questions are answered in
-        [`docs/ARCHITECTURE.md`](https://github.com/erovelli/medicaid-dent-policy/blob/main/docs/ARCHITECTURE.md)
-        and the [ADRs](https://github.com/erovelli/medicaid-dent-policy/tree/main/docs/adr).
+        [`docs/ARCHITECTURE.md`](https://github.com/erovelli/CHOMP/blob/main/docs/ARCHITECTURE.md)
+        and the [ADRs](https://github.com/erovelli/CHOMP/tree/main/docs/adr).
         Please skim those first.
 
   - type: textarea

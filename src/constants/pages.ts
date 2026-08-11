@@ -11,7 +11,7 @@ export const NAV_LABELS: Record<NavPage, string> = {
     contact: "Contact",
 };
 
-export const REPO_URL = "https://github.com/erovelli/medicaid-dent-policy";
+export const REPO_URL = "https://github.com/erovelli/CHOMP";
 
 export type PageSection =
     | { kind: "paragraph"; body: string }

@@ -1,7 +1,17 @@
 {
   "name": "chomp",
   "version": "0.1.0",
+  "description": "Claims History of Oral Healthcare Medicaid Procedures",
+  "license": "MIT",
   "private": true,
+  "homepage": "https://chomp.share.library.harvard.edu/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/erovelli/CHOMP.git"
+  },
+  "bugs": {
+    "url": "https://github.com/erovelli/CHOMP/issues"
+  },
   "type": "module",
   "engines": {
     "node": ">=22.22.1"

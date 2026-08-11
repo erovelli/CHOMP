@@ -1,4 +1,4 @@
-name: Deploy
+name: Deploy staging
 
 on:
   push:
@@ -36,6 +36,7 @@ jobs:
 
       - name: Build
         env:
+          BASE_PATH: /CHOMP/
           VITE_PROTOMAPS_API_KEY: ${{ secrets.VITE_PROTOMAPS_API_KEY }}
         run: npm run build
 
@@ -60,7 +61,7 @@ jobs:
           if-no-files-found: error
 
   deploy:
-    name: Deploy to GitHub Pages
+    name: Deploy staging to GitHub Pages
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -70,7 +71,7 @@ jobs:
 
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: https://erovel.li/CHOMP/
 
     steps:
       - name: Deploy

@@ -4,7 +4,7 @@
       "startServerCommand": "npm run preview -- --port 4173 --strictPort",
       "startServerReadyPattern": "Local:",
       "startServerReadyTimeout": 30000,
-      "url": ["http://localhost:4173/medicaid-dent-policy/"],
+      "url": ["http://localhost:4173/CHOMP/"],
       "numberOfRuns": 3,
       "settings": {
         "preset": "desktop",
