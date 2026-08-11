@@ -197,7 +197,7 @@ The script also runs integrity checks — no unused geocoded addresses, and per-
 
 **Issue.** Adult Medicaid dental benefits vary dramatically by state: from comprehensive (NY, CA) to emergency-only (TN, AL) to none (DE). Pediatric coverage is more uniform (federally mandated under EPSDT).
 **Impact.** Raw claim counts and dollars are not comparable across states for adult dental services. A "low" map value in TN reflects benefit policy, not lack of need.
-**Mitigation.** Already surfaced in the InfoModal on the live site. Worth a paragraph in any policy interpretation of the map.
+**Mitigation.** Already surfaced in the InfoModal on the Harvard production site. Worth a paragraph in any policy interpretation of the map.
 
 ### L21 ⬜ Indian Health Service / tribal dental
 

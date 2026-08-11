@@ -6,10 +6,13 @@
 
 A full-stack data visualization project that transforms ~60 GB of raw HHS Open Data and NPPES records into an interactive map — state-, county-, and ZIP3-level utilization across all 12 CDT/ADA dental procedure categories, six years of history, and monthly drill-down.
 
-[**→ Open the live site**](https://erovelli.github.io/medicaid-dent-policy/)
+[**→ Open the Harvard production site**](https://chomp.share.library.harvard.edu/)
 
-[![CI](https://github.com/erovelli/medicaid-dent-policy/actions/workflows/ci.yml/badge.svg)](https://github.com/erovelli/medicaid-dent-policy/actions/workflows/ci.yml)
-[![Deploy](https://github.com/erovelli/medicaid-dent-policy/actions/workflows/deploy.yml/badge.svg)](https://github.com/erovelli/medicaid-dent-policy/actions/workflows/deploy.yml)
+[Test changes on the GitHub Pages staging site](https://erovel.li/CHOMP/)
+
+[![CI](https://github.com/erovelli/CHOMP/actions/workflows/ci.yml/badge.svg)](https://github.com/erovelli/CHOMP/actions/workflows/ci.yml)
+[![Production deploy](https://github.com/erovelli/CHOMP/actions/workflows/deploy-share.yml/badge.svg)](https://github.com/erovelli/CHOMP/actions/workflows/deploy-share.yml)
+[![Staging deploy](https://github.com/erovelli/CHOMP/actions/workflows/deploy.yml/badge.svg)](https://github.com/erovelli/CHOMP/actions/workflows/deploy.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-informational.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6.svg)](tsconfig.json)
 [![React 18](https://img.shields.io/badge/React-18-61dafb.svg)](https://react.dev)
@@ -93,17 +96,17 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the long-form write-up, i
 
 ## Stack & rationale
 
-| Layer           | Choice                                           | Why                                                                                                                                                                                                                     |
-| --------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Renderer**    | MapLibre GL JS                                   | GPU-accelerated, hardware-composited vector tiles; supports `setFeatureState` for per-feature updates without rebuilding sources.                                                                                       |
-| **Tile format** | [PMTiles](https://protomaps.com/docs/pmtiles) v3 | Single-file vector tiles served over static HTTPS with range requests — no tile server to run.                                                                                                                          |
-| **Basemap**     | Protomaps                                        | Paid-tier vector basemap (key in `.env.local`); gracefully degrades to a blank background when no key is present.                                                                                                       |
-| **Framework**   | React 18 + Vite 5                                | Fast HMR; `React.StrictMode` in dev catches double-mount regressions in the map lifecycle.                                                                                                                              |
-| **Language**    | TypeScript `strict`                              | Every layer is typed end-to-end: `LayerKey` union ↔ `LAYER_CONFIGS` record enforces exhaustiveness at compile time.                                                                                                     |
-| **State**       | [Zustand](https://zustand-demo.pmnd.rs/)         | Single small store with selector-hooks; avoids the provider-tree churn a Context-based solution would introduce in a map app that re-renders on every hover event.                                                      |
-| **Data shape**  | NDJSON of `{ key: records[] }` objects           | Streamable, append-only, gzips well. The browser consumes all four files through a single `fetchNDJSON` helper.                                                                                                         |
-| **Pipeline**    | Python + DuckDB                                  | Python runs the HHS×NPPES merge (`merge_hhs_nppes.py`) and the geocoded-CSV join (`join_geocoded.py`); `build_aggregates.py` runs DuckDB over the merged CSV and writes the six NDJSON files. No database to provision. |
-| **Hosting**     | GitHub Pages (static)                            | Zero-infra. The site is ~6 MB gzipped including both PMTiles archives.                                                                                                                                                  |
+| Layer           | Choice                                              | Why                                                                                                                                                                                                                     |
+| --------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Renderer**    | MapLibre GL JS                                      | GPU-accelerated, hardware-composited vector tiles; supports `setFeatureState` for per-feature updates without rebuilding sources.                                                                                       |
+| **Tile format** | [PMTiles](https://protomaps.com/docs/pmtiles) v3    | Single-file vector tiles served over static HTTPS with range requests — no tile server to run.                                                                                                                          |
+| **Basemap**     | Protomaps                                           | Paid-tier vector basemap (key in `.env.local`); gracefully degrades to a blank background when no key is present.                                                                                                       |
+| **Framework**   | React 18 + Vite 5                                   | Fast HMR; `React.StrictMode` in dev catches double-mount regressions in the map lifecycle.                                                                                                                              |
+| **Language**    | TypeScript `strict`                                 | Every layer is typed end-to-end: `LayerKey` union ↔ `LAYER_CONFIGS` record enforces exhaustiveness at compile time.                                                                                                     |
+| **State**       | [Zustand](https://zustand-demo.pmnd.rs/)            | Single small store with selector-hooks; avoids the provider-tree churn a Context-based solution would introduce in a map app that re-renders on every hover event.                                                      |
+| **Data shape**  | NDJSON of `{ key: records[] }` objects              | Streamable, append-only, gzips well. The browser consumes all four files through a single `fetchNDJSON` helper.                                                                                                         |
+| **Pipeline**    | Python + DuckDB                                     | Python runs the HHS×NPPES merge (`merge_hhs_nppes.py`) and the geocoded-CSV join (`join_geocoded.py`); `build_aggregates.py` runs DuckDB over the merged CSV and writes the six NDJSON files. No database to provision. |
+| **Hosting**     | Harvard SHARE (production) + GitHub Pages (staging) | The same static bundle is deployed at the domain root in production and under `/CHOMP/` in staging. The site is ~6 MB gzipped including both PMTiles archives.                                                          |
 
 ## Engineering highlights
 
@@ -127,15 +130,15 @@ A few decisions worth calling out in a code review:
 ### Run locally
 
 ```bash
-git clone https://github.com/erovelli/medicaid-dent-policy.git
-cd medicaid-dent-policy
+git clone https://github.com/erovelli/CHOMP.git
+cd CHOMP
 nvm use           # or ensure Node 20
 npm install
 echo "VITE_PROTOMAPS_API_KEY=your_key_here" > .env.local
 npm run dev
 ```
 
-Open http://localhost:5173/medicaid-dent-policy/ (note the base path — configured for GitHub Pages).
+Open http://localhost:5173/CHOMP/ (note the base path — configured to match the staging site).
 
 ### Scripts
 
@@ -150,7 +153,7 @@ Open http://localhost:5173/medicaid-dent-policy/ (note the base path — configu
 | `npm test` / `npm run test:watch`         | Vitest unit suite.                                                   |
 | `npm run test:coverage`                   | Vitest + V8 coverage report.                                         |
 | `npm run size`                            | `size-limit` check against the gzipped bundle budget.                |
-| `npm run deploy`                          | Publish `dist/` to the `gh-pages` branch.                            |
+| `npm run deploy`                          | Publish `dist/` to the GitHub Pages staging site.                    |
 
 A Husky pre-commit hook runs `lint-staged` (ESLint + Prettier on staged files). Install it the first time with `npm install` — `husky` auto-registers the hook via the `prepare` script.
 
@@ -187,17 +190,22 @@ No database to provision.
 
 ### Deploy
 
-CI publishes to GitHub Pages on every push to `main` (see [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)). For a manual push:
+Every push to `main` deploys the same source to two static environments:
+
+- **Production:** Harvard SHARE at <https://chomp.share.library.harvard.edu/> via [`.github/workflows/deploy-share.yml`](.github/workflows/deploy-share.yml), built with `BASE_PATH=/`.
+- **Staging/test:** GitHub Pages at <https://erovel.li/CHOMP/> via [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml), built with `BASE_PATH=/CHOMP/`.
+
+Both workflows support manual dispatch from GitHub Actions. The local `gh-pages` command is a staging-only fallback:
 
 ```bash
 npm run build
-npm run deploy    # gh-pages branch
+npm run deploy    # staging only
 ```
 
 ## Project layout
 
 ```
-medicaid-dent-policy/
+CHOMP/
 ├── src/
 │   ├── App.tsx                    # Shell: header + map + floating UI
 │   ├── main.tsx                   # React entry

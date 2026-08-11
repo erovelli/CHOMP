@@ -20,7 +20,7 @@ This shape is familiar and flexible. It is also:
 
 ## Decision
 
-Ship the site as a **static bundle**. All data aggregations happen offline at build time (Python + DuckDB), are exported to NDJSON + PMTiles + GeoJSON, and are served as static files from GitHub Pages. No server-side rendering, no API, no auth, no database — at build time or runtime.
+Ship the site as a **static bundle**. All data aggregations happen offline at build time (Python + DuckDB), are exported to NDJSON + PMTiles + GeoJSON, and are served as static files. The Harvard SHARE host serves production at <https://chomp.share.library.harvard.edu/>; GitHub Pages serves staging at <https://erovel.li/CHOMP/>. No server-side rendering, no API, no auth, no database — at build time or runtime.
 
 > Earlier revisions of this ADR described a Postgres view chain as the build-time aggregator. That stack was retired once DuckDB became the authoritative aggregator (zero-setup, ~10s over the 23M-row CSV) and the SQL was never actually executed in any environment. The "no backend" decision below is unchanged; only the offline build tooling differs.
 
@@ -28,7 +28,7 @@ Ship the site as a **static bundle**. All data aggregations happen offline at bu
 
 **Positive**
 
-- **$0 hosting.** GitHub Pages absorbs the traffic.
+- **No application server.** Harvard SHARE serves the production static bundle, and GitHub Pages hosts an independently deployable staging copy.
 - **Privacy by construction.** Only the published aggregations are accessible. No query can exceed that surface.
 - **Trivial CDN story.** Static files → global edge caches for free.
 - **Reproducible.** Every artifact in `public/data/` corresponds to a specific commit of `scripts/build_aggregates.py` plus the input CSV. Rebuilding is a single `python` invocation.

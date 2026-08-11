@@ -27,6 +27,7 @@ jobs:
 
       - name: Build
         env:
+          BASE_PATH: /CHOMP/
           VITE_PROTOMAPS_API_KEY: ${{ secrets.VITE_PROTOMAPS_API_KEY }}
         run: npm run build
 

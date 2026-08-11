@@ -50,17 +50,17 @@ Small PRs are welcomed without a tracking issue. Anything that changes behavior,
 nvm use                   # Node 20.x (see .nvmrc)
 npm install
 cp .env.example .env.local # add VITE_PROTOMAPS_API_KEY if available
-npm run dev               # http://localhost:5173/medicaid-dent-policy/
+npm run dev               # http://localhost:5173/CHOMP/
 ```
 
 Useful scripts:
 
-| Command           | Purpose                                                                    |
-| ----------------- | -------------------------------------------------------------------------- |
-| `npm run dev`     | Vite dev server with HMR.                                                  |
-| `npm run build`   | Production build (`tsc && vite build`). This is the command CI runs.       |
-| `npm run preview` | Serve the production build locally.                                        |
-| `npm run deploy`  | Publish `dist/` to the `gh-pages` branch. Requires maintainer permissions. |
+| Command           | Purpose                                                                            |
+| ----------------- | ---------------------------------------------------------------------------------- |
+| `npm run dev`     | Vite dev server with HMR.                                                          |
+| `npm run build`   | Production build (`tsc && vite build`). This is the command CI runs.               |
+| `npm run preview` | Serve the production build locally.                                                |
+| `npm run deploy`  | Publish `dist/` to the GitHub Pages staging site. Requires maintainer permissions. |
 
 **Editor setup:** the repo ships with an [`.editorconfig`](.editorconfig) that pins indentation and line endings. Recommended VS Code extensions: TypeScript, EditorConfig for VS Code, ESLint (once added).
 
