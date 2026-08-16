@@ -45,9 +45,9 @@ export default function Header() {
                     left: 0,
                     right: 0,
                     zIndex: Z_INDEX.HEADER,
-                    display: "flex",
+                    display: "grid",
+                    gridTemplateColumns: "1fr auto 1fr",
                     alignItems: "center",
-                    justifyContent: "space-between",
                     gap: 12,
                     padding: isMobile ? "0 12px" : "0 20px",
                     height: HEADER_HEIGHT,
@@ -62,7 +62,7 @@ export default function Header() {
                         alignItems: "baseline",
                         gap: 12,
                         minWidth: 0,
-                        flexShrink: 0,
+                        justifySelf: "start",
                     }}
                 >
                     <button
@@ -83,6 +83,20 @@ export default function Header() {
                     >
                         CHOMP
                     </button>
+                    {!isMobile && !isCompact && (
+                        <span
+                            style={{
+                                fontFamily: "var(--ff-sans)",
+                                fontSize: 13,
+                                fontWeight: 400,
+                                color: "var(--ink-muted, var(--ink))",
+                                opacity: 0.7,
+                                whiteSpace: "nowrap",
+                            }}
+                        >
+                            Claims History of Oral Healthcare Medicaid Procedures
+                        </span>
+                    )}
                 </div>
 
                 {!isMobile && !isCompact && (
@@ -92,8 +106,7 @@ export default function Header() {
                             display: "flex",
                             alignItems: "center",
                             gap: 2,
-                            flex: 1,
-                            justifyContent: "center",
+                            justifySelf: "center",
                             minWidth: 0,
                         }}
                     >
@@ -131,7 +144,8 @@ export default function Header() {
                         display: "flex",
                         alignItems: "center",
                         gap: 8,
-                        flexShrink: 0,
+                        gridColumn: 3,
+                        justifySelf: "end",
                     }}
                 >
                     {(isMobile || isCompact) && (
