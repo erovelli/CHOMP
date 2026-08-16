@@ -32,10 +32,7 @@ export interface PageContent {
 export const PAGE_CONTENT: Record<NavPage, PageContent> = {
     project: {
         title: "About the project",
-        sections: [
-            { kind: "paragraph", body: INFO_MODAL_BODY },
-            { kind: "list", heading: "Important notes", items: INFO_MODAL_NOTES },
-        ],
+        sections: [{ kind: "paragraph", body: INFO_MODAL_BODY }],
     },
     data: {
         title: "Data & methodology",
@@ -57,6 +54,7 @@ export const PAGE_CONTENT: Record<NavPage, PageContent> = {
                     },
                 ],
             },
+            { kind: "list", heading: "Important notes", items: INFO_MODAL_NOTES },
         ],
     },
     team: {
