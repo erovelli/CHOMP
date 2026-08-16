@@ -83,6 +83,20 @@ export default function Header() {
                     >
                         CHOMP
                     </button>
+                    {!isMobile && !isCompact && (
+                        <span
+                            style={{
+                                fontFamily: "var(--ff-sans)",
+                                fontSize: 13,
+                                fontWeight: 400,
+                                color: "var(--ink-muted, var(--ink))",
+                                opacity: 0.7,
+                                whiteSpace: "nowrap",
+                            }}
+                        >
+                            Claims History of Oral Healthcare Medicaid Procedures
+                        </span>
+                    )}
                 </div>
 
                 {!isMobile && !isCompact && (
