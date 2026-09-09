@@ -175,7 +175,7 @@ export default function Header() {
             <Tooltip />
             <DetailPanel />
             <ClickHint />
-            <AboutPage page={aboutPage} onClose={closeAbout} />
+            <AboutPage page={aboutPage} onClose={closeAbout} onPageChange={openAbout} />
             {exportOpen && (
                 <Suspense fallback={null}>
                     <ExportModal open={exportOpen} onClose={closeExport} />

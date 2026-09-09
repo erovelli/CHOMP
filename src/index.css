@@ -293,12 +293,33 @@ button {
     color: var(--ink-dim);
 }
 
-/* Modal tab strip — sub-nav for switching between the About pages without
-   closing the modal. Editorial: text + 1px accent underline on the active
-   tab, no background chrome. */
-.chomp-modal-tab {
+/* Mobile-only sub-nav for the About page — horizontal scroll strip that
+   sticks to the top of the panel as the user scrolls its content. The
+   desktop nav lives in the header (see .chomp-nav-link); the sub-page
+   picker only appears in the panel below the mobile breakpoint, where
+   the header can't spare the room for five text tabs. Right-padding
+   reserves clearance for the close chip that sits above it.  */
+.chomp-about-page__tabs {
+    position: sticky;
+    top: 0;
+    display: flex;
+    gap: 2px;
+    padding: 6px 56px 6px 12px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    /* Firefox / IE hide; Safari/Chrome hide below via ::-webkit-scrollbar. */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    z-index: 1;
+}
+.chomp-about-page__tabs::-webkit-scrollbar {
+    display: none;
+}
+.chomp-about-page__tab {
     position: relative;
-    padding: 12px 6px;
+    flex-shrink: 0;
+    padding: 10px 10px 12px;
     background: transparent;
     border: none;
     cursor: pointer;
@@ -308,28 +329,29 @@ button {
     letter-spacing: 0.005em;
     line-height: 1;
     color: var(--ink-dim);
+    white-space: nowrap;
     transition: color var(--dur-fast) var(--ease-out);
 }
-.chomp-modal-tab::after {
+.chomp-about-page__tab::after {
     content: "";
     position: absolute;
-    left: 6px;
-    right: 6px;
-    bottom: -1px;
+    left: 10px;
+    right: 10px;
+    bottom: 0;
     height: 1.5px;
     background: var(--accent);
     transform: scaleX(0);
     transform-origin: center;
     transition: transform var(--dur-base) var(--ease-out);
 }
-.chomp-modal-tab:hover {
+.chomp-about-page__tab:hover {
     color: var(--ink);
 }
-.chomp-modal-tab[aria-current="page"] {
+.chomp-about-page__tab[aria-current="page"] {
     color: var(--ink);
     font-weight: 600;
 }
-.chomp-modal-tab[aria-current="page"]::after {
+.chomp-about-page__tab[aria-current="page"]::after {
     transform: scaleX(1);
 }
 
