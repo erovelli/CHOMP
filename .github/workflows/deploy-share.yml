@@ -348,12 +348,16 @@ jobs:
           fi
 
           echo "--- range requests (PMTiles) ---"
-          status=$(curl -sS -o /dev/null -w '%{http_code}' -r 0-99 "$SITE_URL/states.pmtiles")
+          # states.pmtiles was retired in PR #78 (states now ship as GeoJSON at
+          # Census 1:5m detail — see scripts/fetch_state_geometry.py). zip3.pmtiles
+          # is the remaining PMTiles asset and a valid canary for whether the
+          # server is still honoring range requests via the .htaccess pmtiles rule.
+          status=$(curl -sS -o /dev/null -w '%{http_code}' -r 0-99 "$SITE_URL/zip3.pmtiles")
           if [ "$status" = "206" ]; then
-            echo "OK: /states.pmtiles returned 206 for a range request"
+            echo "OK: /zip3.pmtiles returned 206 for a range request"
           else
             # Hard failure: PMTiles needs range requests; the map will not render without them.
-            echo "::error::Range request to /states.pmtiles returned $status, expected 206. PMTiles requires range requests — the map will not render."
+            echo "::error::Range request to /zip3.pmtiles returned $status, expected 206. PMTiles requires range requests — the map will not render."
             failed=1
           fi
 
