@@ -94,3 +94,74 @@ export async function fetchProtomapsStyle(apiKey: string) {
     if (!res.ok) throw new Error(`Protomaps style fetch failed: ${res.status}`);
     return res.json();
 }
+
+/**
+ * Protomaps' `white.json` v2 ships ~78 layers for a general-purpose basemap:
+ * 36 road classes, buildings, POIs, landuse (parks/hospitals/schools/military
+ * /etc.), full label hierarchy. None of that belongs on a state-level Medicaid
+ * choropleth — the map serves the data, not navigation. Prune to a whitelist
+ * of layers useful as a backdrop: land, water, a country-boundary hairline,
+ * and orientation labels for water bodies and (only at deep zoom) cities.
+ *
+ * Whitelist rather than blacklist so a Protomaps style update doesn't quietly
+ * reintroduce roads/POIs/landuse the moment they revise the style.
+ *
+ * Editorial-cartography playbook (NYT / FT / Reuters / OWID choropleths):
+ *   - Never label the thing you're choropleth-ing (state abbrevs on a state
+ *     choropleth are visually redundant and muddy). `places_region` is out.
+ *   - `places_country` in giant tracked type ("UNITED STATES OF AMERICA")
+ *     competes with the data. Out.
+ *   - Reveal city labels only on zoom-in — Chicago belongs when the user is
+ *     looking at Cook County, not the whole US.
+ */
+const KEEP_PROTOMAPS_LAYERS = new Set([
+    "background",
+    "earth",
+    "water",
+    "physical_line_river",
+    "boundaries_country",
+    "physical_point_ocean",
+    "physical_point_lakes",
+    "places_locality_circle",
+    "places_locality",
+]);
+
+/** Push city labels/dots past the state-view zoom band so state view stays clean. */
+const CITY_LABEL_MIN_ZOOM = 7;
+
+/** Anchor layer for data-fill insertion — the first pruned symbol layer id. */
+export const PROTOMAPS_FIRST_LABEL_LAYER = "physical_point_ocean";
+
+// The style spec has hundreds of variants; type only the fields we touch
+// and pass through the rest with `T`. Callers cast the result back to
+// maplibregl.StyleSpecification.
+type StyleWithLayers<T> = T & {
+    layers: Array<{ id: string; type: string; minzoom?: number } & Record<string, unknown>>;
+    sources?: Record<string, { attribution?: string } & Record<string, unknown>>;
+};
+
+export function minimizeProtomapsStyle<T>(style: StyleWithLayers<T>): StyleWithLayers<T> {
+    const layers = style.layers
+        .filter((l) => KEEP_PROTOMAPS_LAYERS.has(l.id))
+        .map((l) => {
+            if (l.id === "places_locality" || l.id === "places_locality_circle") {
+                return { ...l, minzoom: Math.max(l.minzoom ?? 0, CITY_LABEL_MIN_ZOOM) };
+            }
+            return l;
+        });
+    // Protomaps' style declares its own "Protomaps © OpenStreetMap" on the
+    // tile source; MapLibre appends that to our customAttribution and the two
+    // read as duplicates in the corner ("Protomaps © OpenStreetMap | © OSM
+    // contributors, Protomaps"). Strip the source-side attribution and let
+    // customAttribution be the single truthful line — it has proper links
+    // and the ODbL-standard "contributors" phrasing.
+    const sources = style.sources
+        ? Object.fromEntries(
+              Object.entries(style.sources).map(([k, v]) => {
+                  const { attribution: _dropped, ...rest } = v;
+                  return [k, rest];
+              }),
+          )
+        : style.sources;
+    return { ...style, layers, sources };
+}
