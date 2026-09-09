@@ -4,6 +4,8 @@ import { Protocol } from "pmtiles";
 import { useMapStore } from "../../lib/store";
 import {
     fetchProtomapsStyle,
+    minimizeProtomapsStyle,
+    PROTOMAPS_FIRST_LABEL_LAYER,
     buildColorExpression,
     colorExpression,
     quantileStops,
@@ -84,8 +86,11 @@ const LEVEL_ID_PROP: Record<GeoLevel, string> = {
 
 // ── Layer helpers ────────────────────────────────────────────
 
-// Grey backdrop of non-US countries. Added first so every data layer renders
-// above it. Non-interactive (no handlers, no feature-state, no promoteId).
+// Grey backdrop of non-US countries. Used only on the fallback (no-Protomaps)
+// path — when Protomaps loads, its own `earth` + `boundaries_country` layers
+// already render the whole world cleanly, and stacking our LSIB polygons on
+// top creates a visible seam where non-US meets US. Non-interactive (no
+// handlers, no feature-state, no promoteId).
 function addWorldLayer(map: maplibregl.Map) {
     const BASE = import.meta.env.BASE_URL;
 
@@ -122,8 +127,12 @@ function addWorldLayer(map: maplibregl.Map) {
     }
 }
 
-function addStatesLayers(map: maplibregl.Map) {
+// `beforeId` (when supplied) pins data fills below the basemap's remaining
+// label layers, so water-body/city labels can float above the choropleth for
+// orientation instead of being buried by an opaque fill.
+function addStatesLayers(map: maplibregl.Map, beforeId?: string) {
     const BASE = import.meta.env.BASE_URL;
+    const insertBefore = beforeId && map.getLayer(beforeId) ? beforeId : undefined;
 
     if (!map.getSource(STATES_SOURCE)) {
         map.addSource(STATES_SOURCE, {
@@ -134,61 +143,68 @@ function addStatesLayers(map: maplibregl.Map) {
     }
 
     if (!map.getLayer(STATES_FILL)) {
-        map.addLayer({
-            id: STATES_FILL,
-            type: "fill",
-            source: STATES_SOURCE,
-            "source-layer": STATES_LAYER,
-            paint: {
-                "fill-color": colorExpression as maplibregl.ExpressionSpecification,
-                "fill-opacity": [
-                    "case",
-                    ["boolean", ["feature-state", "selected"], false],
-                    STATES_FILL_OPACITY.selected,
-                    ["boolean", ["feature-state", "hover"], false],
-                    STATES_FILL_OPACITY.hover,
-                    STATES_FILL_OPACITY.default,
-                ],
+        map.addLayer(
+            {
+                id: STATES_FILL,
+                type: "fill",
+                source: STATES_SOURCE,
+                "source-layer": STATES_LAYER,
+                paint: {
+                    "fill-color": colorExpression as maplibregl.ExpressionSpecification,
+                    "fill-opacity": [
+                        "case",
+                        ["boolean", ["feature-state", "selected"], false],
+                        STATES_FILL_OPACITY.selected,
+                        ["boolean", ["feature-state", "hover"], false],
+                        STATES_FILL_OPACITY.hover,
+                        STATES_FILL_OPACITY.default,
+                    ],
+                },
             },
-        });
+            insertBefore,
+        );
     }
 
     if (!map.getLayer(STATES_STROKE)) {
-        map.addLayer({
-            id: STATES_STROKE,
-            type: "line",
-            source: STATES_SOURCE,
-            "source-layer": STATES_LAYER,
-            paint: {
-                "line-color": [
-                    "case",
-                    ["boolean", ["feature-state", "selected"], false],
-                    STROKE_COLOR_ACTIVE,
-                    ["boolean", ["feature-state", "hover"], false],
-                    STROKE_COLOR_ACTIVE,
-                    STROKE_COLOR_DEFAULT_STATES,
-                ],
-                "line-width": [
-                    "case",
-                    ["boolean", ["feature-state", "selected"], false],
-                    STATES_LINE_WIDTH.selected,
-                    ["boolean", ["feature-state", "hover"], false],
-                    STATES_LINE_WIDTH.hover,
-                    STATES_LINE_WIDTH.default,
-                ],
-                "line-opacity": [
-                    "case",
-                    ["boolean", ["feature-state", "selected"], false],
-                    STATES_LINE_OPACITY.selected,
-                    STATES_LINE_OPACITY.default,
-                ],
+        map.addLayer(
+            {
+                id: STATES_STROKE,
+                type: "line",
+                source: STATES_SOURCE,
+                "source-layer": STATES_LAYER,
+                paint: {
+                    "line-color": [
+                        "case",
+                        ["boolean", ["feature-state", "selected"], false],
+                        STROKE_COLOR_ACTIVE,
+                        ["boolean", ["feature-state", "hover"], false],
+                        STROKE_COLOR_ACTIVE,
+                        STROKE_COLOR_DEFAULT_STATES,
+                    ],
+                    "line-width": [
+                        "case",
+                        ["boolean", ["feature-state", "selected"], false],
+                        STATES_LINE_WIDTH.selected,
+                        ["boolean", ["feature-state", "hover"], false],
+                        STATES_LINE_WIDTH.hover,
+                        STATES_LINE_WIDTH.default,
+                    ],
+                    "line-opacity": [
+                        "case",
+                        ["boolean", ["feature-state", "selected"], false],
+                        STATES_LINE_OPACITY.selected,
+                        STATES_LINE_OPACITY.default,
+                    ],
+                },
             },
-        });
+            insertBefore,
+        );
     }
 }
 
-function addCountyLayers(map: maplibregl.Map) {
+function addCountyLayers(map: maplibregl.Map, beforeId?: string) {
     const BASE = import.meta.env.BASE_URL;
+    const insertBefore = beforeId && map.getLayer(beforeId) ? beforeId : undefined;
 
     if (!map.getSource(COUNTY_SOURCE)) {
         map.addSource(COUNTY_SOURCE, {
@@ -199,59 +215,66 @@ function addCountyLayers(map: maplibregl.Map) {
     }
 
     if (!map.getLayer(COUNTY_FILL)) {
-        map.addLayer({
-            id: COUNTY_FILL,
-            type: "fill",
-            source: COUNTY_SOURCE,
-            paint: {
-                "fill-color": colorExpression as maplibregl.ExpressionSpecification,
-                "fill-opacity": [
-                    "case",
-                    ["boolean", ["feature-state", "selected"], false],
-                    COUNTY_FILL_OPACITY.selected,
-                    ["boolean", ["feature-state", "hover"], false],
-                    COUNTY_FILL_OPACITY.hover,
-                    COUNTY_FILL_OPACITY.default,
-                ],
+        map.addLayer(
+            {
+                id: COUNTY_FILL,
+                type: "fill",
+                source: COUNTY_SOURCE,
+                paint: {
+                    "fill-color": colorExpression as maplibregl.ExpressionSpecification,
+                    "fill-opacity": [
+                        "case",
+                        ["boolean", ["feature-state", "selected"], false],
+                        COUNTY_FILL_OPACITY.selected,
+                        ["boolean", ["feature-state", "hover"], false],
+                        COUNTY_FILL_OPACITY.hover,
+                        COUNTY_FILL_OPACITY.default,
+                    ],
+                },
             },
-        });
+            insertBefore,
+        );
     }
 
     if (!map.getLayer(COUNTY_STROKE)) {
-        map.addLayer({
-            id: COUNTY_STROKE,
-            type: "line",
-            source: COUNTY_SOURCE,
-            paint: {
-                "line-color": [
-                    "case",
-                    ["boolean", ["feature-state", "selected"], false],
-                    STROKE_COLOR_ACTIVE,
-                    ["boolean", ["feature-state", "hover"], false],
-                    STROKE_COLOR_ACTIVE,
-                    STROKE_COLOR_DEFAULT_COUNTY,
-                ],
-                "line-width": [
-                    "case",
-                    ["boolean", ["feature-state", "selected"], false],
-                    COUNTY_LINE_WIDTH.selected,
-                    ["boolean", ["feature-state", "hover"], false],
-                    COUNTY_LINE_WIDTH.hover,
-                    COUNTY_LINE_WIDTH.default,
-                ],
-                "line-opacity": [
-                    "case",
-                    ["boolean", ["feature-state", "selected"], false],
-                    COUNTY_LINE_OPACITY.selected,
-                    COUNTY_LINE_OPACITY.default,
-                ],
+        map.addLayer(
+            {
+                id: COUNTY_STROKE,
+                type: "line",
+                source: COUNTY_SOURCE,
+                paint: {
+                    "line-color": [
+                        "case",
+                        ["boolean", ["feature-state", "selected"], false],
+                        STROKE_COLOR_ACTIVE,
+                        ["boolean", ["feature-state", "hover"], false],
+                        STROKE_COLOR_ACTIVE,
+                        STROKE_COLOR_DEFAULT_COUNTY,
+                    ],
+                    "line-width": [
+                        "case",
+                        ["boolean", ["feature-state", "selected"], false],
+                        COUNTY_LINE_WIDTH.selected,
+                        ["boolean", ["feature-state", "hover"], false],
+                        COUNTY_LINE_WIDTH.hover,
+                        COUNTY_LINE_WIDTH.default,
+                    ],
+                    "line-opacity": [
+                        "case",
+                        ["boolean", ["feature-state", "selected"], false],
+                        COUNTY_LINE_OPACITY.selected,
+                        COUNTY_LINE_OPACITY.default,
+                    ],
+                },
             },
-        });
+            insertBefore,
+        );
     }
 }
 
-function addZip3Layers(map: maplibregl.Map) {
+function addZip3Layers(map: maplibregl.Map, beforeId?: string) {
     const BASE = import.meta.env.BASE_URL;
+    const insertBefore = beforeId && map.getLayer(beforeId) ? beforeId : undefined;
 
     if (!map.getSource(ZIP3_SOURCE)) {
         map.addSource(ZIP3_SOURCE, {
@@ -262,56 +285,62 @@ function addZip3Layers(map: maplibregl.Map) {
     }
 
     if (!map.getLayer(ZIP3_FILL)) {
-        map.addLayer({
-            id: ZIP3_FILL,
-            type: "fill",
-            source: ZIP3_SOURCE,
-            "source-layer": ZIP3_LAYER,
-            paint: {
-                "fill-color": colorExpression as maplibregl.ExpressionSpecification,
-                "fill-opacity": [
-                    "case",
-                    ["boolean", ["feature-state", "selected"], false],
-                    ZIP3_FILL_OPACITY.selected,
-                    ["boolean", ["feature-state", "hover"], false],
-                    ZIP3_FILL_OPACITY.hover,
-                    ZIP3_FILL_OPACITY.default,
-                ],
+        map.addLayer(
+            {
+                id: ZIP3_FILL,
+                type: "fill",
+                source: ZIP3_SOURCE,
+                "source-layer": ZIP3_LAYER,
+                paint: {
+                    "fill-color": colorExpression as maplibregl.ExpressionSpecification,
+                    "fill-opacity": [
+                        "case",
+                        ["boolean", ["feature-state", "selected"], false],
+                        ZIP3_FILL_OPACITY.selected,
+                        ["boolean", ["feature-state", "hover"], false],
+                        ZIP3_FILL_OPACITY.hover,
+                        ZIP3_FILL_OPACITY.default,
+                    ],
+                },
             },
-        });
+            insertBefore,
+        );
     }
 
     if (!map.getLayer(ZIP3_STROKE)) {
-        map.addLayer({
-            id: ZIP3_STROKE,
-            type: "line",
-            source: ZIP3_SOURCE,
-            "source-layer": ZIP3_LAYER,
-            paint: {
-                "line-color": [
-                    "case",
-                    ["boolean", ["feature-state", "selected"], false],
-                    STROKE_COLOR_ACTIVE,
-                    ["boolean", ["feature-state", "hover"], false],
-                    STROKE_COLOR_ACTIVE,
-                    STROKE_COLOR_DEFAULT_ZIP3,
-                ],
-                "line-width": [
-                    "case",
-                    ["boolean", ["feature-state", "selected"], false],
-                    ZIP3_LINE_WIDTH.selected,
-                    ["boolean", ["feature-state", "hover"], false],
-                    ZIP3_LINE_WIDTH.hover,
-                    ZIP3_LINE_WIDTH.default,
-                ],
-                "line-opacity": [
-                    "case",
-                    ["boolean", ["feature-state", "selected"], false],
-                    ZIP3_LINE_OPACITY.selected,
-                    ZIP3_LINE_OPACITY.default,
-                ],
+        map.addLayer(
+            {
+                id: ZIP3_STROKE,
+                type: "line",
+                source: ZIP3_SOURCE,
+                "source-layer": ZIP3_LAYER,
+                paint: {
+                    "line-color": [
+                        "case",
+                        ["boolean", ["feature-state", "selected"], false],
+                        STROKE_COLOR_ACTIVE,
+                        ["boolean", ["feature-state", "hover"], false],
+                        STROKE_COLOR_ACTIVE,
+                        STROKE_COLOR_DEFAULT_ZIP3,
+                    ],
+                    "line-width": [
+                        "case",
+                        ["boolean", ["feature-state", "selected"], false],
+                        ZIP3_LINE_WIDTH.selected,
+                        ["boolean", ["feature-state", "hover"], false],
+                        ZIP3_LINE_WIDTH.hover,
+                        ZIP3_LINE_WIDTH.default,
+                    ],
+                    "line-opacity": [
+                        "case",
+                        ["boolean", ["feature-state", "selected"], false],
+                        ZIP3_LINE_OPACITY.selected,
+                        ZIP3_LINE_OPACITY.default,
+                    ],
+                },
             },
-        });
+            insertBefore,
+        );
     }
 }
 
@@ -1045,7 +1074,10 @@ export default function MapContainer() {
 
             let style;
             if (apiKey) {
-                style = await fetchProtomapsStyle(apiKey);
+                // Prune Protomaps' general-purpose style down to a
+                // choropleth-appropriate backdrop — see minimizeProtomapsStyle
+                // for the whitelist and the rationale.
+                style = minimizeProtomapsStyle(await fetchProtomapsStyle(apiKey));
             } else {
                 style = {
                     version: 8,
@@ -1110,10 +1142,21 @@ export default function MapContainer() {
             map.current.on("load", async () => {
                 if (!map.current) return;
 
-                addWorldLayer(map.current);
-                addStatesLayers(map.current);
-                addCountyLayers(map.current);
-                addZip3Layers(map.current);
+                // On the Protomaps path, its own `earth` + `boundaries_country`
+                // already render the whole world — skip our LSIB backdrop to
+                // avoid the visible seam and the tone clash. Fall back to LSIB
+                // only when there is no basemap at all.
+                if (!apiKey) {
+                    addWorldLayer(map.current);
+                }
+                // Pin data fills below the pruned basemap's remaining label
+                // layers so water-body / city labels can float over the
+                // choropleth for orientation at deep zoom, rather than being
+                // buried by an opaque fill.
+                const labelAnchor = apiKey ? PROTOMAPS_FIRST_LABEL_LAYER : undefined;
+                addStatesLayers(map.current, labelAnchor);
+                addCountyLayers(map.current, labelAnchor);
+                addZip3Layers(map.current, labelAnchor);
                 setActiveGeoLayer(map.current, geoLevelRef.current);
 
                 map.current.on("click", STATES_FILL, handleStateClick);
