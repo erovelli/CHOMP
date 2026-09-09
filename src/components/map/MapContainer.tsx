@@ -34,8 +34,8 @@ import {
     STATES_SOURCE,
     STATES_FILL,
     STATES_STROKE,
-    STATES_LAYER,
     STATES_ID_PROP,
+    STATES_GEOJSON,
     ZIP3_SOURCE,
     ZIP3_FILL,
     ZIP3_STROKE,
@@ -136,9 +136,9 @@ function addStatesLayers(map: maplibregl.Map, beforeId?: string) {
 
     if (!map.getSource(STATES_SOURCE)) {
         map.addSource(STATES_SOURCE, {
-            type: "vector",
-            url: `pmtiles://${BASE}states.pmtiles`,
-            promoteId: { [STATES_LAYER]: STATES_ID_PROP },
+            type: "geojson",
+            data: `${BASE}${STATES_GEOJSON}`,
+            promoteId: STATES_ID_PROP,
         });
     }
 
@@ -148,7 +148,6 @@ function addStatesLayers(map: maplibregl.Map, beforeId?: string) {
                 id: STATES_FILL,
                 type: "fill",
                 source: STATES_SOURCE,
-                "source-layer": STATES_LAYER,
                 paint: {
                     "fill-color": colorExpression as maplibregl.ExpressionSpecification,
                     "fill-opacity": [
@@ -171,7 +170,6 @@ function addStatesLayers(map: maplibregl.Map, beforeId?: string) {
                 id: STATES_STROKE,
                 type: "line",
                 source: STATES_SOURCE,
-                "source-layer": STATES_LAYER,
                 paint: {
                     "line-color": [
                         "case",
@@ -516,7 +514,7 @@ function paintValues(
     const safe = (v: number): number => (Number.isFinite(v) ? v : 0);
     for (const [id, records] of Object.entries(stateData)) {
         map.setFeatureState(
-            { source: STATES_SOURCE, sourceLayer: STATES_LAYER, id },
+            { source: STATES_SOURCE, id },
             { value: safe(valueOf("state", id, records)) },
         );
     }
@@ -743,7 +741,7 @@ export default function MapContainer() {
 
         if (selectedStateRef.current) {
             map.current.setFeatureState(
-                { source: STATES_SOURCE, sourceLayer: STATES_LAYER, id: selectedStateRef.current },
+                { source: STATES_SOURCE, id: selectedStateRef.current },
                 { selected: false },
             );
             selectedStateRef.current = null;
@@ -781,7 +779,6 @@ export default function MapContainer() {
                 map.current.setFeatureState(
                     {
                         source: STATES_SOURCE,
-                        sourceLayer: STATES_LAYER,
                         id: selectedStateRef.current,
                     },
                     { selected: false },
@@ -789,10 +786,7 @@ export default function MapContainer() {
             }
 
             selectedStateRef.current = postal;
-            map.current.setFeatureState(
-                { source: STATES_SOURCE, sourceLayer: STATES_LAYER, id: postal },
-                { selected: true },
-            );
+            map.current.setFeatureState({ source: STATES_SOURCE, id: postal }, { selected: true });
             map.current.setPaintProperty(
                 STATES_FILL,
                 "fill-color",
@@ -905,7 +899,6 @@ export default function MapContainer() {
                 map.current.setFeatureState(
                     {
                         source: STATES_SOURCE,
-                        sourceLayer: STATES_LAYER,
                         id: hoveredStateRef.current,
                     },
                     { hover: false },
@@ -913,10 +906,7 @@ export default function MapContainer() {
             }
 
             hoveredStateRef.current = postal;
-            map.current.setFeatureState(
-                { source: STATES_SOURCE, sourceLayer: STATES_LAYER, id: postal },
-                { hover: true },
-            );
+            map.current.setFeatureState({ source: STATES_SOURCE, id: postal }, { hover: true });
             map.current.setPaintProperty(
                 STATES_FILL,
                 "fill-color",
@@ -1008,7 +998,7 @@ export default function MapContainer() {
 
         if (hoveredStateRef.current) {
             map.current.setFeatureState(
-                { source: STATES_SOURCE, sourceLayer: STATES_LAYER, id: hoveredStateRef.current },
+                { source: STATES_SOURCE, id: hoveredStateRef.current },
                 { hover: false },
             );
         }

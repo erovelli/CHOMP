@@ -144,8 +144,8 @@ export const PAGE_CONTENT: Record<NavPage, PageContent> = {
                 heading: "Geographies",
                 items: [
                     {
-                        label: "U.S. Census TIGER/Line 2023",
-                        href: "https://www.census.gov/geographies/mapping-files/time-series/geo/tiger-line-file.html",
+                        label: "U.S. Census Cartographic Boundary Files (2023)",
+                        href: "https://www.census.gov/geographies/mapping-files/time-series/geo/carto-boundary-file.html",
                     },
                     {
                         label: "U.S. Department of State, Office of the Geographer, Large Scale International Boundaries (LSIB)",
