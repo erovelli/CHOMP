@@ -19,12 +19,19 @@ const ExportModal = lazy(() => import("./ExportModal"));
 // Reserve the widest desktop breakpoint band for the full horizontal nav.
 // Below this we fall back to a compact "About" button that opens the modal
 // on the last-viewed page. Threshold chosen to just clear the wordmark +
-// 5 nav items + Export at 13px font.
-const NAV_COLLAPSE_QUERY = "(max-width: 1080px)";
+// 7 nav items (Atlas + 5 sub-pages + GitHub) + Export at 13px font, with a
+// handful of pixels of headroom for font-metric variance across platforms.
+const NAV_COLLAPSE_QUERY = "(max-width: 1120px)";
+
+// The tagline (long wordmark subtitle) drops one breakpoint earlier than the
+// nav: at ~1120-1280 px there's room for either the tagline OR the full nav
+// but not both. Drop the tagline first — the nav is the more useful control.
+const TAGLINE_HIDE_QUERY = "(max-width: 1280px)";
 
 export default function Header() {
     const isMobile = useIsMobile();
     const isCompact = useMediaQuery(NAV_COLLAPSE_QUERY);
+    const hideTagline = useMediaQuery(TAGLINE_HIDE_QUERY);
     const [exportOpen, setExportOpen] = useState(false);
     const [filtersOpen, setFiltersOpen] = useState(false);
     const [aboutPage, setAboutPage] = useState<NavPage | null>("project");
@@ -83,7 +90,7 @@ export default function Header() {
                     >
                         CHOMP
                     </button>
-                    {!isMobile && !isCompact && (
+                    {!isMobile && !isCompact && !hideTagline && (
                         <span
                             style={{
                                 fontFamily: "var(--ff-sans)",
@@ -92,6 +99,14 @@ export default function Header() {
                                 color: "var(--ink-muted, var(--ink))",
                                 opacity: 0.7,
                                 whiteSpace: "nowrap",
+                                // Belt-and-suspenders: if a future font-metric
+                                // shift makes the tagline overflow its grid
+                                // column before the media-query breakpoint
+                                // catches it, ellipsis-truncate rather than
+                                // paint over the nav.
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                minWidth: 0,
                             }}
                         >
                             Claims History of Oral Healthcare Medicaid Procedures
