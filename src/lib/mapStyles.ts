@@ -137,6 +137,7 @@ export const PROTOMAPS_FIRST_LABEL_LAYER = "physical_point_ocean";
 // maplibregl.StyleSpecification.
 type StyleWithLayers<T> = T & {
     layers: Array<{ id: string; type: string; minzoom?: number } & Record<string, unknown>>;
+    sources?: Record<string, { attribution?: string } & Record<string, unknown>>;
 };
 
 export function minimizeProtomapsStyle<T>(style: StyleWithLayers<T>): StyleWithLayers<T> {
@@ -148,5 +149,19 @@ export function minimizeProtomapsStyle<T>(style: StyleWithLayers<T>): StyleWithL
             }
             return l;
         });
-    return { ...style, layers };
+    // Protomaps' style declares its own "Protomaps © OpenStreetMap" on the
+    // tile source; MapLibre appends that to our customAttribution and the two
+    // read as duplicates in the corner ("Protomaps © OpenStreetMap | © OSM
+    // contributors, Protomaps"). Strip the source-side attribution and let
+    // customAttribution be the single truthful line — it has proper links
+    // and the ODbL-standard "contributors" phrasing.
+    const sources = style.sources
+        ? Object.fromEntries(
+              Object.entries(style.sources).map(([k, v]) => {
+                  const { attribution: _dropped, ...rest } = v;
+                  return [k, rest];
+              }),
+          )
+        : style.sources;
+    return { ...style, layers, sources };
 }

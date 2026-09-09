@@ -14,11 +14,15 @@ export const CONUS_BOUNDS: [[number, number], [number, number]] = [
 ];
 
 // ── Tile sources & layers ─────────────────────────────────────
+// States are a GeoJSON source, mirroring counties. Was PMTiles at ~1:20m
+// generalization (107 KB); switched to Census cb_2023_us_state_5m so the
+// coastline reads clean against Protomaps' OSM-derived basemap. See
+// scripts/fetch_state_geometry.py for provenance and the rationale.
 export const STATES_SOURCE = "states-source";
 export const STATES_FILL = "states-fill";
 export const STATES_STROKE = "states-stroke";
-export const STATES_LAYER = "states";
 export const STATES_ID_PROP = "postal";
+export const STATES_GEOJSON = "states.geojson";
 
 export const ZIP3_SOURCE = "zip3-source";
 export const ZIP3_FILL = "zip3-fill";
