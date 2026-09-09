@@ -1089,7 +1089,11 @@ export default function MapContainer() {
 
             map.current.addControl(
                 new maplibregl.AttributionControl({
-                    compact: true,
+                    // Keep the OSM/Protomaps line visible inline on the map
+                    // rather than tucked behind the compact "i" chip — the
+                    // ODbL attribution requirement is easier for everyone to
+                    // find when it's readable at a glance.
+                    compact: false,
                     // Required by Protomaps' license when Protomaps tiles load.
                     customAttribution: apiKey ? OSM_ATTRIBUTION : undefined,
                 }),

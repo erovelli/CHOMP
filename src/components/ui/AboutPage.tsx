@@ -1,11 +1,18 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { HEADER_HEIGHT, Z_INDEX } from "../../constants/layout";
-import { PAGE_CONTENT, type NavPage, type PageSection } from "../../constants/pages";
+import {
+    NAV_PAGES,
+    NAV_LABELS,
+    PAGE_CONTENT,
+    type NavPage,
+    type PageSection,
+} from "../../constants/pages";
 import { useIsMobile } from "../../lib/useMediaQuery";
 
 interface AboutPageProps {
     page: NavPage | null;
     onClose: () => void;
+    onPageChange: (page: NavPage) => void;
 }
 
 // Full-viewport slide-in page. Covers the map below the header while leaving
@@ -13,8 +20,9 @@ interface AboutPageProps {
 // a single click on the primary nav, not a modal-with-sub-tabs redundancy.
 // Pattern: Pearl and other editorial product sites where clicking a nav item
 // swaps the whole content region rather than opening a floating dialog.
-export default function AboutPage({ page, onClose }: AboutPageProps) {
+export default function AboutPage({ page, onClose, onPageChange }: AboutPageProps) {
     const isMobile = useIsMobile();
+    const scrollRef = useRef<HTMLElement | null>(null);
 
     useEffect(() => {
         if (!page) return;
@@ -25,12 +33,19 @@ export default function AboutPage({ page, onClose }: AboutPageProps) {
         return () => window.removeEventListener("keydown", onKey);
     }, [page, onClose]);
 
+    // Switching sub-pages should feel like navigating, not like remembering
+    // where you scrolled on the previous one — reset scroll on every change.
+    useEffect(() => {
+        scrollRef.current?.scrollTo({ top: 0 });
+    }, [page]);
+
     if (!page) return null;
 
     const content = PAGE_CONTENT[page];
 
     return (
         <section
+            ref={scrollRef}
             className="chomp-about-page"
             role="region"
             aria-labelledby="about-page-title"
@@ -51,9 +66,9 @@ export default function AboutPage({ page, onClose }: AboutPageProps) {
                 className="chomp-close-btn"
                 style={{
                     position: "absolute",
-                    top: isMobile ? 16 : 24,
-                    right: isMobile ? 16 : 32,
-                    zIndex: 1,
+                    top: isMobile ? 12 : 24,
+                    right: isMobile ? 12 : 32,
+                    zIndex: 2,
                 }}
             >
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
@@ -65,6 +80,21 @@ export default function AboutPage({ page, onClose }: AboutPageProps) {
                     />
                 </svg>
             </button>
+
+            {isMobile && (
+                <nav aria-label="About sections" className="chomp-about-page__tabs">
+                    {NAV_PAGES.map((navPage) => (
+                        <button
+                            key={navPage}
+                            onClick={() => onPageChange(navPage)}
+                            className="chomp-about-page__tab"
+                            aria-current={page === navPage ? "page" : undefined}
+                        >
+                            {NAV_LABELS[navPage]}
+                        </button>
+                    ))}
+                </nav>
+            )}
 
             <article className="chomp-about-page__content">
                 <h1 id="about-page-title" className="chomp-about-page__title">
