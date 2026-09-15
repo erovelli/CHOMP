@@ -349,19 +349,25 @@ state/county sources. Note `merged_hhs_nppes_geo.csv` does have territory
 The Legend reads the active stops from the store (`colorStops`) and surfaces a caveat string when the metric is `enrollees` (_"Capped at 95th percentile; outliers saturate"_) versus the volume default (_"Scale adjusts to the current view"_).
 **Status.** Implemented (supersedes the earlier uniform-rule approach).
 
-### L36 ⬜ County geometry vintage differs from claims
+### L36 ⬜ County geometry uses the 2023 Census vintage
 
 **Issue.** Counties are served as GeoJSON (Census cartographic-boundary counties,
 via [`scripts/fetch_county_geometry.py`](../scripts/fetch_county_geometry.py))
 because the build environment has no tippecanoe/ogr2ogr to produce a county
-`.pmtiles`. The boundary file is a fixed Census vintage; a handful of FIPS codes
-that changed over 2018–2024 (e.g. Connecticut's 2022 planning-region recode) may
-not match the geocoded `county_fips` exactly.
-**Impact.** A small number of county keys may not join to a polygon (rendered
-blank) or vice-versa. At the national choropleth scale this is negligible.
-**Mitigation.** Swap in a matching-vintage county boundary set, or move counties
-to PMTiles, in a follow-up. ZIP3/state are unaffected.
-**Status.** Minor; documented.
+`.pmtiles`. The GENZ2023 (cb_2023_us_county_5m) vintage is what makes the join
+work: it carries Connecticut's 9 Planning Regions (09110..09190, replacing the
+legacy 8 counties in 2022), Alaska's post-2019 borough reorganizations, and
+South Dakota's 46102 Oglala Lakota renaming, all of which the aggregate
+`county_fips` uses. An older vintage (Plotly's pre-2022 mirror, GENZ2021 and
+earlier) would silently drop every CT polygon at paint time because none of the
+Planning-Region GEOIDs would exist in the source.
+**Impact.** With the 2023 vintage, every county key emitted by the aggregate
+joins to a polygon (verified: 0 data-only ids).
+**Follow-up.** For 2018–2021, CT still has no per-Planning-Region ACS
+denominator, so the per-enrollee metric renders as no-data at the bottom of the
+scale for those years. A future crosswalk from the legacy CT counties to
+Planning Regions would recover it.
+**Status.** Resolved for volume; documented gap for per-enrollee 2018–2021 CT.
 
 ### L37 🟥 Provider-attribution inflates per-enrollee rates at smaller grains
 

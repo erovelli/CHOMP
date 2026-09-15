@@ -7,9 +7,17 @@ environment has no tippecanoe/ogr2ogr to produce a county .pmtiles, and ~3.2k
 county polygons are small enough to ship as GeoJSON (MapLibre supports
 `feature-state` + `promoteId` on GeoJSON sources exactly like vector tiles).
 
-Source: Census cartographic-boundary counties, mirrored by Plotly. Each feature's
-top-level `id` is the 5-digit county FIPS (GEOID) — the same key used by the
-county aggregate NDJSON (`provider_procedure_category_aggregate_*_county.json`).
+Source: Census cartographic-boundary counties, 2023 vintage, 1:5,000,000
+scale. This vintage is what makes the choropleth join to the aggregate NDJSON
+correctly — the 2022 Census redistricting replaced Connecticut's 8 legacy
+counties (09001..09015) with 9 Planning Regions (09110..09190), and the
+aggregate is built on the new codes. Older mirrors (Plotly's geojson-counties-
+fips.json, pre-2022 Census CB) still carry the legacy CT counties, which
+silently drop every CT polygon at paint time. `NAMELSAD` is the Census-
+canonical display label ("Autauga County", "Capitol Planning Region",
+"Alexandria city", ...) so we don't have to reassemble it from NAME + LSAD.
+
+Public domain (17 U.S.C. § 105).
 
 Output: public/counties.geojson with per-feature properties trimmed to:
     GEOID : 5-digit FIPS string (also promoted to the feature id)
@@ -21,54 +29,91 @@ Usage:
 
 from __future__ import annotations
 
+import io
 import json
 import sys
 import urllib.request
+import zipfile
 from pathlib import Path
+
+import shapefile  # type: ignore[import-untyped]  # pyshp
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 OUT_PATH = REPO_ROOT / "public" / "counties.geojson"
-SRC_URL = "https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json"
+SRC_URL = "https://www2.census.gov/geo/tiger/GENZ2023/shp/cb_2023_us_county_5m.zip"
 
-FIPS_TO_USPS = {
-    "01": "AL", "02": "AK", "04": "AZ", "05": "AR", "06": "CA", "08": "CO",
-    "09": "CT", "10": "DE", "11": "DC", "12": "FL", "13": "GA", "15": "HI",
-    "16": "ID", "17": "IL", "18": "IN", "19": "IA", "20": "KS", "21": "KY",
-    "22": "LA", "23": "ME", "24": "MD", "25": "MA", "26": "MI", "27": "MN",
-    "28": "MS", "29": "MO", "30": "MT", "31": "NE", "32": "NV", "33": "NH",
-    "34": "NJ", "35": "NM", "36": "NY", "37": "NC", "38": "ND", "39": "OH",
-    "40": "OK", "41": "OR", "42": "PA", "44": "RI", "45": "SC", "46": "SD",
-    "47": "TN", "48": "TX", "49": "UT", "50": "VT", "51": "VA", "53": "WA",
-    "54": "WV", "55": "WI", "56": "WY",
-    "60": "AS", "66": "GU", "69": "MP", "72": "PR", "78": "VI",
-}
+# 2-digit STATEFP we accept. 50 states + DC + the five inhabited territories
+# whose postals appear in the aggregate NDJSON. Reject anything else loudly
+# rather than silently emit a polygon the front end can't join to.
+KEEP_STATEFP = frozenset(
+    [
+        "01", "02", "04", "05", "06", "08", "09", "10", "11", "12",
+        "13", "15", "16", "17", "18", "19", "20", "21", "22", "23",
+        "24", "25", "26", "27", "28", "29", "30", "31", "32", "33",
+        "34", "35", "36", "37", "38", "39", "40", "41", "42", "44",
+        "45", "46", "47", "48", "49", "50", "51", "53", "54", "55",
+        "56",
+        "60", "66", "69", "72", "78",
+    ]
+)
 
 
 def main() -> int:
     print(f"Fetching {SRC_URL} ...")
-    with urllib.request.urlopen(SRC_URL, timeout=60) as resp:
-        fc = json.load(resp)
+    with urllib.request.urlopen(SRC_URL, timeout=120) as resp:
+        payload = resp.read()
+
+    zf = zipfile.ZipFile(io.BytesIO(payload))
+    shp_name = next(n for n in zf.namelist() if n.endswith(".shp"))
+    stem = shp_name[:-4]
+
+    reader = shapefile.Reader(
+        shp=io.BytesIO(zf.read(f"{stem}.shp")),
+        dbf=io.BytesIO(zf.read(f"{stem}.dbf")),
+        shx=io.BytesIO(zf.read(f"{stem}.shx")),
+    )
+
+    field_names = [f[0] for f in reader.fields[1:]]  # skip DeletionFlag
+    required = {"STATEFP", "GEOID", "NAMELSAD", "STUSPS"}
+    if not required.issubset(field_names):
+        print(
+            f"Unexpected shapefile schema — fields were {field_names}",
+            file=sys.stderr,
+        )
+        return 1
+    statefp_i = field_names.index("STATEFP")
+    geoid_i = field_names.index("GEOID")
+    namelsad_i = field_names.index("NAMELSAD")
+    stusps_i = field_names.index("STUSPS")
 
     out_features = []
-    for f in fc.get("features", []):
-        geoid = str(f.get("id") or "").zfill(5)
-        if len(geoid) != 5 or not geoid.isdigit():
+    seen_statefp: set[str] = set()
+    for sr in reader.iterShapeRecords():
+        statefp = sr.record[statefp_i]
+        if statefp not in KEEP_STATEFP:
             continue
-        props = f.get("properties", {})
-        county_name = props.get("NAME", "")
-        lsad = props.get("LSAD", "County")
-        postal = FIPS_TO_USPS.get(geoid[:2], geoid[:2])
-        label = f"{county_name} {lsad}".strip()
-        if postal:
-            label = f"{label}, {postal}"
+        seen_statefp.add(statefp)
+        geoid = str(sr.record[geoid_i]).zfill(5)
+        namelsad = sr.record[namelsad_i]
+        postal = sr.record[stusps_i]
+        # pyshp's built-in GeoJSON emitter handles MultiPolygon for multi-part
+        # counties correctly (Aleutians, Louisiana parishes with islands, etc.).
+        geom = sr.shape.__geo_interface__
         out_features.append(
             {
                 "type": "Feature",
                 "id": geoid,
-                "properties": {"GEOID": geoid, "name": label},
-                "geometry": f["geometry"],
+                "properties": {"GEOID": geoid, "name": f"{namelsad}, {postal}"},
+                "geometry": geom,
             }
         )
+
+    missing_states = sorted(KEEP_STATEFP - seen_statefp)
+    if missing_states:
+        # Louder than a silent partial: a state falling out of the source
+        # would leave that whole state blank on the county view.
+        print(f"Missing STATEFP from source: {missing_states}", file=sys.stderr)
+        return 1
 
     out = {"type": "FeatureCollection", "features": out_features}
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
