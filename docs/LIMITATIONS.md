@@ -16,17 +16,18 @@ This is a comprehensive list of limitations that affect the merged and geocoded 
 
 Cumulative accounting of how many rows we lose at each stage of the pipeline, and the limit ID that explains each loss. "Rows in" of each stage equals "rows remaining" from the previous stage; numbers come from `data/MergedHHS-NPI/coverage_report.csv`, `geocode_failures.csv`, and the HHS source CSV.
 
-| #   | Stage                                                                  | Reason for exclusion                                                                                  |     Rows in |               Rows dropped | Rows remaining | Limit ID   |
-| --- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ----------: | -------------------------: | -------------: | ---------- |
-| 0   | HHS source CSV                                                         | — (raw release, 7 columns, 2018-01 → 2024-12)                                                         |           — |                          — |    227,083,361 | —          |
-| 1   | Phase A filter ([`merge_hhs_nppes.py`](../scripts/merge_hhs_nppes.py)) | HCPCS code not D-prefixed (non-dental — medical, behavioral, etc.)                                    | 227,083,361 |                203,014,787 |     24,068,574 | structural |
-| 2   | Phase B NPPES inner join                                               | `SERVICING_PROVIDER_NPI_NUM` not found in same-month NPPES (all causes combined)                      |  24,068,574 |            895,691 (3.72%) |     23,172,883 | L07        |
-| 2a  | ↳ sub-cause                                                            | Non-NPI servicing identifier (NULL, A-prefix Atypical, M-prefix Medicaid, sentinels, other malformed) |           — | ~895,083 (~99.9% of drops) |              — | L08        |
-| 2b  | ↳ sub-cause                                                            | Real 10-digit NPI but registered after the NBER monthly snapshot (recoverable with ±1-month window)   |           — |      608 (~0.07% of drops) |              — | L04        |
-| 3   | Geocoding (ArcGIS, collaborator handoff)                               | Address could not be geocoded (`geocode_status == 'U'`; 86 of 69,960 unique addresses)                |  23,172,883 |             32,488 (0.14%) |     23,140,395 | L13 / L32  |
-| —   | **Final mapped dataset**                                               | —                                                                                                     |           — |                          — | **23,140,395** | —          |
+| #   | Stage                                                                  | Reason for exclusion                                                                                                                      |     Rows in |               Rows dropped |                                                Rows remaining | Limit ID        |
+| --- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------: | -------------------------: | ------------------------------------------------------------: | --------------- |
+| 0   | HHS source CSV                                                         | — (raw release, 7 columns, 2018-01 → 2024-12)                                                                                             |           — |                          — |                                                   227,083,361 | —               |
+| 1   | Phase A filter ([`merge_hhs_nppes.py`](../scripts/merge_hhs_nppes.py)) | HCPCS code not D-prefixed (non-dental — medical, behavioral, etc.)                                                                        | 227,083,361 |                203,014,787 |                                                    24,068,574 | structural      |
+| 2   | Phase B NPPES inner join                                               | `SERVICING_PROVIDER_NPI_NUM` not found in same-month NPPES (all causes combined)                                                          |  24,068,574 |            895,691 (3.72%) |                                                    23,172,883 | L07             |
+| 2a  | ↳ sub-cause                                                            | Non-NPI servicing identifier (NULL, A-prefix Atypical, M-prefix Medicaid, sentinels, other malformed)                                     |           — | ~895,083 (~99.9% of drops) |                                                             — | L08             |
+| 2b  | ↳ sub-cause                                                            | Real 10-digit NPI but registered after the NBER monthly snapshot (recoverable with ±1-month window)                                       |           — |      608 (~0.07% of drops) |                                                             — | L04             |
+| 3   | Geocoding (ArcGIS, collaborator handoff)                               | Address could not be geocoded (`geocode_status == 'U'`; 86 of 69,960 unique addresses); rows kept in file with NULL `county_fips`/lat/lon |  23,172,883 |             32,488 (0.14%) | 23,172,883 (file); 23,140,395 usable for state/county roll-up | L13 / L32 / L33 |
+| 4a  | State/county roll-up                                                   | Rows with NULL `county_fips` are excluded from `state`/`county` aggregates                                                                |  23,172,883 |             32,488 (0.14%) |                          **23,140,395** state/county universe | L33             |
+| 4b  | ZIP3 roll-up                                                           | Rows with NULL `practice_zip5` are excluded from `zip3` aggregate (31,509 of the geocode-failed rows still have a valid ZIP → kept here)  |  23,172,883 |                        979 |                                  **23,171,904** ZIP3 universe | L33             |
 
-**Cumulative loss from raw HHS:** 203,942,966 rows (89.81%) — almost entirely the non-dental filter at stage 1. From the dental-only universe of 24,068,574 rows, total downstream loss is 928,179 rows (3.86%).
+**Cumulative loss from raw HHS to the state/county universe:** 203,942,966 rows (89.81%) — almost entirely the non-dental filter at stage 1. From the dental-only universe of 24,068,574 rows, downstream loss to state/county aggregates is 928,179 rows (3.86%); to the ZIP3 aggregate, 896,670 rows (3.73%).
 
 **Not counted here** (invisible upstream losses): HHS cell-suppression of small (provider × HCPCS × month) cells (L03), and claims-processing lag in 2024-11/2024-12 (L02). These never enter our row counts.
 
@@ -81,14 +82,14 @@ Cumulative accounting of how many rows we lose at each stage of the pipeline, an
 
 ## 2. Merge-pipeline limitations (caused by our `merge_hhs_nppes.py`)
 
-### L07 🟥 3.2% inner-join drop rate
+### L07 🟥 3.72% inner-join drop rate
 
-**Issue.** ~3.2% of HHS dental rows are dropped because the `SERVICING_PROVIDER_NPI_NUM` value isn't found in the same-month NPPES file. Of these dropped rows:
+**Issue.** 3.72% of HHS dental rows are dropped because the `SERVICING_PROVIDER_NPI_NUM` value isn't found in the same-month NPPES file. Of these dropped rows:
 
-- 99.9% have a `SERVICING_PROVIDER_NPI_NUM` that **isn't a real NPI** (see L08–L11).
-- 0.1% are real NPIs that _would_ be found in an adjacent NPPES month (see L04).
+- 99.93% (895,083 rows) have a `SERVICING_PROVIDER_NPI_NUM` that **isn't a real NPI** (see L08–L11).
+- 0.07% (608 rows) are real NPIs that _would_ be found in an adjacent NPPES month (see L04). These are counted in the drop total — the current pipeline does not fall back to adjacent months.
 
-**Impact.** The merged dataset excludes ~740,000 of ~23.9M dental claim-rows from any geography-attached analysis. The exclusion is non-random — it disproportionately removes care delivered by atypical providers (school-based dental, mobile units, FQHC satellite operations under aggregator IDs).
+**Impact.** The merged dataset excludes 895,691 of 24,068,574 dental claim-rows from any geography-attached analysis. The exclusion is non-random — it disproportionately removes care delivered by atypical providers (school-based dental, mobile units, FQHC satellite operations under aggregator IDs).
 **Mitigation.** Disclose as methodological exclusion. Quantified per-month in `data/MergedHHS-NPI/coverage_report.csv`.
 
 ### L08 🟥 Non-NPI servicing identifiers (A-prefix, M-prefix, sentinels, nulls)
@@ -107,7 +108,7 @@ Cumulative accounting of how many rows we lose at each stage of the pipeline, an
 ### L09 🟨 Inner-join semantics (not left-join)
 
 **Issue.** `merge_hhs_nppes.py` does an inner join on `servicing_npi`. Dropped rows are silently excluded from the merged output — they don't appear with NULL geography fields.
-**Impact.** Downstream code can't distinguish "no claims at this address" from "claims existed but lost in merge." The total claim count in the merged file is 23,172,883 vs. ~23.9M in pre-merge HHS dental.
+**Impact.** Downstream code can't distinguish "no claims at this address" from "claims existed but lost in merge." The total claim count in the merged file is 23,172,883 vs. 24,068,574 in pre-merge HHS dental.
 **Mitigation.** Pre-merge per-month counts are preserved in `data/MergedHHS-NPI/hhs_dental/*.parquet` for sanity-checking. `analyze_coverage.py` produces the count differential per month.
 
 ### L10 🟨 Servicing NPI used as join key, not billing NPI
