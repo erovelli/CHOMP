@@ -6,6 +6,7 @@ import { formatCurrency } from "../../../lib/formatters";
 import { MONTH_NAMES } from "../../../constants/time";
 import StatCard from "./StatCard";
 import CategoryBreakdown from "./CategoryBreakdown";
+import DqRibbon from "./DqRibbon";
 
 export default function PanelContent({
     detail,
@@ -191,6 +192,8 @@ export default function PanelContent({
                                 label="Claims / Enrollee"
                             />
                         </div>
+
+                        {detail.level === "state" && <DqRibbon stateUsps={detail.id} />}
 
                         <CategoryBreakdown records={displayRecords} periodLabel={periodLabel} />
                     </>

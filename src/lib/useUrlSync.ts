@@ -16,6 +16,11 @@ export function useUrlSync(): void {
         if (initial.layer) store.setActiveLayer(initial.layer);
         if (initial.year) store.setSelectedYear(initial.year);
         if (initial.month) store.setSelectedMonth(initial.month);
+        if (initial.dq === "off") store.setDqOverlayVisible(false);
+        else if (initial.dq) {
+            store.setDqTopic(initial.dq);
+            store.setDqOverlayVisible(true);
+        }
     }, []);
 
     useEffect(() => {
@@ -25,6 +30,7 @@ export function useUrlSync(): void {
                 layer: state.activeLayer,
                 year: state.selectedYear,
                 month: state.selectedMonth,
+                dq: state.dqOverlayVisible ? state.dqTopic : ("off" as const),
             };
             const serialized = JSON.stringify(next);
             if (serialized === lastSerialized) return;

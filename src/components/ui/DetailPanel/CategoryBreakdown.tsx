@@ -1,4 +1,3 @@
-import { CATEGORY_COLORS } from "../../../constants/map";
 import { formatCurrency } from "../../../lib/formatters";
 
 interface CategoryRecord {
@@ -35,7 +34,6 @@ export default function CategoryBreakdown({
                     .sort((a, b) => b.total_claims - a.total_claims)
                     .map((record) => {
                         const pct = (record.total_claims / maxClaims) * 100;
-                        const color = CATEGORY_COLORS[record.category] ?? "#999";
                         return (
                             <div key={record.category} style={{ marginBottom: 10 }}>
                                 <div
@@ -43,6 +41,7 @@ export default function CategoryBreakdown({
                                         display: "flex",
                                         justifyContent: "space-between",
                                         alignItems: "baseline",
+                                        gap: 8,
                                         marginBottom: 4,
                                     }}
                                 >
@@ -57,12 +56,29 @@ export default function CategoryBreakdown({
                                     </span>
                                     <span
                                         style={{
-                                            fontSize: 11,
-                                            fontFamily: "var(--ff-serif)",
-                                            color: "var(--ink-mid)",
+                                            display: "inline-flex",
+                                            alignItems: "baseline",
+                                            gap: 8,
+                                            flexShrink: 0,
                                         }}
                                     >
-                                        {record.total_claims.toLocaleString()}
+                                        <span
+                                            style={{
+                                                fontSize: 11,
+                                                fontFamily: "var(--ff-serif)",
+                                                color: "var(--ink-mid)",
+                                            }}
+                                        >
+                                            {record.total_claims.toLocaleString()}
+                                        </span>
+                                        <span
+                                            style={{
+                                                fontSize: 10,
+                                                color: "var(--ink-dim)",
+                                            }}
+                                        >
+                                            {formatCurrency(record.total_amount_paid)} paid
+                                        </span>
                                     </span>
                                 </div>
                                 <div
@@ -77,22 +93,11 @@ export default function CategoryBreakdown({
                                         style={{
                                             height: "100%",
                                             width: `${pct}%`,
-                                            background: color,
+                                            background: "var(--ink-dim)",
                                             borderRadius: 2,
                                             transition: "width 0.5s cubic-bezier(0.22,1,0.36,1)",
                                         }}
                                     />
-                                </div>
-                                <div
-                                    style={{
-                                        display: "flex",
-                                        justifyContent: "flex-end",
-                                        marginTop: 2,
-                                    }}
-                                >
-                                    <span style={{ fontSize: 10, color: "var(--ink-dim)" }}>
-                                        {formatCurrency(record.total_amount_paid)} paid
-                                    </span>
                                 </div>
                             </div>
                         );

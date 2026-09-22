@@ -2,6 +2,13 @@ import { useMapStore } from "../../lib/store";
 import { LAYER_CONFIGS, LAYER_ORDER, GEO_LEVELS, METRIC_OPTIONS } from "../../constants/map";
 import { AVAILABLE_YEARS, MONTH_NAMES } from "../../constants/time";
 import { HEADER_HEIGHT, Z_INDEX } from "../../constants/layout";
+import {
+    DQ_TOPIC_ORDER,
+    DQ_TOPIC_LABELS,
+    DQ_ASSESSMENT_ORDER,
+    DQ_ASSESSMENT_COLORS,
+} from "../../constants/dq";
+import { dqHasYear } from "../../lib/dataService";
 
 // Desktop control panel: one editorial card at top-left, sans-only, monochrome.
 // Selection language is weight + subtle background; the accent color is
@@ -18,6 +25,11 @@ export default function LeftRail() {
         selectedMonth,
         selectedYear,
         monthlyDataLoaded,
+        dqTopic,
+        setDqTopic,
+        dqOverlayVisible,
+        setDqOverlayVisible,
+        dqData,
     } = useMapStore();
     const loadingMonthly = selectedMonth !== null && !monthlyDataLoaded;
     const isAllMonths = selectedMonth === null;
@@ -63,6 +75,54 @@ export default function LeftRail() {
                             />
                         ))}
                     </div>
+                </Group>
+
+                <Group
+                    title="Data Quality"
+                    hint={
+                        !dqOverlayVisible
+                            ? "hidden"
+                            : !dqData
+                              ? "loading"
+                              : !dqHasYear(dqData, dqTopic, selectedYear)
+                                ? `no data for ${selectedYear}`
+                                : undefined
+                    }
+                >
+                    {dqOverlayVisible ? (
+                        <>
+                            <div role="radiogroup" aria-label="Data Quality topic">
+                                {DQ_TOPIC_ORDER.map((key) => (
+                                    <RadioRow
+                                        key={key}
+                                        label={DQ_TOPIC_LABELS[key]}
+                                        checked={key === dqTopic}
+                                        onSelect={() => setDqTopic(key)}
+                                    />
+                                ))}
+                            </div>
+                            <DqLegendSwatches />
+                            <div className="chomp-rail-reset-row">
+                                <button
+                                    type="button"
+                                    className="chomp-rail-reset"
+                                    onClick={() => setDqOverlayVisible(false)}
+                                >
+                                    Hide overlay
+                                </button>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="chomp-rail-reset-row">
+                            <button
+                                type="button"
+                                className="chomp-rail-reset"
+                                onClick={() => setDqOverlayVisible(true)}
+                            >
+                                Show overlay
+                            </button>
+                        </div>
+                    )}
                 </Group>
 
                 <Group title="Year" trailing={<HeadingValue>{selectedYear}</HeadingValue>}>
@@ -227,6 +287,56 @@ function AllMonthsButton() {
             >
                 All months
             </button>
+        </div>
+    );
+}
+
+// Compact swatch row for the 5 DQ assessment tiers. Sits under the topic
+// radio list inside the "Data Quality" group so users don't have to look at
+// the map's floating legend to decode a ring color they see. Inline colored
+// pills instead of vertical rows to keep the group tight; labels wrap.
+function DqLegendSwatches() {
+    return (
+        <div
+            role="list"
+            aria-label="Data Quality assessment tiers"
+            style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 3,
+                margin: "8px 0 2px",
+                paddingTop: 8,
+                borderTop: "1px solid var(--border)",
+            }}
+        >
+            {DQ_ASSESSMENT_ORDER.map((tier) => (
+                <div
+                    key={tier}
+                    role="listitem"
+                    style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        fontSize: 10,
+                        color: "var(--ink-mid)",
+                        letterSpacing: "0.01em",
+                    }}
+                >
+                    <span
+                        aria-hidden
+                        style={{
+                            display: "inline-block",
+                            width: 12,
+                            height: 3,
+                            borderRadius: 1,
+                            background: DQ_ASSESSMENT_COLORS[tier],
+                            boxShadow: "0 0 0 1px #ffffff",
+                            flexShrink: 0,
+                        }}
+                    />
+                    {tier}
+                </div>
+            ))}
         </div>
     );
 }

@@ -3,6 +3,13 @@ import { useMapStore } from "../../lib/store";
 import { LAYER_CONFIGS, LAYER_ORDER, GEO_LEVELS, METRIC_OPTIONS } from "../../constants/map";
 import { AVAILABLE_YEARS, MONTH_OPTIONS } from "../../constants/time";
 import { Z_INDEX, SHEET_MAX_WIDTH, PANEL_TRANSITION } from "../../constants/layout";
+import {
+    DQ_TOPIC_ORDER,
+    DQ_TOPIC_LABELS,
+    DQ_ASSESSMENT_ORDER,
+    DQ_ASSESSMENT_COLORS,
+} from "../../constants/dq";
+import type { DqTopicKey } from "../../lib/types";
 import SheetHandle from "./SheetHandle";
 
 // Mobile replacement for the four floating desktop controls (LayerControl,
@@ -22,6 +29,10 @@ export default function FilterSheet({ open, onClose }: { open: boolean; onClose:
         selectedMonth,
         setSelectedMonth,
         monthlyDataLoaded,
+        dqTopic,
+        setDqTopic,
+        dqOverlayVisible,
+        setDqOverlayVisible,
     } = useMapStore();
     const sheetRef = useRef<HTMLDivElement>(null);
     const loadingMonthly = selectedMonth !== null && !monthlyDataLoaded;
@@ -116,6 +127,67 @@ export default function FilterSheet({ open, onClose }: { open: boolean; onClose:
                                 />
                             ))}
                         </div>
+                    </Section>
+
+                    <Section title="Data Quality" hint={dqOverlayVisible ? undefined : "hidden"}>
+                        <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                            <Chip
+                                label={dqOverlayVisible ? "Overlay on" : "Overlay off"}
+                                active={dqOverlayVisible}
+                                onClick={() => setDqOverlayVisible(!dqOverlayVisible)}
+                            />
+                        </div>
+                        {dqOverlayVisible && (
+                            <>
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                                    {DQ_TOPIC_ORDER.map((key) => (
+                                        <Chip
+                                            key={key}
+                                            label={DQ_TOPIC_LABELS[key]}
+                                            active={key === dqTopic}
+                                            onClick={() => setDqTopic(key as DqTopicKey)}
+                                        />
+                                    ))}
+                                </div>
+                                <div
+                                    style={{
+                                        display: "flex",
+                                        flexWrap: "wrap",
+                                        gap: "4px 12px",
+                                        marginTop: 10,
+                                        paddingTop: 8,
+                                        borderTop: "1px solid var(--border)",
+                                    }}
+                                >
+                                    {DQ_ASSESSMENT_ORDER.map((tier) => (
+                                        <div
+                                            key={tier}
+                                            style={{
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: 6,
+                                                fontSize: 11,
+                                                color: "var(--ink-mid)",
+                                            }}
+                                        >
+                                            <span
+                                                aria-hidden
+                                                style={{
+                                                    display: "inline-block",
+                                                    width: 12,
+                                                    height: 3,
+                                                    borderRadius: 1,
+                                                    background: DQ_ASSESSMENT_COLORS[tier],
+                                                    boxShadow: "0 0 0 1px #ffffff",
+                                                    flexShrink: 0,
+                                                }}
+                                            />
+                                            {tier}
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        )}
                     </Section>
 
                     <Section title="Year">

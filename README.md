@@ -185,6 +185,12 @@ A Husky pre-commit hook runs `lint-staged` (ESLint + Prettier on staged files). 
    three NDJSONs to `public/data/medicaid_enrollment_{state,county,zip3}.json`.
    These are the denominator the front end reads for the "Per Medicaid
    enrollee" rate metric.
+6. **DQ Atlas overlay** — Download the 10 topic CSVs from
+   [medicaid.gov/dq-atlas](https://www.medicaid.gov/dq-atlas/) into
+   `data/DQ Atlas/`, then `python scripts/build_dq_atlas.py` writes
+   `public/data/dq_atlas.json` (~150 KB, all topics × years × states). The
+   front end lazy-fetches this file on load; a missing/broken file cleanly
+   degrades to "overlay unavailable".
 
 No database to provision.
 
@@ -268,7 +274,8 @@ CHOMP/
 - [ ] **Visual regression.** Playwright screenshot diffs of the three primary layouts (empty, state-selected, zip3-selected).
 - [x] **Per-capita normalization.** ACS C27007 Medicaid enrollment drives the "Per Medicaid enrollee" metric at all three geographies; cross-level shared color scale winsorized at p95.
 - [ ] **Time-series chart.** Spark-line of the selected region + category in the detail panel.
-- [x] **URL-addressable state (partial).** `?layer=preventive&year=2024&month=2024-06` shareable deep links for layer/year/month. Region rehydration is a follow-up — it needs to wait for annual data to load and synthesize a `RegionDetail`.
+- [x] **URL-addressable state (partial).** `?layer=preventive&year=2024&month=2024-06&dq=link-bene` shareable deep links for layer, year, month, and the DQ overlay topic (`dq=off` to hide). Region rehydration is a follow-up — it needs to wait for annual data to load and synthesize a `RegionDetail`.
+- [x] **CMS Data-Quality overlay.** Optional ring layer around each state colored by CMS's DQ Atlas assessment (Low / Medium / High concern / Unusable / Unclassified) across 10 topics; state DetailPanel gains a chip ribbon showing all 10 at once. Overlay follows the map's year, hides when the topic has no data for that year.
 - [x] **Export.** PNG / JPEG of a Wikipedia-style synthesized choropleth at the active geo level — state, county, or ZIP3 — rendered off-screen via `d3-geo` + Canvas (`geoAlbersUsa` handles AK/HI; PR in a Mercator inset; state view adds GU/MP/VI as labeled color chips), plus a CSV of the current-view per-region totals. See [ADR 0004](docs/adr/0004-synthesized-export-via-d3-geo.md).
 - [ ] **Data Version Control.** Pin each `public/data/*.json` export to a dated commit of the source data.
 
@@ -286,6 +293,7 @@ CHOMP/
 
 - **HHS Open Data** — _Medicaid Dental Claims, 2018–2024_ (released 2026-02-08). [data.cms.gov](https://data.cms.gov/)
 - **CMS NPPES** — National Plan and Provider Enumeration System monthly download. [download.cms.gov/nppes](https://download.cms.gov/nppes/NPI_Files.html)
+- **CMS DQ Atlas** — Data-quality assessments across 10 topics (claims volume, linking claims to beneficiaries/providers, missing payment data, procedure-code validity, etc.) for the T-MSIS Analytic Files, 2018–2024. Surfaced as the optional ring overlay on the map and the chip ribbon in the state DetailPanel. [medicaid.gov/dq-atlas](https://www.medicaid.gov/dq-atlas)
 - **U.S. Census TIGER/Line** — State and ZIP Code Tabulation Area polygons.
 - **U.S. Department of State LSIB / World Polygons** — Non-US country backdrop polygons, from the Office of the Geographer. [geodata.state.gov](https://geodata.state.gov/)
 - **HCPCS D-code categories** — CDT category conventions from the American Dental Association.

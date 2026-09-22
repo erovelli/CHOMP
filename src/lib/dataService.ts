@@ -5,8 +5,12 @@ import type {
     DataRecord,
     MonthlyDataRecord,
     EnrollmentRecord,
+    DqData,
+    DqTopicKey,
+    DqStateRecord,
 } from "./types";
 import { CATEGORY_TO_KEY, COUNTY_GEOJSON, DATA_PATHS } from "../constants/map";
+import { DQ_DATA_PATH } from "../constants/dq";
 
 // ── Module-level caches ───────────────────────────────────────
 let stateAnnualCache: Record<string, DataRecord[]> = {};
@@ -220,6 +224,53 @@ export function getValueForRegion(
     // doesn't conflate "no data" with a true 0 rate.
     if (enrollees == null || enrollees <= 0) return Number.NaN;
     return claims / enrollees;
+}
+
+// ── DQ Atlas ──────────────────────────────────────────────────
+// Single JSON blob (not NDJSON) — the file is small enough (~40 KB gz) that
+// there's no benefit to streaming, and a single fetch simplifies the loader.
+
+let dqAtlasCache: DqData | null = null;
+let dqAtlasPromise: Promise<DqData | null> | null = null;
+
+export async function loadDqAtlas(): Promise<DqData | null> {
+    if (dqAtlasCache) return dqAtlasCache;
+    if (dqAtlasPromise) return dqAtlasPromise;
+    const BASE = import.meta.env.BASE_URL;
+    dqAtlasPromise = (async () => {
+        try {
+            const res = await fetch(`${BASE}${DQ_DATA_PATH}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            dqAtlasCache = (await res.json()) as DqData;
+            return dqAtlasCache;
+        } catch (err) {
+            // Overlay is optional — a missing/broken atlas file degrades to
+            // "no overlay" rather than failing the whole map load.
+            console.warn(`DQ Atlas load failed: ${(err as Error).message}. Overlay disabled.`);
+            dqAtlasPromise = null;
+            return null;
+        }
+    })();
+    return dqAtlasPromise;
+}
+
+/** Look up one state's DQ record for a (topic, year). Returns undefined when
+ * the topic doesn't cover the year, the state isn't in the DQ Atlas, or the
+ * atlas hasn't loaded. Callers must handle undefined gracefully. */
+export function getDqRecord(
+    data: DqData | null,
+    topic: DqTopicKey,
+    year: string,
+    stateUsps: string,
+): DqStateRecord | undefined {
+    return data?.topics[topic]?.years[year]?.[stateUsps];
+}
+
+/** True if the atlas has data for (topic, year). Used by DqLegend to decide
+ * between the swatch row and the "no data for this year" note. */
+export function dqHasYear(data: DqData | null, topic: DqTopicKey, year: string): boolean {
+    const yearBucket = data?.topics[topic]?.years[year];
+    return !!yearBucket && Object.keys(yearBucket).length > 0;
 }
 
 /** Monthly counterpart of getValueForRegion — same shape, filters on year_month. */
