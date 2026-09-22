@@ -131,7 +131,32 @@ export default function AboutPage({ page, onClose, onPageChange }: AboutPageProp
 
 function SectionView({ section }: { section: PageSection }) {
     if (section.kind === "paragraph") {
-        return <p className="chomp-about-page__paragraph">{section.body}</p>;
+        // A paragraph body can be a plain string or an array of segments
+        // (strings and `{text, href}` link objects) so a paragraph can carry
+        // an inline hyperlink without hoisting the whole line into a
+        // separate links section.
+        if (typeof section.body === "string") {
+            return <p className="chomp-about-page__paragraph">{section.body}</p>;
+        }
+        return (
+            <p className="chomp-about-page__paragraph">
+                {section.body.map((seg, i) =>
+                    typeof seg === "string" ? (
+                        <span key={i}>{seg}</span>
+                    ) : (
+                        <a
+                            key={i}
+                            href={seg.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="chomp-link-inline"
+                        >
+                            {seg.text}
+                        </a>
+                    ),
+                )}
+            </p>
+        );
     }
     if (section.kind === "rule") {
         return <hr className="chomp-about-page__rule" />;
