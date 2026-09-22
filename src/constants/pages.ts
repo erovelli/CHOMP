@@ -13,8 +13,13 @@ export const NAV_LABELS: Record<NavPage, string> = {
 
 export const REPO_URL = "https://github.com/erovelli/CHOMP";
 
+/** One run of paragraph text. A bare string is a plain run; an object with
+ * `href` renders as an inline link. Use the array form when a paragraph
+ * needs an inline hyperlink (e.g. "…contact <Kenneth Liu>."). */
+export type ParagraphSegment = string | { text: string; href: string };
+
 export type PageSection =
-    | { kind: "paragraph"; body: string }
+    | { kind: "paragraph"; body: string | readonly ParagraphSegment[] }
     | { kind: "list"; heading?: string; items: readonly string[] }
     | { kind: "links"; heading?: string; items: readonly { label: string; href: string }[] }
     | { kind: "rule" }
@@ -194,15 +199,15 @@ export const PAGE_CONTENT: Record<NavPage, PageContent> = {
         sections: [
             {
                 kind: "links",
-                items: [
-                    { label: "Report a bug or data issue", href: `${REPO_URL}/issues/new` },
-                    { label: "Suggest a feature", href: `${REPO_URL}/issues/new` },
-                    { label: "Browse the source", href: REPO_URL },
-                ],
+                items: [{ label: "File an issue on GitHub", href: `${REPO_URL}/issues` }],
             },
             {
                 kind: "paragraph",
-                body: "For research collaborations, methodology questions, or partnerships that don't fit the issue tracker, reach any team member directly via GitHub.",
+                body: [
+                    "For research collaborations, methodology questions, or partnerships, contact ",
+                    { text: "Kenneth Liu", href: "https://github.com/kennethliu64" },
+                    ".",
+                ],
             },
         ],
     },

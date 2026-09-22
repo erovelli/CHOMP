@@ -2,6 +2,20 @@ import { useEffect, useRef, useCallback } from "react";
 import maplibregl from "maplibre-gl";
 import { Protocol } from "pmtiles";
 import { useMapStore } from "../../lib/store";
+import type { DqTopicKey, DqData } from "../../lib/types";
+import {
+    DQ_RING_HALO_LAYER,
+    DQ_RING_WIDTH,
+    DQ_RING_HALO_WIDTH,
+    DQ_RING_OPACITY,
+    DQ_RING_HALO_OPACITY,
+    DQ_RING_HALO_COLOR,
+    DQ_RING_NEUTRAL_COLOR,
+    DQ_ASSESSMENT_COLORS,
+    DQ_TIER_STACK_ORDER,
+    dqTierLayerId,
+} from "../../constants/dq";
+import { loadDqAtlas } from "../../lib/dataService";
 import {
     fetchProtomapsStyle,
     minimizeProtomapsStyle,
@@ -532,6 +546,110 @@ function paintValues(
     }
 }
 
+// ── DQ Atlas overlay ────────────────────────────────────────
+// Halo + one line layer per severity tier, added in ascending severity so the
+// worst tier paints on top of shared borders. See constants/dq.ts for the
+// full rationale; briefly, a single-layer approach let Wisconsin's
+// Low-concern green ring erase part of Illinois's Unusable red ring on the
+// shared boundary — with per-tier ordering, the Unusable ring is always last.
+const DQ_HAS_STATE: maplibregl.ExpressionSpecification = [
+    "!=",
+    ["coalesce", ["feature-state", "dqColor"], ""],
+    "",
+];
+
+function addDqRingLayers(map: maplibregl.Map) {
+    if (!map.getLayer(DQ_RING_HALO_LAYER)) {
+        map.addLayer({
+            id: DQ_RING_HALO_LAYER,
+            type: "line",
+            source: STATES_SOURCE,
+            layout: { visibility: "none" },
+            paint: {
+                "line-color": [
+                    "case",
+                    DQ_HAS_STATE,
+                    DQ_RING_HALO_COLOR,
+                    DQ_RING_NEUTRAL_COLOR,
+                ] as maplibregl.ExpressionSpecification,
+                "line-width": DQ_RING_HALO_WIDTH,
+                "line-opacity": DQ_RING_HALO_OPACITY,
+            },
+        });
+    }
+    for (const tier of DQ_TIER_STACK_ORDER) {
+        const id = dqTierLayerId(tier);
+        if (map.getLayer(id)) continue;
+        const color = DQ_ASSESSMENT_COLORS[tier];
+        map.addLayer({
+            id,
+            type: "line",
+            source: STATES_SOURCE,
+            layout: { visibility: "none" },
+            paint: {
+                "line-color": color,
+                "line-width": DQ_RING_WIDTH,
+                // Each tier's layer draws only on states whose feature-state
+                // dqColor matches this tier's hex — the paint-time equivalent
+                // of a per-tier filter (feature-state can't be filtered on).
+                "line-opacity": [
+                    "case",
+                    ["==", ["coalesce", ["feature-state", "dqColor"], ""], color],
+                    DQ_RING_OPACITY,
+                    0,
+                ] as maplibregl.ExpressionSpecification,
+            },
+        });
+    }
+}
+
+/** Bring the DQ layers to the top of the render stack, halo first then each
+ * tier in ascending severity. Call this after every layer reorder (geo-level
+ * change) so the DQ overlay stays above county/zip3 fills and state stroke. */
+function hoistDqLayers(map: maplibregl.Map) {
+    if (map.getLayer(DQ_RING_HALO_LAYER)) map.moveLayer(DQ_RING_HALO_LAYER);
+    for (const tier of DQ_TIER_STACK_ORDER) {
+        const id = dqTierLayerId(tier);
+        if (map.getLayer(id)) map.moveLayer(id);
+    }
+}
+
+function setDqVisibility(map: maplibregl.Map, visible: boolean) {
+    const v = visible ? "visible" : "none";
+    if (map.getLayer(DQ_RING_HALO_LAYER)) {
+        map.setLayoutProperty(DQ_RING_HALO_LAYER, "visibility", v);
+    }
+    for (const tier of DQ_TIER_STACK_ORDER) {
+        const id = dqTierLayerId(tier);
+        if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", v);
+    }
+}
+
+// Iterate the (topic, year) bucket and write the resolved swatch color into
+// each state's feature-state. States absent from the bucket keep the previous
+// paint until this or the next paint pass clears them — call clearDqRings
+// first when switching topic/year to avoid stale colors leaking through.
+function paintDqRings(
+    map: maplibregl.Map,
+    data: DqData,
+    topic: DqTopicKey,
+    year: string,
+    knownStates: Set<string>,
+) {
+    const yearBucket = data.topics[topic]?.years[year] ?? {};
+    // Clear every known state first so states missing from this year's bucket
+    // don't keep their previous color from a prior (topic, year) pass.
+    for (const id of knownStates) {
+        map.setFeatureState({ source: STATES_SOURCE, id }, { dqColor: "" });
+    }
+    for (const [postal, rec] of Object.entries(yearBucket)) {
+        const color = DQ_ASSESSMENT_COLORS[rec.assessment];
+        if (color) {
+            map.setFeatureState({ source: STATES_SOURCE, id: postal }, { dqColor: color });
+        }
+    }
+}
+
 // ── Component ────────────────────────────────────────────────
 
 export default function MapContainer() {
@@ -557,7 +675,15 @@ export default function MapContainer() {
         setHovered,
         setColorStops,
         dismissHint,
+        dqTopic,
+        dqOverlayVisible,
+        dqData,
+        setDqData,
     } = useMapStore();
+    // Set of state ids that have DQ feature-state set. Used to clear stale
+    // colors when topic/year changes so a state present last pass but missing
+    // this pass doesn't keep its old ring color.
+    const dqKnownStatesRef = useRef<Set<string>>(new Set());
     const activeLayerRef = useRef<LayerKey>(activeLayer);
     const selectedYearRef = useRef<string>(selectedYear);
     const selectedMonthRef = useRef<string | null>(selectedMonth);
@@ -732,7 +858,36 @@ export default function MapContainer() {
         if (!map.current || !map.current.isStyleLoaded()) return;
         setActiveGeoLayer(map.current, geoLevel);
         applyActiveColors();
+        // setActiveGeoLayer hoists STATES_STROKE to keep the state border
+        // above county/zip3 fills; the DQ overlay is state-scoped too and
+        // needs to sit above that stroke, so re-hoist it after every level
+        // change (halo first, then each severity tier in order).
+        hoistDqLayers(map.current);
     }, [geoLevel, applyActiveColors]);
+
+    // DQ overlay paint + visibility. Repaints when (dqData, dqTopic,
+    // selectedYear) change. Hides the overlay entirely when the topic has no
+    // data for the current year (per the design brief), when the user has
+    // closed the overlay, or when the atlas hasn't loaded yet. Skips the
+    // isStyleLoaded() check — a positive getLayer result is sufficient, and
+    // isStyleLoaded returns false during transient tile fetches (Protomaps'
+    // asynchronous glyph loading in particular) even after our layers are
+    // safe to touch.
+    useEffect(() => {
+        const m = map.current;
+        if (!m || !m.getLayer(DQ_RING_HALO_LAYER)) return;
+
+        const hasYearData =
+            !!dqData &&
+            !!dqData.topics[dqTopic]?.years[selectedYear] &&
+            Object.keys(dqData.topics[dqTopic].years[selectedYear]).length > 0;
+        const shouldShow = dqOverlayVisible && hasYearData;
+
+        if (shouldShow && dqData) {
+            paintDqRings(m, dqData, dqTopic, selectedYear, dqKnownStatesRef.current);
+        }
+        setDqVisibility(m, shouldShow);
+    }, [dqData, dqTopic, dqOverlayVisible, selectedYear]);
 
     // Reset paint when panel is closed
     useEffect(() => {
@@ -1147,7 +1302,15 @@ export default function MapContainer() {
                 addStatesLayers(map.current, labelAnchor);
                 addCountyLayers(map.current, labelAnchor);
                 addZip3Layers(map.current, labelAnchor);
+                // DQ overlay shares the states source; add after states so
+                // the source already exists. Layers start hidden — turned on
+                // by the visibility effect once dqData resolves.
+                addDqRingLayers(map.current);
                 setActiveGeoLayer(map.current, geoLevelRef.current);
+                // setActiveGeoLayer hoists states-stroke to the top for
+                // county/zip3 spatial context; the DQ overlay belongs above
+                // that, so hoist it again as the final step.
+                hoistDqLayers(map.current);
 
                 map.current.on("click", STATES_FILL, handleStateClick);
                 map.current.on("mousemove", STATES_FILL, handleStateMouseMove);
@@ -1170,6 +1333,16 @@ export default function MapContainer() {
                     isMonthlyMode(),
                 );
                 applyActiveColors();
+                // Track every state id the annual data knows about so the DQ
+                // ring pass can wipe stale colors from states not present in
+                // the current (topic, year) bucket. Uses annual state ids as
+                // the universe — the ring layer is state-scoped anyway.
+                dqKnownStatesRef.current = new Set(Object.keys(getStateAnnualData()));
+                // Kick off DQ overlay fetch in parallel; overlay is optional
+                // and never blocks the main map from becoming interactive.
+                loadDqAtlas().then((data) => {
+                    if (data) setDqData(data);
+                });
             });
         };
 

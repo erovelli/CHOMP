@@ -58,3 +58,34 @@ describe("serializeUrlState", () => {
         expect(parseUrlState(serializeUrlState(input))).toEqual(input);
     });
 });
+
+describe("DQ overlay URL state", () => {
+    it("parses a valid dq topic (overlay on)", () => {
+        expect(parseUrlState("?dq=link-bene")).toEqual({ dq: "link-bene" });
+    });
+
+    it("still parses dq=off for backward-compat with older links", () => {
+        expect(parseUrlState("?dq=off")).toEqual({ dq: "off" });
+    });
+
+    it("ignores unknown dq values", () => {
+        expect(parseUrlState("?dq=bogus")).toEqual({});
+    });
+
+    it("serializes a topic (overlay on) — including the default topic", () => {
+        // Overlay is hidden by default, so the default TOPIC still needs to
+        // appear in the URL when the overlay is visible — otherwise a shared
+        // link would silently drop back to hidden.
+        expect(serializeUrlState({ dq: "claims-volume" })).toBe("?dq=claims-volume");
+        expect(serializeUrlState({ dq: "link-bene" })).toBe("?dq=link-bene");
+    });
+
+    it("omits dq=off since hidden is the default", () => {
+        expect(serializeUrlState({ dq: "off" })).toBe("");
+    });
+
+    it("round-trips a dq topic with other fields", () => {
+        const input = { layer: "preventive" as const, year: "2023", dq: "link-bene" as const };
+        expect(parseUrlState(serializeUrlState(input))).toEqual(input);
+    });
+});

@@ -72,3 +72,50 @@ export interface RegionDetail {
     records: DataRecord[];
     monthlyRecords?: MonthlyDataRecord[];
 }
+
+// ── DQ Atlas overlay ─────────────────────────────────────────
+// CMS DQ Atlas (medicaid.gov/dq-atlas) publishes per-state, per-year data-
+// quality ratings across ~50 topics. This app surfaces 10 as an optional
+// ring-overlay on top of the claims choropleth. See scripts/build_dq_atlas.py
+// for the pipeline and public/data/dq_atlas.json for the emitted blob.
+
+/** The 10 topics we surface (subset of the DQ Atlas's ~50). */
+export type DqTopicKey =
+    | "link-bene"
+    | "link-providers"
+    | "claims-volume"
+    | "service-users"
+    | "cmc-encounters"
+    | "missing-pmt-ffs"
+    | "missing-pmt-enc"
+    | "pmt-consistency"
+    | "proc-cd-prof"
+    | "proc-cd-inst";
+
+/** CMS's 5-tier categorical rating. */
+export type DqAssessment =
+    | "Low concern"
+    | "Medium concern"
+    | "High concern"
+    | "Unusable"
+    | "Unclassified";
+
+/** Per-(topic, year, state) record. `pct` is the topic's headline metric,
+ * omitted when the CSV reports "Not applicable". */
+export interface DqStateRecord {
+    assessment: DqAssessment;
+    pct?: number;
+}
+
+export interface DqTopic {
+    label: string;
+    description: string;
+    metric_label: string;
+    /** Keyed by 4-digit year, then by USPS state postal. */
+    years: Record<string, Record<string, DqStateRecord>>;
+}
+
+export interface DqData {
+    topics: Record<DqTopicKey, DqTopic>;
+    assessments: DqAssessment[];
+}

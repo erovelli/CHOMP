@@ -1,11 +1,21 @@
-import type { LayerKey } from "./types";
+import type { LayerKey, DqTopicKey } from "./types";
 import { LAYER_ORDER } from "../constants/map";
 import { AVAILABLE_YEARS } from "../constants/time";
+import { DQ_TOPIC_ORDER } from "../constants/dq";
 
+/**
+ * `dq` encodes the Data Quality overlay:
+ *   - a topic key ("claims-volume", "link-bene", ...) turns the overlay ON
+ *     with that topic
+ *   - absent → overlay OFF (the app default; keeps shareable links short)
+ * "off" is still parsed for backward-compat with earlier links but no longer
+ * emitted — the default is now hidden, so absence already means off.
+ */
 export interface UrlState {
     layer?: LayerKey;
     year?: string;
     month?: string | null;
+    dq?: DqTopicKey | "off";
 }
 
 const YEAR_MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -22,6 +32,10 @@ function isYearMonth(value: string | null): value is string {
     return value !== null && YEAR_MONTH_PATTERN.test(value);
 }
 
+function isDqTopic(value: string | null): value is DqTopicKey {
+    return value !== null && (DQ_TOPIC_ORDER as readonly string[]).includes(value);
+}
+
 export function parseUrlState(search: string): UrlState {
     const params = new URLSearchParams(search);
     const state: UrlState = {};
@@ -35,6 +49,10 @@ export function parseUrlState(search: string): UrlState {
     const month = params.get("month");
     if (isYearMonth(month)) state.month = month;
 
+    const dq = params.get("dq");
+    if (dq === "off") state.dq = "off";
+    else if (isDqTopic(dq)) state.dq = dq;
+
     return state;
 }
 
@@ -44,6 +62,11 @@ export function serializeUrlState(state: UrlState): string {
     if (state.layer && state.layer !== "all") params.set("layer", state.layer);
     if (state.year) params.set("year", state.year);
     if (state.month) params.set("month", state.month);
+    // Overlay is hidden by default, so we only emit `dq` when it's visible.
+    // "off" is the implicit default when the param is absent; we never write
+    // it (nor the default topic — a bare `?dq=claims-volume` link is short
+    // and self-describing).
+    if (state.dq && state.dq !== "off") params.set("dq", state.dq);
 
     const query = params.toString();
     return query ? `?${query}` : "";
