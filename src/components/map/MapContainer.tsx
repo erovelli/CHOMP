@@ -692,6 +692,14 @@ export default function MapContainer() {
     const monthlyLoadedRef = useRef<boolean>(monthlyDataLoaded);
     // Current data-driven color stops, shared with hover/select handlers.
     const stopsRef = useRef<number[]>([]);
+    // True once the load handler has added our layers, loaded annual data, and
+    // done the first paint. The repaint effects gate on this rather than
+    // map.isStyleLoaded(): isStyleLoaded() goes false during transient tile /
+    // glyph fetches (e.g. right after a year change), and an effect that bails
+    // then never re-runs — leaving the map painted for a stale metric/level.
+    // Before this flips, the effects only update refs and the load handler's
+    // first paint picks them up.
+    const mapReadyRef = useRef(false);
 
     // The map paints monthly values only once the monthly data has actually
     // loaded; until then it stays on the annual view (so the choropleth never
@@ -824,7 +832,7 @@ export default function MapContainer() {
         selectedMonthRef.current = selectedMonth;
         metricRef.current = metric;
         monthlyLoadedRef.current = monthlyDataLoaded;
-        if (!map.current || !map.current.isStyleLoaded()) return;
+        if (!map.current || !mapReadyRef.current) return;
         const monthly = isMonthlyMode();
         paintValues(map.current, currentPeriod(), activeLayer, metric, monthly);
         applyActiveColors();
@@ -855,7 +863,7 @@ export default function MapContainer() {
     // Switch the visible geography level and rescale to its distribution.
     useEffect(() => {
         geoLevelRef.current = geoLevel;
-        if (!map.current || !map.current.isStyleLoaded()) return;
+        if (!map.current || !mapReadyRef.current) return;
         setActiveGeoLayer(map.current, geoLevel);
         applyActiveColors();
         // setActiveGeoLayer hoists STATES_STROKE to keep the state border
@@ -1333,6 +1341,7 @@ export default function MapContainer() {
                     isMonthlyMode(),
                 );
                 applyActiveColors();
+                mapReadyRef.current = true;
                 // Track every state id the annual data knows about so the DQ
                 // ring pass can wipe stale colors from states not present in
                 // the current (topic, year) bucket. Uses annual state ids as
