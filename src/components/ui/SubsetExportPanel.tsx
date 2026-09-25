@@ -511,11 +511,9 @@ function Section({
             >
                 <span
                     style={{
-                        fontSize: 9,
+                        fontSize: 12,
                         fontWeight: 700,
-                        letterSpacing: "0.12em",
-                        textTransform: "uppercase",
-                        color: "var(--ink-dim)",
+                        color: "var(--ink)",
                     }}
                 >
                     {label}

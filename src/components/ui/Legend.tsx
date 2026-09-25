@@ -10,7 +10,10 @@ export default function Legend() {
     const { activeLayer, metric, colorStops } = useMapStore();
     const cfg = LAYER_CONFIGS[activeLayer];
     const fmt = metric === "enrollees" ? formatRatio : formatStop;
-    const unit = metric === "enrollees" ? "Claims / Medicaid enrollee" : cfg.unit;
+    const unit =
+        metric === "enrollees"
+            ? "Claims / Medicaid enrollee"
+            : cfg.unit.charAt(0).toUpperCase() + cfg.unit.slice(1);
     const hasStops = colorStops.length > 0;
 
     return (
@@ -31,15 +34,13 @@ export default function Legend() {
         >
             <p
                 style={{
-                    fontSize: 10,
-                    fontWeight: 600,
-                    letterSpacing: "0.08em",
-                    textTransform: "uppercase",
-                    color: "var(--ink-dim)",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: "var(--ink)",
                     marginBottom: 10,
                 }}
             >
-                {cfg.label} — {unit}
+                {cfg.label} · {unit}
             </p>
             <div
                 style={{

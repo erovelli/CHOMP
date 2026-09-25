@@ -23,15 +23,13 @@ export default function DqRibbon({ stateUsps }: { stateUsps: string }) {
         <div style={{ marginBottom: 20 }}>
             <p
                 style={{
-                    fontSize: 10,
+                    fontSize: 12,
                     fontWeight: 700,
-                    letterSpacing: "0.1em",
-                    textTransform: "uppercase",
-                    color: "var(--ink-dim)",
+                    color: "var(--ink)",
                     marginBottom: 8,
                 }}
             >
-                Data Quality — {selectedYear}
+                Data quality · {selectedYear}
             </p>
             <div
                 style={{

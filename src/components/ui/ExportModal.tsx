@@ -201,11 +201,9 @@ export default function ExportModal({ open, onClose }: ExportModalProps) {
                 >
                     <p
                         style={{
-                            fontSize: 9,
+                            fontSize: 12,
                             fontWeight: 700,
-                            letterSpacing: "0.12em",
-                            textTransform: "uppercase",
-                            color: "var(--ink-dim)",
+                            color: "var(--ink)",
                             marginBottom: 6,
                         }}
                     >

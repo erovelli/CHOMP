@@ -17,8 +17,8 @@
     --ink-dim: #6b655c;
     --accent: #0d6b60;
     --accent-light: #e3efec;
-    --ff-sans: "Libre Franklin", sans-serif;
-    --ff-serif: "Source Serif 4", serif;
+    --ff-sans: "Schibsted Grotesk", sans-serif;
+    --ff-serif: "Newsreader", serif;
     --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
     --dur-fast: 120ms;
     --dur-base: 200ms;
@@ -63,26 +63,20 @@ button {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 8px 12px;
+    padding: 8px 4px;
     min-height: 34px;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 4px;
+    background: transparent;
+    border: none;
     cursor: pointer;
     font-family: var(--ff-sans);
     font-size: 12px;
     font-weight: 600;
     color: var(--ink);
     letter-spacing: 0.01em;
-    transition:
-        background var(--dur-fast) var(--ease-out),
-        border-color var(--dur-fast) var(--ease-out),
-        color var(--dur-fast) var(--ease-out);
+    transition: color var(--dur-fast) var(--ease-out);
 }
 .chomp-header-btn:hover,
 .chomp-header-btn:focus-visible {
-    background: var(--surface);
-    border-color: var(--accent);
     color: var(--accent);
 }
 .chomp-header-btn__icon {
@@ -454,12 +448,10 @@ button {
 }
 .chomp-rail-heading {
     font-family: var(--ff-sans);
-    font-size: 10px;
+    font-size: 13px;
     font-weight: 700;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--ink-dim);
-    margin-bottom: 10px;
+    color: var(--ink);
+    margin-bottom: 8px;
     display: flex;
     align-items: baseline;
     justify-content: space-between;
@@ -480,54 +472,118 @@ button {
     color: var(--ink-dim);
     font-weight: 500;
 }
-.chomp-rail-radio {
+/* Segmented toggle (Geography, Metric; Year on mobile). Newsroom pattern:
+   options side by side in one outline. Selected option uses the same accent
+   tint + accent text as the rest of the site (map ramp, Export, primary
+   buttons) — quieter than a solid fill so the map stays the loudest thing. */
+.chomp-toggle {
     display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    padding: 6px 8px;
-    margin: 0 -8px;
+    background: var(--surface);
+    border: 1px solid var(--border-dark);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.chomp-toggle__option {
+    flex: 1;
+    min-width: 0;
+    padding: 7px 6px;
     background: transparent;
     border: none;
-    border-radius: 3px;
     cursor: pointer;
-    text-align: left;
     font-family: var(--ff-sans);
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 500;
     color: var(--ink-mid);
-    line-height: 1.25;
+    line-height: 1.2;
+    white-space: nowrap;
     transition:
         background var(--dur-fast) var(--ease-out),
         color var(--dur-fast) var(--ease-out);
 }
-.chomp-rail-radio:hover {
+.chomp-toggle__option + .chomp-toggle__option {
+    border-left: 1px solid var(--border-dark);
+}
+.chomp-toggle__option:hover {
     color: var(--ink);
     background: var(--surface2);
 }
-.chomp-rail-radio[aria-checked="true"] {
-    color: var(--ink);
-    font-weight: 600;
+.chomp-toggle__option[aria-checked="true"] {
+    color: var(--accent);
+    font-weight: 700;
+    background: var(--accent-light);
+    box-shadow: inset 0 0 0 1px var(--accent);
 }
-.chomp-rail-radio__label {
-    flex: 1;
-    min-width: 0;
+.chomp-toggle__option:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
 }
 
-/* Reset chip (e.g. "All months" that returns the month slider to the null
-   state). Bordered pill so it reads clearly as an interactive control —
-   the earlier text-only treatment was mistaken for caption copy. Still
-   monochrome; pressed state uses surface2 fill + bold, not the accent
-   color, to keep the rail's palette discipline. */
+/* Dropdown (Procedure category, Data quality topic; Month on mobile). Native
+   <select> with the platform arrow replaced by a drawn chevron. */
+.chomp-select {
+    position: relative;
+}
+.chomp-select::after {
+    content: "";
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    width: 6px;
+    height: 6px;
+    border-right: 1.5px solid var(--ink-mid);
+    border-bottom: 1.5px solid var(--ink-mid);
+    transform: translateY(-70%) rotate(45deg);
+    pointer-events: none;
+}
+.chomp-select select {
+    appearance: none;
+    width: 100%;
+    padding: 7px 30px 7px 10px;
+    background: var(--surface);
+    border: 1px solid var(--border-dark);
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: var(--ff-sans);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    transition: border-color var(--dur-fast) var(--ease-out);
+}
+.chomp-select select:hover {
+    border-color: var(--ink-mid);
+}
+.chomp-select select:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+/* Touch sizing: 44px targets, and 16px select text so iOS Safari doesn't
+   zoom the page when the picker opens. */
+@media (pointer: coarse) {
+    .chomp-toggle__option {
+        min-height: 44px;
+        font-size: 14px;
+    }
+    .chomp-select select {
+        min-height: 44px;
+        padding: 10px 34px 10px 12px;
+        font-size: 16px;
+        font-weight: 500;
+    }
+}
+
+/* Rail text button (e.g. Data Quality "Show overlay" / "Hide overlay").
+   Unboxed; monochrome to keep the rail's palette discipline. */
 .chomp-rail-reset {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
-    padding: 6px 14px;
+    padding: 6px 4px;
     background: transparent;
-    border: 1px solid var(--border);
-    border-radius: 4px;
+    border: none;
     cursor: pointer;
     font-family: var(--ff-sans);
     font-size: 12px;
@@ -535,33 +591,14 @@ button {
     letter-spacing: 0.005em;
     color: var(--ink-mid);
     line-height: 1.1;
-    transition:
-        background var(--dur-fast) var(--ease-out),
-        color var(--dur-fast) var(--ease-out),
-        border-color var(--dur-fast) var(--ease-out);
+    transition: color var(--dur-fast) var(--ease-out);
 }
 .chomp-rail-reset:hover {
     color: var(--ink);
-    border-color: var(--border-dark);
-    background: var(--surface2);
-}
-.chomp-rail-reset[aria-pressed="true"] {
-    color: var(--ink);
-    font-weight: 600;
-    background: var(--surface2);
-    border-color: var(--border-dark);
-}
-.chomp-rail-reset[aria-pressed="true"]::before {
-    content: "";
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--ink);
-    flex-shrink: 0;
 }
 
-/* Wrapper that centers the reset chip below the slider so it doesn't hang
-   at the left edge. */
+/* Wrapper that centers a rail text button so it doesn't hang at the left
+   edge. */
 .chomp-rail-reset-row {
     display: flex;
     justify-content: center;

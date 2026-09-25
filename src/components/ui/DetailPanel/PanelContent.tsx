@@ -81,10 +81,8 @@ export default function PanelContent({
             >
                 <p
                     style={{
-                        fontSize: 9,
-                        fontWeight: 700,
-                        letterSpacing: "0.12em",
-                        textTransform: "uppercase",
+                        fontSize: 12,
+                        fontWeight: 500,
                         color: "var(--ink-dim)",
                         marginBottom: 4,
                     }}
@@ -93,7 +91,7 @@ export default function PanelContent({
                         ? "State"
                         : detail.level === "county"
                           ? "County"
-                          : "ZIP3 Area"}
+                          : "ZIP3 area"}
                 </p>
                 <h2
                     style={{
@@ -165,23 +163,23 @@ export default function PanelContent({
                                 marginBottom: 24,
                             }}
                         >
-                            <StatCard value={totalClaims.toLocaleString()} label="Total Claims" />
+                            <StatCard value={totalClaims.toLocaleString()} label="Total claims" />
                             <StatCard
                                 value={
                                     medicaidEnrollees != null && medicaidEnrollees > 0
                                         ? medicaidEnrollees.toLocaleString()
                                         : "—"
                                 }
-                                label="Medicaid Enrollees"
+                                label="Medicaid enrollees"
                             />
-                            <StatCard value={formatCurrency(totalPaid)} label="Total Paid" />
+                            <StatCard value={formatCurrency(totalPaid)} label="Total paid" />
                             <StatCard
                                 value={
                                     totalClaims > 0
                                         ? `$${(totalPaid / totalClaims).toFixed(0)}`
                                         : "—"
                                 }
-                                label="Avg Paid / Claim"
+                                label="Avg paid / claim"
                             />
                             <StatCard
                                 value={
@@ -189,7 +187,7 @@ export default function PanelContent({
                                         ? (totalClaims / medicaidEnrollees).toFixed(2)
                                         : "—"
                                 }
-                                label="Claims / Enrollee"
+                                label="Claims / enrollee"
                             />
                         </div>
 

@@ -9,13 +9,15 @@ import {
     DQ_ASSESSMENT_ORDER,
     DQ_ASSESSMENT_COLORS,
 } from "../../constants/dq";
-import type { DqTopicKey } from "../../lib/types";
 import SheetHandle from "./SheetHandle";
+import { Segmented, Select } from "./Controls";
 
-// Mobile replacement for the four floating desktop controls (LayerControl,
-// GeoLevelControl, MetricControl, TimeControl): one bottom sheet with
-// touch-sized chips. Selections apply immediately, same as desktop — "Done"
-// just dismisses the sheet.
+// <select> values must be strings; the store models "all months" as null.
+const ALL_MONTHS_KEY = "all";
+
+// Mobile counterpart to the desktop LeftRail: one bottom sheet with the same
+// shared controls (Controls.tsx), sized for touch. Selections apply
+// immediately, same as desktop — "Done" just dismisses the sheet.
 export default function FilterSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
     const {
         activeLayer,
@@ -102,53 +104,58 @@ export default function FilterSheet({ open, onClose }: { open: boolean; onClose:
                     }}
                 >
                     <Section title="Geography">
-                        <div style={{ display: "flex", gap: 6 }}>
-                            {GEO_LEVELS.map(({ key, label }) => (
-                                <Chip
-                                    key={key}
-                                    label={label}
-                                    active={key === geoLevel}
-                                    onClick={() => setGeoLevel(key)}
-                                    grow
-                                />
-                            ))}
-                        </div>
+                        <Segmented
+                            ariaLabel="Geography"
+                            options={GEO_LEVELS}
+                            value={geoLevel}
+                            onChange={setGeoLevel}
+                        />
                     </Section>
 
                     <Section title="Metric">
-                        <div style={{ display: "flex", gap: 6 }}>
-                            {METRIC_OPTIONS.map(({ key, label }) => (
-                                <Chip
-                                    key={key}
-                                    label={label}
-                                    active={key === metric}
-                                    onClick={() => setMetric(key)}
-                                    grow
-                                />
-                            ))}
-                        </div>
+                        <Segmented
+                            ariaLabel="Metric"
+                            options={METRIC_OPTIONS}
+                            value={metric}
+                            onChange={setMetric}
+                        />
                     </Section>
 
-                    <Section title="Data Quality" hint={dqOverlayVisible ? undefined : "hidden"}>
-                        <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-                            <Chip
-                                label={dqOverlayVisible ? "Overlay on" : "Overlay off"}
-                                active={dqOverlayVisible}
-                                onClick={() => setDqOverlayVisible(!dqOverlayVisible)}
-                            />
-                        </div>
+                    <Section title="Year">
+                        <Segmented
+                            ariaLabel="Year"
+                            options={AVAILABLE_YEARS.map((y) => ({ key: y, label: y }))}
+                            value={selectedYear}
+                            onChange={setSelectedYear}
+                        />
+                    </Section>
+
+                    <Section title="Month" hint={loadingMonthly ? "loading…" : undefined}>
+                        <Select
+                            ariaLabel="Month"
+                            options={MONTH_OPTIONS.map(({ value, label }) => ({
+                                key: value ?? ALL_MONTHS_KEY,
+                                label: value === null ? "All months" : label,
+                            }))}
+                            value={selectedMonth ?? ALL_MONTHS_KEY}
+                            onChange={(key) =>
+                                setSelectedMonth(key === ALL_MONTHS_KEY ? null : key)
+                            }
+                        />
+                    </Section>
+
+                    <Section title="Data quality" hint={dqOverlayVisible ? undefined : "hidden"}>
                         {dqOverlayVisible && (
                             <>
-                                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                                    {DQ_TOPIC_ORDER.map((key) => (
-                                        <Chip
-                                            key={key}
-                                            label={DQ_TOPIC_LABELS[key]}
-                                            active={key === dqTopic}
-                                            onClick={() => setDqTopic(key as DqTopicKey)}
-                                        />
-                                    ))}
-                                </div>
+                                <Select
+                                    ariaLabel="Data quality topic"
+                                    options={DQ_TOPIC_ORDER.map((key) => ({
+                                        key,
+                                        label: DQ_TOPIC_LABELS[key],
+                                    }))}
+                                    value={dqTopic}
+                                    onChange={setDqTopic}
+                                />
                                 <div
                                     style={{
                                         display: "flex",
@@ -188,113 +195,27 @@ export default function FilterSheet({ open, onClose }: { open: boolean; onClose:
                                 </div>
                             </>
                         )}
-                    </Section>
-
-                    <Section title="Year">
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                            {AVAILABLE_YEARS.map((year) => (
-                                <Chip
-                                    key={year}
-                                    label={year}
-                                    active={year === selectedYear}
-                                    onClick={() => setSelectedYear(year)}
-                                />
-                            ))}
+                        <div className="chomp-rail-reset-row">
+                            <button
+                                type="button"
+                                className="chomp-rail-reset"
+                                onClick={() => setDqOverlayVisible(!dqOverlayVisible)}
+                            >
+                                {dqOverlayVisible ? "Hide overlay" : "Show overlay"}
+                            </button>
                         </div>
                     </Section>
 
-                    <Section title="Month" hint={loadingMonthly ? "loading…" : undefined}>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                            {MONTH_OPTIONS.map(({ value, label }) => (
-                                <Chip
-                                    key={label}
-                                    label={label}
-                                    active={value === selectedMonth}
-                                    onClick={() => setSelectedMonth(value)}
-                                />
-                            ))}
-                        </div>
-                    </Section>
-
-                    <Section title="Procedure Category">
-                        <div
-                            style={{
-                                border: "1px solid var(--border)",
-                                borderRadius: 6,
-                                overflow: "hidden",
-                            }}
-                        >
-                            {LAYER_ORDER.map((key, i) => {
-                                const cfg = LAYER_CONFIGS[key];
-                                const isActive = key === activeLayer;
-                                return (
-                                    <button
-                                        key={key}
-                                        onClick={() => setActiveLayer(key)}
-                                        style={{
-                                            display: "flex",
-                                            alignItems: "center",
-                                            gap: 10,
-                                            width: "100%",
-                                            minHeight: 44,
-                                            padding: "10px 12px",
-                                            background: isActive
-                                                ? "var(--accent-light)"
-                                                : "transparent",
-                                            border: "none",
-                                            borderTop: i === 0 ? "none" : "1px solid var(--border)",
-                                            cursor: "pointer",
-                                            textAlign: "left",
-                                            fontFamily: "var(--ff-sans)",
-                                        }}
-                                    >
-                                        <div
-                                            style={{
-                                                width: 10,
-                                                height: 10,
-                                                borderRadius: "50%",
-                                                background: cfg.accent,
-                                                flexShrink: 0,
-                                            }}
-                                        />
-                                        <div style={{ flex: 1 }}>
-                                            <span
-                                                style={{
-                                                    display: "block",
-                                                    fontSize: 13,
-                                                    fontWeight: 500,
-                                                    color: isActive
-                                                        ? "var(--accent)"
-                                                        : "var(--ink)",
-                                                    lineHeight: 1.25,
-                                                }}
-                                            >
-                                                {cfg.label}
-                                            </span>
-                                            <span
-                                                style={{
-                                                    display: "block",
-                                                    fontSize: 11,
-                                                    color: "var(--ink-dim)",
-                                                    marginTop: 1,
-                                                }}
-                                            >
-                                                {cfg.description}
-                                            </span>
-                                        </div>
-                                        <span
-                                            style={{
-                                                fontSize: 13,
-                                                color: "var(--accent)",
-                                                opacity: isActive ? 1 : 0,
-                                            }}
-                                        >
-                                            ✓
-                                        </span>
-                                    </button>
-                                );
-                            })}
-                        </div>
+                    <Section title="Procedure category">
+                        <Select
+                            ariaLabel="Procedure category"
+                            options={LAYER_ORDER.map((key) => ({
+                                key,
+                                label: LAYER_CONFIGS[key].label,
+                            }))}
+                            value={activeLayer}
+                            onChange={setActiveLayer}
+                        />
                     </Section>
                 </div>
 
@@ -345,63 +266,16 @@ function Section({
         <div>
             <p
                 style={{
-                    fontSize: 10,
+                    fontSize: 13,
                     fontWeight: 700,
-                    letterSpacing: "0.12em",
-                    textTransform: "uppercase",
-                    color: "var(--ink-dim)",
+                    color: "var(--ink)",
                     marginBottom: 8,
                 }}
             >
                 {title}
-                {hint && (
-                    <span
-                        style={{
-                            marginLeft: 8,
-                            fontWeight: 500,
-                            letterSpacing: "0.02em",
-                            textTransform: "none",
-                        }}
-                    >
-                        {hint}
-                    </span>
-                )}
+                {hint && <span className="chomp-rail-heading__value--muted"> · {hint}</span>}
             </p>
             {children}
         </div>
-    );
-}
-
-function Chip({
-    label,
-    active,
-    onClick,
-    grow,
-}: {
-    label: string;
-    active: boolean;
-    onClick: () => void;
-    grow?: boolean;
-}) {
-    return (
-        <button
-            onClick={onClick}
-            style={{
-                flex: grow ? 1 : undefined,
-                minHeight: 40,
-                padding: "8px 14px",
-                fontSize: 13,
-                fontWeight: active ? 600 : 500,
-                fontFamily: "var(--ff-sans)",
-                color: active ? "var(--accent)" : "var(--ink-mid)",
-                background: active ? "var(--accent-light)" : "var(--surface2)",
-                border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
-                borderRadius: 6,
-                cursor: "pointer",
-                transition: "background 0.12s, color 0.12s, border-color 0.12s",
-            }}
-        >
-            {label}
-        </button>
     );
 }

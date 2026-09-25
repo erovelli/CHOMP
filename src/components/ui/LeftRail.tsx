@@ -9,11 +9,11 @@ import {
     DQ_ASSESSMENT_COLORS,
 } from "../../constants/dq";
 import { dqHasYear } from "../../lib/dataService";
+import { Segmented, Select } from "./Controls";
 
-// Desktop control panel: one editorial card at top-left, sans-only, monochrome.
-// Selection language is weight + subtle background; the accent color is
-// deliberately kept out of the rail so it stays reserved for the primary CTA
-// (Export) and interactive feedback (hover, focus) elsewhere in the app.
+// Desktop control panel: one editorial card at top-left. Short option sets are
+// segmented toggles, long ones are dropdowns (see Controls.tsx); the mobile
+// FilterSheet uses the same controls.
 export default function LeftRail() {
     const {
         activeLayer,
@@ -52,33 +52,37 @@ export default function LeftRail() {
         >
             <div className="chomp-rail-scroll">
                 <Group title="Geography">
-                    <div role="radiogroup" aria-label="Geography">
-                        {GEO_LEVELS.map(({ key, label }) => (
-                            <RadioRow
-                                key={key}
-                                label={label}
-                                checked={key === geoLevel}
-                                onSelect={() => setGeoLevel(key)}
-                            />
-                        ))}
-                    </div>
+                    <Segmented
+                        ariaLabel="Geography"
+                        options={GEO_LEVELS}
+                        value={geoLevel}
+                        onChange={setGeoLevel}
+                    />
                 </Group>
 
                 <Group title="Metric">
-                    <div role="radiogroup" aria-label="Metric">
-                        {METRIC_OPTIONS.map(({ key, label }) => (
-                            <RadioRow
-                                key={key}
-                                label={label}
-                                checked={key === metric}
-                                onSelect={() => setMetric(key)}
-                            />
-                        ))}
-                    </div>
+                    <Segmented
+                        ariaLabel="Metric"
+                        options={METRIC_OPTIONS}
+                        value={metric}
+                        onChange={setMetric}
+                    />
+                </Group>
+
+                <Group title="Year" trailing={<HeadingValue>{selectedYear}</HeadingValue>}>
+                    <YearSlider />
                 </Group>
 
                 <Group
-                    title="Data Quality"
+                    title="Month"
+                    hint={loadingMonthly ? "loading…" : undefined}
+                    trailing={<HeadingValue muted={isAllMonths}>{currentMonthLabel}</HeadingValue>}
+                >
+                    <MonthSlider />
+                </Group>
+
+                <Group
+                    title="Data quality"
                     hint={
                         !dqOverlayVisible
                             ? "hidden"
@@ -91,16 +95,15 @@ export default function LeftRail() {
                 >
                     {dqOverlayVisible ? (
                         <>
-                            <div role="radiogroup" aria-label="Data Quality topic">
-                                {DQ_TOPIC_ORDER.map((key) => (
-                                    <RadioRow
-                                        key={key}
-                                        label={DQ_TOPIC_LABELS[key]}
-                                        checked={key === dqTopic}
-                                        onSelect={() => setDqTopic(key)}
-                                    />
-                                ))}
-                            </div>
+                            <Select
+                                ariaLabel="Data quality topic"
+                                options={DQ_TOPIC_ORDER.map((key) => ({
+                                    key,
+                                    label: DQ_TOPIC_LABELS[key],
+                                }))}
+                                value={dqTopic}
+                                onChange={setDqTopic}
+                            />
                             <DqLegendSwatches />
                             <div className="chomp-rail-reset-row">
                                 <button
@@ -125,33 +128,16 @@ export default function LeftRail() {
                     )}
                 </Group>
 
-                <Group title="Year" trailing={<HeadingValue>{selectedYear}</HeadingValue>}>
-                    <YearSlider />
-                </Group>
-
-                <Group
-                    title="Month"
-                    hint={loadingMonthly ? "loading…" : undefined}
-                    trailing={<HeadingValue muted={isAllMonths}>{currentMonthLabel}</HeadingValue>}
-                >
-                    <MonthSlider />
-                    <AllMonthsButton />
-                </Group>
-
-                <Group title="Procedure Category">
-                    <div role="radiogroup" aria-label="Procedure Category">
-                        {LAYER_ORDER.map((key) => {
-                            const cfg = LAYER_CONFIGS[key];
-                            return (
-                                <RadioRow
-                                    key={key}
-                                    label={cfg.label}
-                                    checked={key === activeLayer}
-                                    onSelect={() => setActiveLayer(key)}
-                                />
-                            );
-                        })}
-                    </div>
+                <Group title="Procedure category">
+                    <Select
+                        ariaLabel="Procedure category"
+                        options={LAYER_ORDER.map((key) => ({
+                            key,
+                            label: LAYER_CONFIGS[key].label,
+                        }))}
+                        value={activeLayer}
+                        onChange={setActiveLayer}
+                    />
                 </Group>
             </div>
         </aside>
@@ -193,28 +179,6 @@ function HeadingValue({ children, muted }: { children: React.ReactNode; muted?: 
     );
 }
 
-function RadioRow({
-    label,
-    checked,
-    onSelect,
-}: {
-    label: string;
-    checked: boolean;
-    onSelect: () => void;
-}) {
-    return (
-        <button
-            type="button"
-            role="radio"
-            aria-checked={checked}
-            onClick={onSelect}
-            className="chomp-rail-radio"
-        >
-            <span className="chomp-rail-radio__label">{label}</span>
-        </button>
-    );
-}
-
 function YearSlider() {
     const { selectedYear, setSelectedYear } = useMapStore();
     const min = parseInt(AVAILABLE_YEARS[0], 10);
@@ -246,8 +210,7 @@ function YearSlider() {
 function MonthSlider() {
     const { selectedMonth, setSelectedMonth } = useMapStore();
     // Slider is always enabled — dragging always sets a specific month, which
-    // is the natural way to leave the All state. To return to All, use the
-    // AllMonthsButton below the slider.
+    // is the natural way to leave the All state.
     const monthInt = selectedMonth === null ? 1 : parseInt(selectedMonth, 10);
 
     return (
@@ -271,23 +234,6 @@ function MonthSlider() {
                 <span>Dec</span>
             </div>
         </>
-    );
-}
-
-function AllMonthsButton() {
-    const { selectedMonth, setSelectedMonth } = useMapStore();
-    const isAll = selectedMonth === null;
-    return (
-        <div className="chomp-rail-reset-row">
-            <button
-                type="button"
-                className="chomp-rail-reset"
-                aria-pressed={isAll}
-                onClick={() => setSelectedMonth(null)}
-            >
-                All months
-            </button>
-        </div>
     );
 }
 
