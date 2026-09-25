@@ -23,10 +23,8 @@ export default function StatCard({ value, label }: { value: string; label: strin
             </div>
             <div
                 style={{
-                    fontSize: 10,
-                    fontWeight: 700,
-                    letterSpacing: "0.04em",
-                    textTransform: "uppercase",
+                    fontSize: 12,
+                    fontWeight: 500,
                     color: "var(--ink-dim)",
                 }}
             >

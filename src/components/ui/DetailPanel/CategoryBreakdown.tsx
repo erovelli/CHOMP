@@ -19,15 +19,13 @@ export default function CategoryBreakdown({
         <>
             <p
                 style={{
-                    fontSize: 10,
+                    fontSize: 12,
                     fontWeight: 700,
-                    letterSpacing: "0.1em",
-                    textTransform: "uppercase",
-                    color: "var(--ink-dim)",
+                    color: "var(--ink)",
                     marginBottom: 12,
                 }}
             >
-                Breakdown by Category — {periodLabel}
+                Breakdown by category · {periodLabel}
             </p>
             <div style={{ marginBottom: 24 }}>
                 {records
