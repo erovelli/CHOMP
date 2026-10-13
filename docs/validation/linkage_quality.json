@@ -1,0 +1,118 @@
+{
+  "nppes_linkage": {
+    "overall": {
+      "rows": 24068574,
+      "rows_matched_pct": 96.279,
+      "lines_matched_pct": 95.966,
+      "dollars_matched_pct": 95.519
+    },
+    "by_year": [
+      {
+        "year": "2018",
+        "rows_matched_pct": 94.306,
+        "lines_matched_pct": 93.852,
+        "dollars_matched_pct": 97.021
+      },
+      {
+        "year": "2019",
+        "rows_matched_pct": 95.247,
+        "lines_matched_pct": 94.694,
+        "dollars_matched_pct": 93.537
+      },
+      {
+        "year": "2020",
+        "rows_matched_pct": 94.717,
+        "lines_matched_pct": 94.184,
+        "dollars_matched_pct": 92.714
+      },
+      {
+        "year": "2021",
+        "rows_matched_pct": 94.834,
+        "lines_matched_pct": 94.1,
+        "dollars_matched_pct": 92.397
+      },
+      {
+        "year": "2022",
+        "rows_matched_pct": 96.82,
+        "lines_matched_pct": 96.605,
+        "dollars_matched_pct": 95.317
+      },
+      {
+        "year": "2023",
+        "rows_matched_pct": 97.655,
+        "lines_matched_pct": 97.412,
+        "dollars_matched_pct": 96.916
+      },
+      {
+        "year": "2024",
+        "rows_matched_pct": 99.059,
+        "lines_matched_pct": 99.048,
+        "dollars_matched_pct": 98.681
+      }
+    ],
+    "unmatched_by_cause": [
+      {
+        "cause": "missing servicing ID",
+        "rows": 685886,
+        "rows_pct_of_unmatched": 76.576,
+        "lines": 40090675,
+        "dollars": 1486098274.53
+      },
+      {
+        "cause": "non-NPI identifier (state-assigned / malformed)",
+        "rows": 207059,
+        "rows_pct_of_unmatched": 23.117,
+        "lines": 11539632,
+        "dollars": 492752005.62
+      },
+      {
+        "cause": "10-digit NPI not in same-month NPPES",
+        "rows": 2746,
+        "rows_pct_of_unmatched": 0.307,
+        "lines": 154255,
+        "dollars": 2418168.84
+      }
+    ]
+  },
+  "geocoding": {
+    "unique_addresses": 69960,
+    "by_status": [
+      {
+        "status": "M",
+        "addresses": 69384,
+        "addresses_pct": 99.177,
+        "lines_pct": 99.615
+      },
+      {
+        "status": "T",
+        "addresses": 490,
+        "addresses_pct": 0.7,
+        "lines_pct": 0.221
+      },
+      {
+        "status": "U",
+        "addresses": 86,
+        "addresses_pct": 0.123,
+        "lines_pct": 0.164
+      }
+    ]
+  },
+  "state_consistency": {
+    "lines_with_us_nppes_address": 1229732566,
+    "state_agreement_pct": 99.976,
+    "lines_with_foreign_nppes_address_geocoded": 174365
+  },
+  "registry_audit": {
+    "n_sampled": 200,
+    "n_found": 200,
+    "counts": {
+      "zip5_match": 185,
+      "mismatch": 8,
+      "state_match_only": 7
+    },
+    "zip5_match_pct": 92.5,
+    "zip5_or_state_match_pct": 96.0,
+    "seed": 20261012,
+    "frame": "distinct servicing NPIs with >=1 matched dental row in 2024"
+  }
+}
