@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Figure: annual Medicaid+CHIP dental dollars — NHE vs. HHS release vs. CHOMP.
+"""Figure 2: annual Medicaid+CHIP dental dollars — NHE vs. HHS release vs. CHOMP.
 
 Reads docs/validation/nhe_benchmark.csv (written by scripts/validate_nhe.py) and
-writes docs/validation/fig_nhe_benchmark.{png,pdf}. 2024 is drawn hollow because
-HHS marks 2024 T-MSIS data as preliminary.
+writes docs/validation/Fig2.{eps,pdf,png} (Springer naming). Sized and typeset for
+Springer journal artwork: 174 mm (full-page) width, Arial, >= 8 pt, vector
+PDF/EPS for submission plus a 300 dpi PNG preview. Notes (preliminary 2024, what
+the percentages mean) belong in the caption, not the artwork. 2024 is drawn
+hollow with a dashed connector because HHS marks 2024 T-MSIS data as preliminary.
 """
 
 from __future__ import annotations
@@ -18,8 +21,10 @@ import pandas as pd  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 VAL = REPO_ROOT / "docs" / "validation"
+MM = 1 / 25.4
 
 # Reference categorical slots 1-3 (validated all-pairs, light mode) + text tokens.
+# Marker shape is the secondary encoding for grayscale print.
 SERIES = [
     ("medicaid_chip", "NHE Medicaid + CHIP dental services", "#2a78d6", "o"),
     ("release_dental", "HHS release, all D-codes", "#eb6834", "s"),
@@ -32,45 +37,45 @@ def main() -> None:
     df = pd.read_csv(VAL / "nhe_benchmark.csv")
     df[[c for c, *_ in SERIES]] = df[[c for c, *_ in SERIES]] / 1000  # $M -> $B
 
-    plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 9})
-    fig, ax = plt.subplots(figsize=(6.5, 3.6), dpi=300)
+    plt.rcParams.update({
+        "font.family": "Arial", "font.size": 8, "pdf.fonttype": 42, "ps.fonttype": 42,
+    })
+    fig, ax = plt.subplots(figsize=(174 * MM, 92 * MM))
     final = df[~df["preliminary"]]
-    prelim = df[df["year"] >= final["year"].max()]  # last final year -> 2024, dashed
+    tail = df[df["year"] >= final["year"].max()]  # last final year -> preliminary year
 
     for col, label, color, marker in SERIES:
-        ax.plot(final["year"], final[col], color=color, lw=2, marker=marker, ms=6,
-                markeredgecolor="white", markeredgewidth=1, label=label, zorder=3)
-        ax.plot(prelim["year"], prelim[col], color=color, lw=2, ls=(0, (3, 2)), zorder=2)
+        ax.plot(final["year"], final[col], color=color, lw=1.5, marker=marker, ms=5,
+                markeredgecolor="white", markeredgewidth=0.8, label=label, zorder=3)
+        ax.plot(tail["year"], tail[col], color=color, lw=1.5, ls=(0, (3, 2)), zorder=2)
         last = df.iloc[-1]
-        ax.plot(last["year"], last[col], marker=marker, ms=6, markerfacecolor="white",
-                markeredgecolor=color, markeredgewidth=1.5, ls="none", zorder=4)
+        ax.plot(last["year"], last[col], marker=marker, ms=5, markerfacecolor="white",
+                markeredgecolor=color, markeredgewidth=1.2, ls="none", zorder=4)
 
-    # Coverage of NHE for CHOMP, as text under the x labels' data points.
     for _, r in df.iterrows():
         ax.annotate(f"{r['chomp_pct_of_nhe']:.0f}%", (r["year"], r["chomp_50dc"]),
-                    textcoords="offset points", xytext=(0, -14), ha="center",
-                    fontsize=7.5, color=TEXT_SECONDARY)
+                    textcoords="offset points", xytext=(0, -12), ha="center",
+                    fontsize=8, color=TEXT_SECONDARY)
 
     ax.set_ylim(0, 20)
     ax.set_xlim(df["year"].min() - 0.4, df["year"].max() + 0.4)
     ax.set_xticks(df["year"], [f"{y}" + ("*" if p else "") for y, p in zip(df["year"], df["preliminary"])])
     ax.set_ylabel("Dental spending ($ billions)", color=TEXT_PRIMARY)
-    ax.grid(axis="y", color=GRID, lw=0.8)
+    ax.grid(axis="y", color=GRID, lw=0.6)
     ax.set_axisbelow(True)
     for s in ("top", "right"):
         ax.spines[s].set_visible(False)
     for s in ("left", "bottom"):
         ax.spines[s].set_color(TEXT_SECONDARY)
-    ax.tick_params(colors=TEXT_SECONDARY)
-    ax.legend(loc="upper left", frameon=False, fontsize=8, labelcolor=TEXT_PRIMARY)
-    fig.text(0.01, 0.005,
-             "Percentages: CHOMP mapped total as a share of NHE Medicaid + CHIP dental. "
-             "*2024 T-MSIS data preliminary (HHS).",
-             fontsize=7, color=TEXT_SECONDARY)
-    fig.tight_layout(rect=(0, 0.04, 1, 1))
-    for ext in ("png", "pdf"):
-        fig.savefig(VAL / f"fig_nhe_benchmark.{ext}", facecolor="white")
-    print("wrote", VAL / "fig_nhe_benchmark.png")
+        ax.spines[s].set_linewidth(0.6)
+    ax.tick_params(colors=TEXT_SECONDARY, width=0.6)
+    ax.legend(loc="upper left", frameon=False, labelcolor=TEXT_PRIMARY, handlelength=2.5)
+    fig.tight_layout()
+
+    for ext in ("pdf", "eps"):
+        fig.savefig(VAL / f"Fig2.{ext}", facecolor="white")
+    fig.savefig(VAL / "Fig2.png", dpi=300, facecolor="white")
+    print("wrote", ", ".join(str(VAL / f"Fig2.{e}") for e in ("pdf", "eps", "png")))
 
 
 if __name__ == "__main__":
