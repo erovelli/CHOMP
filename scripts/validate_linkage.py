@@ -261,7 +261,8 @@ def main() -> int:
         )
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    (OUT_DIR / "linkage_quality.json").write_text(json.dumps(out, indent=2), encoding="utf-8")
+    (OUT_DIR / "linkage_quality.json").write_text(json.dumps(out, indent=2) + "
+", encoding="utf-8")
     print(json.dumps(out, indent=2))
     return 0
 
