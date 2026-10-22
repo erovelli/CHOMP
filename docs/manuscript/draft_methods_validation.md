@@ -1,16 +1,16 @@
 # Draft: Methods, Results, Discussion (limitations)
 
-Citations are numbered in order of appearance within this draft and will shift once the Introduction is written. XX marks a value still to be filled in from the local reproducibility report. The release date in the first sentence of Data Sources needs checking (February 8 or 13, 2026).
+Citations are numbered in order of appearance within this draft and will shift once the Introduction is written. XX marks a value still to be filled in from the local reproducibility report. The release date in the first sentence of Data Sources needs checking (February 8 or 13, 2026). The ArcGIS details marked XX in Data Sources are for Md Shahinoor Rahman to fill in.
 
 ## Methods
 
 ### Data Sources
 
-Data were obtained from the Medicaid Provider Spending file released by the U.S. Department of Health and Human Services (HHS) on February 8, 2026 [1]. The file is derived from the Transformed Medicaid Statistical Information System (T-MSIS) and covers fee-for-service, managed care, and Children's Health Insurance Program (CHIP) claims with dates of service from January 2018 through December 2024 [1]. Each record summarizes one combination of billing provider, servicing provider, procedure code, and month. It gives the number of claims, the number of unique beneficiaries, and the total amount paid by Medicaid. HHS suppressed records with fewer than 12 claims before release. Provider practice locations came from the National Plan and Provider Enumeration System (NPPES), using the 84 monthly snapshots archived by the National Bureau of Economic Research (NBER) [2]. Procedure categories follow the American Dental Association Current Dental Terminology (CDT) [3].
+Data were obtained from the Medicaid Provider Spending file released by the U.S. Department of Health and Human Services (HHS) on February 8, 2026 [1]. The file is derived from the Transformed Medicaid Statistical Information System (T-MSIS) and covers fee-for-service, managed care, and Children's Health Insurance Program (CHIP) claims with dates of service from January 2018 through December 2024 [1]. Each record summarizes one combination of billing provider, servicing provider, procedure code, and month. It gives the number of claims, the number of unique beneficiaries, and the total amount paid by Medicaid. HHS suppressed records with fewer than 12 claims before release. Provider practice locations came from the National Plan and Provider Enumeration System (NPPES), using the 84 monthly snapshots archived by the National Bureau of Economic Research (NBER) [2]. Practice addresses were geocoded with Esri ArcGIS (XX product and version) using the XX locator, with a minimum match score of XX [3]. Procedure categories follow the American Dental Association Current Dental Terminology (CDT) [4].
 
 ### Data Linkage and Aggregation
 
-Fig. 1 summarizes the processing steps. All CDT codes begin with "D," so records with a procedure code beginning with that letter were kept as dental records. The servicing provider identifier on each dental record, normally a National Provider Identifier (NPI), was linked to the NPPES snapshot for the month of service, and the record took the practice location address from that snapshot. Unlinked records were excluded. Distinct practice addresses were geocoded in a single batch with the ArcGIS World Geocoding Service [4]. For each address the geocoder returned coordinates, a five-digit county Federal Information Processing Standards (FIPS) code, and a match status of matched, tied (several candidate locations scored equally), or unmatched.
+Fig. 1 summarizes the processing steps. All CDT codes begin with "D," so records with a procedure code beginning with that letter were kept as dental records. The servicing provider identifier on each dental record, normally a National Provider Identifier (NPI), was linked to the NPPES snapshot for the month of service, and the record took the practice location address from that snapshot. Unlinked records were excluded. Distinct practice addresses were geocoded in a single batch. For each address the geocoder returned coordinates, a five-digit county Federal Information Processing Standards (FIPS) code, and a match status of matched, tied (several candidate locations scored equally), or unmatched.
 
 Procedure codes were assigned to the 12 CDT categories by numeric range. For example, D1000 to D1999 is preventive. Codes outside the defined ranges were labeled uncategorized and kept in all totals. Claims and payments were summed by year and by month at the state, county, and three-digit ZIP code (ZIP3) levels in DuckDB [5]. Beneficiary counts were summed the same way. A patient is counted once for each provider, procedure code, and month, so these sums are not counts of unique individuals. County came from the geocoded FIPS code, and each state total is the sum of its counties. ZIP3 is the first three digits of the NPPES practice ZIP code. Records without a county were left out of state and county totals, and records without a valid ZIP code were left out of ZIP3 totals.
 
@@ -50,8 +50,8 @@ The largest source of loss was the exclusion of records without a valid NPI, whi
 
 1. HHS. Medicaid Provider Spending. HHS Open Data Platform. 2026.
 2. National Bureau of Economic Research. NPPES monthly data archive, 2018–2024.
-3. American Dental Association. Current Dental Terminology (CDT).
-4. Esri. ArcGIS World Geocoding Service.
+3. Esri. ArcGIS (XX product, version, and locator).
+4. American Dental Association. Current Dental Terminology (CDT).
 5. DuckDB Foundation. DuckDB.
 6. Centers for Medicare & Medicaid Services. NPPES NPI Registry API, version 2.1.
 7. Centers for Medicare & Medicaid Services, Office of the Actuary. National Health Expenditure Accounts: type of service and source of funds, CY 1960–2024.
