@@ -26,7 +26,7 @@ Third, payments were compared with national spending estimates. Payments (TOTAL_
 
 ## Results
 
-### Pipeline Output
+### Linked Dataset
 
 Of 227,083,361 records in the HHS release, 24,068,574 (10.6%) were dental. They contained 1.28 billion claims and $44.2 billion in payments. Linkage to NPPES excluded 895,691 records (3.7%) and left 23,172,883. After the 69,960 distinct practice addresses were geocoded, 23,140,395 records were available for state and county aggregation and 23,171,904 for ZIP3 aggregation (Fig. 1).
 
