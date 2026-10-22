@@ -1,8 +1,12 @@
-# Draft: Methods, Results, Discussion (limitations), Availability
+# Draft: Brief Report sections (journal's suggested structure)
 
 Citations are numbered in order of appearance within this draft and will shift once the Introduction is written. Before submission, confirm that the reproducibility audit passed (sentence in Availability). The release date in the first sentence of Data Sources needs checking (February 8 or 13, 2026). The ArcGIS details marked XX in Data Sources are for Md Shahinoor Rahman to fill in.
 
-## Methods
+## Problem and Motivation
+
+[To write. Adapted from the Introduction of the original manuscript.]
+
+## Technical Approach
 
 ### Data Sources
 
@@ -14,35 +18,35 @@ Fig. 1 summarizes the processing steps. All CDT codes begin with "D," so records
 
 Procedure codes were assigned to the 12 CDT categories by numeric range. For example, D1000 to D1999 is preventive. Codes outside the defined ranges were labeled uncategorized and kept in all totals. Claims and payments were summed by year and by month at the state, county, and three-digit ZIP code (ZIP3) levels. Beneficiary counts were summed the same way. A patient is counted once for each provider, procedure code, and month, so these sums are not counts of unique individuals. County came from the geocoded FIPS code, and each state total is the sum of its counties. Territories were treated as states. ZIP3 is the first three digits of the NPPES practice ZIP code. Records without a county were left out of state and county totals, and records without a valid ZIP code were left out of ZIP3 totals.
 
-### Validation
-
-The data processing was evaluated in two ways. Every proportion describes all records, so no confidence intervals are given.
-
-First, the completeness and agreement of the linkage were assessed. Completeness was the proportion of dental records, claims, and payments linked to NPPES. Each unlinked record was classified by its servicing provider identifier, which could be missing, a valid 10-digit NPI absent from that month's NPPES snapshot, or another identifier such as a state-assigned or malformed value. Geocoding completeness was summarized by match status. For records with an NPPES address in the United States or a U.S. territory, the state of the geocoded county was compared with the state recorded in NPPES.
-
-Second, dental payments were compared with national estimates. Annual payment totals were calculated at three stages. The first included all dental records in the release, the second included records linked and geocoded to any location, and the third included only records linked and geocoded to the 50 states and the District of Columbia. Dividing the second total by the first gave the share of payments retained after linkage and geocoding. The first and third totals were compared with combined Medicaid and CHIP spending on dental services in the National Health Expenditure Accounts (NHE, 2024 edition, accessed October 12, 2026) [5]. Like the release, NHE includes federal and state shares. It covers only the 50 states and the District of Columbia, which matches the third total. The first total could not be limited to that geography because unlinked records have no location. NHE counts dental services as the revenue of dentists' offices [6], so dental care billed by other facilities may fall outside it. The comparison was therefore used to estimate how much national spending appears in the release, and the totals were not expected to match. Claims for late 2024 were incomplete at release. Data for 2024 were included in pooled totals, reported separately, and excluded in a sensitivity analysis. To measure how incomplete 2024 was, November and December claims were compared with the January to October monthly mean, using the same months of 2023 as a reference for seasonal variation.
-
-## Results
-
 ### Linked Dataset
 
 Of 227,083,361 records in the HHS release, 24,068,574 (10.6%) were dental. They contained 1.28 billion claims and $44.2 billion in payments. Linkage to NPPES excluded 895,691 records (3.7%) and left 23,172,883. Uncategorized procedure codes accounted for less than 0.01% of linked claims and payments. After the 69,960 distinct practice addresses were geocoded, 23,140,395 records were available for state and county aggregation and 23,171,904 for ZIP3 aggregation (Fig. 1).
 
+## Validation
+
+The data processing was evaluated in two ways. Every proportion describes all records, so no confidence intervals are given.
+
 ### Linkage Completeness and Agreement
+
+The completeness and agreement of the linkage were assessed. Completeness was the proportion of dental records, claims, and payments linked to NPPES. Each unlinked record was classified by its servicing provider identifier, which could be missing, a valid 10-digit NPI absent from that month's NPPES snapshot, or another identifier such as a state-assigned or malformed value. Geocoding completeness was summarized by match status. For records with an NPPES address in the United States or a U.S. territory, the state of the geocoded county was compared with the state recorded in NPPES.
 
 NPPES linkage captured 96.3% of dental records, 96.0% of claims, and 95.5% of payments. The share of linked records rose from 94.3% in 2018 to 99.1% in 2024. The 895,691 unlinked records carried $1.98 billion in payments. Of these records, 685,886 (76.6%, $1.49 billion) had no servicing provider identifier and 207,059 (23.1%, $0.49 billion) had a state-assigned or malformed identifier. The remaining 2,746 (0.3%, $2.4 million) had a valid NPI that was missing from that month's snapshot. Of the 69,960 addresses, 69,384 (99.2%) were matched, 490 (0.7%) were tied, and 86 (0.1%) were unmatched. Unmatched addresses accounted for 0.2% of claims. Record counts reconciled for all 69,960 addresses after the geocoder output was joined back to records. The state of the geocoded county agreed with the NPPES state for 99.98% of 1.23 billion claims.
 
 ### Comparison With National Health Expenditure Estimates
 
+Dental payments were compared with national estimates. Annual payment totals were calculated at three stages. The first included all dental records in the release, the second included records linked and geocoded to any location, and the third included only records linked and geocoded to the 50 states and the District of Columbia. Dividing the second total by the first gave the share of payments retained after linkage and geocoding. The first and third totals were compared with combined Medicaid and CHIP spending on dental services in the National Health Expenditure Accounts (NHE, 2024 edition, accessed October 12, 2026) [5]. Like the release, NHE includes federal and state shares. It covers only the 50 states and the District of Columbia, which matches the third total. The first total could not be limited to that geography because unlinked records have no location. NHE counts dental services as the revenue of dentists' offices [6], so dental care billed by other facilities may fall outside it. The comparison was therefore used to estimate how much national spending appears in the release, and the totals were not expected to match. Claims for late 2024 were incomplete at release. Data for 2024 were included in pooled totals, reported separately, and excluded in a sensitivity analysis. To measure how incomplete 2024 was, November and December claims were compared with the January to October monthly mean, using the same months of 2023 as a reference for seasonal variation.
+
 Dental payments in the release totaled $44.2 billion from 2018 through 2024, which is 44.0% of the $100.6 billion in Medicaid and CHIP dental spending estimated by NHE. This total includes territories and unlinked records. Linkage and geocoding together retained 95.4% of payments in the release. Payments placed in the 50 states and the District of Columbia (the mapped total) totaled $41.8 billion (41.6% of NHE), and territories accounted for another $0.35 billion. Without 2024, the two proportions were 44.2% and 41.5%. In 2024 the release held $8.05 billion and the mapped total was $7.87 billion, or 43.0% and 42.0% of the NHE estimate. Claims in November and December 2024 fell 21.5% and 61.5% below the January to October 2024 monthly mean. The same months of 2023 fell 6.6% and 21.4% below. Fig. 2 gives annual values.
 
-## Discussion (limitations paragraph)
-
-The largest source of loss was the exclusion of unlinked records, which removed 3.7% of dental records and 4.5% of payments. These records are probably not missing at random. School-based programs, mobile clinics, and other providers that bill under state-assigned identifiers may be overrepresented among them, so totals are understated most in states and years where such billing is common. Linkage improved from 94.3% of records in 2018 to 99.1% in 2024, which means part of the apparent growth in mapped payments over the period comes from better identifier reporting. Suppression of records with fewer than 12 claims removes more care from low-volume providers and for infrequent procedures, and the size of that loss cannot be estimated from the released data. Each claim was placed at the servicing provider's practice address. That address may differ from both the patient's residence and the site of care, so sub-state totals show where providers practice. Claims for November and December 2024 were incomplete at release, and 2024 totals are preliminary. Most of the difference from NHE estimates is already present in the release. NHE dental services represents the revenue of dentists' offices, and procedures billed by health centers and other facilities can be counted under other service categories [6]. State and ZIP3 totals come from slightly different sets of records and do not reconcile exactly. The completeness and quality of T-MSIS data also vary by state and year [7]. Adult dental benefits differ across state Medicaid programs, so part of any difference between states reflects policy. The aggregated data support descriptive analysis only.
-
-## Availability (draft sentence)
+## Availability
 
 A separate script that re-implements the processing from the written methods reproduced every record of the published files and is included in the repository.
+
+[To add: repository URL, license, description of the published files, Zenodo DOI.]
+
+## Limitations
+
+The largest source of loss was the exclusion of unlinked records, which removed 3.7% of dental records and 4.5% of payments. These records are probably not missing at random. School-based programs, mobile clinics, and other providers that bill under state-assigned identifiers may be overrepresented among them, so totals are understated most in states and years where such billing is common. Linkage improved from 94.3% of records in 2018 to 99.1% in 2024, which means part of the apparent growth in mapped payments over the period comes from better identifier reporting. Suppression of records with fewer than 12 claims removes more care from low-volume providers and for infrequent procedures, and the size of that loss cannot be estimated from the released data. Each claim was placed at the servicing provider's practice address. That address may differ from both the patient's residence and the site of care, so sub-state totals show where providers practice. Claims for November and December 2024 were incomplete at release, and 2024 totals are preliminary. Most of the difference from NHE estimates is already present in the release. NHE dental services represents the revenue of dentists' offices, and procedures billed by health centers and other facilities can be counted under other service categories [6]. State and ZIP3 totals come from slightly different sets of records and do not reconcile exactly. The completeness and quality of T-MSIS data also vary by state and year [7]. Adult dental benefits differ across state Medicaid programs, so part of any difference between states reflects policy. The aggregated data support descriptive analysis only.
 
 ## References used in this draft
 
