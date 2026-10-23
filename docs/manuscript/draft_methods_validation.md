@@ -44,9 +44,7 @@ PUT FIG2 HERE
 
 ## Availability
 
-A separate script that re-implements the processing from the written methods reproduced every record of the published files and is included in the repository.
-
-[To add: repository URL, license, description of the published files, Zenodo DOI.]
+The code and the aggregated data are available under the MIT license at https://github.com/erovelli/CHOMP (archived version: Zenodo DOI XX). The data comprise annual and monthly claims, payments, and beneficiary counts by CDT category at the state, county, and ZIP3 levels. The repository also contains a script that reproduces every published record from the source files.
 
 ## Limitations
 
