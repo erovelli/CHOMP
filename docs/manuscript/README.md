@@ -1,6 +1,6 @@
 # Manuscript companion
 
-Supporting material for the Brief Report _A Framework for HHS Open Data Visualization Using Medicaid Dental Claims_ (Liu, Morgan, Borbiev, Ngaw, Rovelli, Gilbert, Elani), submitted to the _Journal of Medical Systems_.
+Supporting material for the Brief Report _A Framework for HHS Open Data Visualization Using Medicaid Dental Claims_, submitted to the _Journal of Medical Systems_.
 
 If you came here from the paper, every number it reports traces to a file in this repository. The tables below give the path for each one and the script that writes it.
 
