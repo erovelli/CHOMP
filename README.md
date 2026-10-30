@@ -284,7 +284,7 @@ CHOMP/
 - [**ARCHITECTURE**](docs/ARCHITECTURE.md) — System design, data flow, and the trade-offs behind each decision.
 - [**DATA DICTIONARY**](docs/DATA_DICTIONARY.md) — NDJSON schema, field semantics, units, and suppression rules.
 - [**LIMITATIONS**](docs/LIMITATIONS.md) — Running ledger of data-quality issues, structural exclusions, and methodological caveats. Read before publishing any number derived from this pipeline.
-- [**MANUSCRIPT COMPANION**](docs/manuscript/README.md) — Where each number and figure in the _Journal of Medical Systems_ Brief Report comes from, and how to reproduce it.
+- [**MANUSCRIPT COMPANION**](docs/manuscript/README.md) — Where each number and figure in the manuscript comes from, and how to reproduce it.
 - [**ADRs**](docs/adr/) — Architecture Decision Records for the load-bearing calls.
 - [**CONTRIBUTING**](CONTRIBUTING.md) — Workflow, coding standards, commit conventions.
 - [**SECURITY**](SECURITY.md) — Responsible disclosure policy.
