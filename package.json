@@ -59,7 +59,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@lhci/cli": "0.15.1",
-    "@types/d3-geo": "^3.1.0",
+    "@types/d3-geo": "^3.1.1",
     "@types/papaparse": "^5.3.15",
     "@types/topojson-client": "^3.1.5",
     "@types/topojson-specification": "^1.0.5",
