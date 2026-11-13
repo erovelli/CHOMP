@@ -149,6 +149,19 @@ function interactionExpr<T extends string | number>(v: {
     return expr as maplibregl.ExpressionSpecification;
 }
 
+/**
+ * The same `case` shape as interactionExpr with one value on every branch.
+ * setActiveGeoLayer uses it for hidden and context levels instead of a bare
+ * constant: MapLibre builds a layer's paint buffers for the kind of value a
+ * property had at the time (expression or constant), and a feature-state
+ * write that lands after the kind has flipped, but before the tiles reload,
+ * throws "this.expression.evaluate is not a function" from updatePaintArrays.
+ * Clearing a selection on a level switch is exactly that sequence.
+ */
+function flatExpr<T extends string | number>(value: T) {
+    return interactionExpr({ selected: value, hover: value, default: value });
+}
+
 function strokeColorExpr(level: GeoLevel) {
     return interactionExpr({
         selected: STROKE_COLOR_ACTIVE,
@@ -227,19 +240,19 @@ function setActiveGeoLayer(map: maplibregl.Map, active: GeoLevel) {
             map.setPaintProperty(spec.stroke, "line-opacity", interactionExpr(spec.lineOpacity));
             map.setPaintProperty(spec.stroke, "line-width", interactionExpr(spec.lineWidth));
             if (level === "state") {
-                // Restore the case-expression line-color in case we came back
-                // from context mode (which pinned it to the default constant).
+                // Restore the interactive line-color in case we came back
+                // from context mode (which pinned it to the default color).
                 map.setPaintProperty(spec.stroke, "line-color", strokeColorExpr(level));
             }
         } else if (level === "state") {
-            map.setPaintProperty(spec.fill, "fill-opacity", 0);
-            map.setPaintProperty(spec.stroke, "line-opacity", spec.lineOpacity.default);
-            map.setPaintProperty(spec.stroke, "line-width", spec.lineWidth.default);
-            map.setPaintProperty(spec.stroke, "line-color", spec.strokeColor);
+            map.setPaintProperty(spec.fill, "fill-opacity", flatExpr(0));
+            map.setPaintProperty(spec.stroke, "line-opacity", flatExpr(spec.lineOpacity.default));
+            map.setPaintProperty(spec.stroke, "line-width", flatExpr(spec.lineWidth.default));
+            map.setPaintProperty(spec.stroke, "line-color", flatExpr(spec.strokeColor));
         } else {
-            map.setPaintProperty(spec.fill, "fill-opacity", 0);
-            map.setPaintProperty(spec.stroke, "line-opacity", 0);
-            map.setPaintProperty(spec.stroke, "line-width", 0);
+            map.setPaintProperty(spec.fill, "fill-opacity", flatExpr(0));
+            map.setPaintProperty(spec.stroke, "line-opacity", flatExpr(0));
+            map.setPaintProperty(spec.stroke, "line-width", flatExpr(0));
         }
     }
     // Make sure the state stroke sits ABOVE the active level's fill so the
