@@ -669,6 +669,7 @@ export default function MapContainer() {
         selectedRegion,
         geoLevel,
         metric,
+        setAnnualDataLoaded,
         monthlyDataLoaded,
         setMonthlyDataLoaded,
         setSelectedRegion,
@@ -1342,6 +1343,9 @@ export default function MapContainer() {
                 );
                 applyActiveColors();
                 mapReadyRef.current = true;
+                // Tell render-time readers of the annual caches (the export
+                // modal's region picker) that the data is in.
+                setAnnualDataLoaded(true);
                 // Track every state id the annual data knows about so the DQ
                 // ring pass can wipe stale colors from states not present in
                 // the current (topic, year) bucket. Uses annual state ids as
@@ -1375,6 +1379,7 @@ export default function MapContainer() {
         handleZip3Click,
         handleZip3MouseMove,
         handleZip3MouseLeave,
+        setAnnualDataLoaded,
     ]);
 
     return (

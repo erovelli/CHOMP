@@ -23,6 +23,12 @@ interface MapState {
     selectedMonth: string | null;
     setSelectedMonth: (month: string | null) => void;
 
+    // True once loadAnnualData has resolved (claims and enrollment caches both
+    // populated). Those caches are plain module state, so a component that
+    // reads them during render keys on this flag to re-derive when they fill.
+    annualDataLoaded: boolean;
+    setAnnualDataLoaded: (loaded: boolean) => void;
+
     monthlyDataLoaded: boolean;
     setMonthlyDataLoaded: (loaded: boolean) => void;
 
@@ -83,6 +89,9 @@ export const useMapStore = create<MapState>((set) => ({
 
     selectedMonth: null,
     setSelectedMonth: (month) => set({ selectedMonth: month }),
+
+    annualDataLoaded: false,
+    setAnnualDataLoaded: (loaded) => set({ annualDataLoaded: loaded }),
 
     monthlyDataLoaded: false,
     setMonthlyDataLoaded: (loaded) => set({ monthlyDataLoaded: loaded }),

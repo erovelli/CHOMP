@@ -47,6 +47,7 @@ function toggle<T>(set: Set<T>, value: T): Set<T> {
 }
 
 export default function SubsetExportPanel() {
+    const annualDataLoaded = useMapStore((s) => s.annualDataLoaded);
     const setMonthlyDataLoaded = useMapStore((s) => s.setMonthlyDataLoaded);
     const monthlyDataLoaded = useMapStore((s) => s.monthlyDataLoaded);
 
@@ -61,7 +62,6 @@ export default function SubsetExportPanel() {
     );
     const [includeAllTotal, setIncludeAllTotal] = useState(false);
 
-    const [selectedRegions, setSelectedRegions] = useState<Set<string>>(new Set());
     const [regionSearch, setRegionSearch] = useState("");
     const [countyNames, setCountyNames] = useState<Record<string, string>>({});
 
@@ -69,12 +69,21 @@ export default function SubsetExportPanel() {
     const [generating, setGenerating] = useState(false);
     const [confirmLarge, setConfirmLarge] = useState(false);
 
-    // Region universe for the current level — keys of the always-loaded annual
-    // cache. (Monthly suppression can drop a few ids; the builder simply emits
-    // no rows for an id absent from the monthly cache.)
+    // Region universe for the current level: keys of the annual cache. The
+    // cache fills at app start and the modal can be opened before it has, so
+    // the universe is empty until then and re-derives when the load lands.
+    // (Monthly suppression can drop a few ids; the builder simply emits no
+    // rows for an id absent from the monthly cache.)
     const regionUniverse = useMemo(() => {
+        if (!annualDataLoaded) return [];
         return Object.keys(getAnnualDataForLevel(level)).sort();
-    }, [level]);
+    }, [level, annualDataLoaded]);
+
+    // Default selection: every region of the level. Seeded here for the first
+    // render; the reset below keeps it in step with later universe changes.
+    const [selectedRegions, setSelectedRegions] = useState<Set<string>>(
+        () => new Set(regionUniverse),
+    );
 
     // Available months are a synchronous read off the monthly cache once it has
     // loaded, so derive them rather than mirroring into state from the effect
@@ -91,9 +100,10 @@ export default function SubsetExportPanel() {
     const monthlyLoading =
         grain === "monthly" && availableMonths.length === 0 && monthlyError === null;
 
-    // Reset the region selection (default: all) whenever the level changes.
-    // Handled during render off the change in `regionUniverse` (the documented
-    // alternative to a setState-in-effect).
+    // Reset the region selection (default: all) whenever the level changes, or
+    // when the annual data arrives after mount. Handled during render off the
+    // change in `regionUniverse` (the documented alternative to a
+    // setState-in-effect).
     const [prevRegionUniverse, setPrevRegionUniverse] = useState(regionUniverse);
     if (prevRegionUniverse !== regionUniverse) {
         setPrevRegionUniverse(regionUniverse);
@@ -421,8 +431,12 @@ export default function SubsetExportPanel() {
                             )}
                         </label>
                     ))}
-                    {filteredRegions.length === 0 && (
-                        <Hint>No regions match “{regionSearch}”.</Hint>
+                    {!annualDataLoaded ? (
+                        <Hint>Loading regions…</Hint>
+                    ) : (
+                        filteredRegions.length === 0 && (
+                            <Hint>No regions match “{regionSearch}”.</Hint>
+                        )
                     )}
                     {filteredRegions.length > REGION_DISPLAY_CAP && (
                         <Hint>
@@ -482,7 +496,9 @@ export default function SubsetExportPanel() {
                 {periodsSelected.size === 0 && grain === "annual" && (
                     <Hint>Select at least one year.</Hint>
                 )}
-                {selectedRegions.size === 0 && <Hint>Select at least one region.</Hint>}
+                {annualDataLoaded && selectedRegions.size === 0 && (
+                    <Hint>Select at least one region.</Hint>
+                )}
             </div>
         </div>
     );
