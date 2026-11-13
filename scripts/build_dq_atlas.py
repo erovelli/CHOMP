@@ -46,8 +46,8 @@ DEFAULT_IN = REPO_ROOT / "data" / "DQ Atlas"
 DEFAULT_OUT = REPO_ROOT / "public" / "data" / "dq_atlas.json"
 
 # Ten front-end topic keys. Each pattern matches the CSV base name after
-# stripping the `-<year>-<release>.csv` suffix. Order also drives the
-# LayerControl-style ribbon in the DetailPanel.
+# stripping the `-<year>-<release>.csv` suffix. (Display order in the app
+# comes from DQ_TOPIC_ORDER in src/constants/dq.ts, not from this list.)
 TOPIC_PATTERNS: list[tuple[str, str, str]] = [
     ("link-bene", "TAF-DQ-Link-Claims-Bene", "Linking Claims to Beneficiaries"),
     ("link-providers", "TAF-DQ-Link-Claims-Providers", "Linking Claims to Providers"),

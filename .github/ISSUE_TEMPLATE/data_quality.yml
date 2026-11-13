@@ -88,7 +88,7 @@ body:
     attributes:
       label: Pre-flight checks
       options:
-        - label: I've read the InfoModal about HHS cell suppression and NPI-to-practice-location limitations.
+        - label: I've read the notes on the site's Data page about HHS cell suppression and NPI-to-practice-location limitations.
           required: true
         - label: The discrepancy is not explained by a definitional difference (HCPCS categorization, claim vs. encounter, gross vs. paid).
           required: true

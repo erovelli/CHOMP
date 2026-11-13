@@ -180,14 +180,14 @@ Frontend mapping from these category strings to `LayerKey` values is in [`CATEGO
 
 ## Suppression & null handling
 
-- **HHS suppresses cells with <12 claims or <12 unique beneficiaries per provider-month.** Those rows are absent from the raw HHS release and therefore absent from every downstream aggregate. This is surfaced in the InfoModal on first visit.
+- **HHS suppresses cells with <12 claims or <12 unique beneficiaries per provider-month.** Those rows are absent from the raw HHS release and therefore absent from every downstream aggregate. This is stated in the notes on the About → Data page.
 - **Missing periods are absent, not zero.** A ZIP3 with no preventive claims in March 2022 has no `("2022-03", "Preventive")` record — the UI must treat missing as zero for summation but must _not_ plot a zero point on a time series.
 - **Uncategorized rows are dropped at export**, not at ingest. A new HCPCS range appearing in a future HHS release will show up under `Uncategorized` until the `CASE` expression is extended.
 - **`state = NULL` rows are dropped at export.** Providers whose NPI record has no practice state are omitted from the state-grain files; those records appear (when the ZIP5 is known) in the ZIP3-grain files.
 
 ## Identifier formats
 
-- **State:** USPS two-letter postal code, uppercase. Matches the `postal` property on `states.pmtiles`. Derived from the county FIPS state prefix via the FIPS→USPS map in [`build_aggregates.py`](../scripts/build_aggregates.py) (50 states + DC + the 5 inhabited territories GU/MP/PR/VI/AS).
+- **State:** USPS two-letter postal code, uppercase. Matches the `postal` property on [`public/states.geojson`](../public/states.geojson). Derived from the county FIPS state prefix via the FIPS→USPS map in [`build_aggregates.py`](../scripts/build_aggregates.py) (50 states + DC + the 5 inhabited territories GU/MP/PR/VI/AS).
 - **County:** five-digit county FIPS / GEOID string, zero-padded (`"01001"`, not `1001`). Source: geocoded `county_fips`. Matches the `GEOID` property on [`public/counties.geojson`](../public/counties.geojson) (regenerate with [`scripts/fetch_county_geometry.py`](../scripts/fetch_county_geometry.py)).
 - **ZIP3:** three-digit string, zero-padded (`"021"`, not `21`). Derived by `LEFT(practice_zip5, 3)`. Matches the `3dig_zip` property on `zip3.pmtiles`.
 - **Period:** year as `"YYYY"`; month as `"YYYY-MM"`. Always strings, never numbers — this is deliberate so downstream code can't accidentally do arithmetic on the values.

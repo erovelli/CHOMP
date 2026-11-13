@@ -120,7 +120,7 @@ JSON array and is streamable if a future iteration moves to incremental load.
 
 ### 3.3 Cell suppression
 
-HHS suppresses any provider-month-code cell with fewer than 12 claims or 12 unique beneficiaries. This is preserved end-to-end: suppressed rows are simply absent from the raw data, and the aggregations pass through only what arrives. The absence is surfaced through the InfoModal on first load, not hidden.
+HHS suppresses any provider-month-code cell with fewer than 12 claims or 12 unique beneficiaries. This is preserved end-to-end: suppressed rows are simply absent from the raw data, and the aggregations pass through only what arrives. The absence is stated in the notes on the About → Data page, not hidden.
 
 ## 4. Frontend architecture
 
@@ -130,27 +130,29 @@ HHS suppresses any provider-month-code cell with fewer than 12 claims or 12 uniq
   App.tsx
    ├── Header.tsx ──┐
    │                │
-   │                ├── LayerControl.tsx      ── reads store.activeLayer
-   │                ├── GeoLevelControl.tsx   ── reads store.geoLevel
-   │                ├── MetricControl.tsx     ── reads store.metric
-   │                ├── TimeControl.tsx       ── reads store.selectedYear/selectedMonth
+   │                ├── LeftRail.tsx          ── desktop controls; reads/writes layer,
+   │                │                            geoLevel, metric, year, month, DQ topic
+   │                ├── FilterSheet.tsx       ── mobile bottom sheet, same controls
+   │                │                            (both built from Controls.tsx)
    │                ├── Legend.tsx            ── reads store.activeLayer / colorStops
    │                ├── Tooltip.tsx           ── reads store.hovered*
    │                ├── ClickHint.tsx         ── reads store.hintVisible
-   │                ├── InfoModal.tsx         ── local state
+   │                ├── AboutPage.tsx         ── page content from constants/pages.ts
    │                ├── ExportModal.tsx       ── lazy chunk; reads store snapshot
    │                │                            renders synthesized PNG/JPEG via
    │                │                            lib/export/synthesizeMap.ts and
    │                │                            current-view CSV via lib/export/csv.ts
+   │                │   └── SubsetExportPanel.tsx ── custom-dataset CSV builder
    │                └── DetailPanel/
    │                    ├── index.tsx         ── reads store.panelOpen/selectedDetail
-   │                    └── PanelContent.tsx  ── reads store.selectedYear
+   │                    └── PanelContent.tsx  ── reads store.selectedYear/selectedMonth
    │                        ├── StatCard.tsx
+   │                        ├── DqRibbon.tsx
    │                        └── CategoryBreakdown.tsx
    │
    └── MapContainer.tsx      ── owns the maplibregl.Map instance
-                             ── reads store.activeLayer / selectedYear
-                             ── writes store.selectedRegion / hovered*
+                             ── reads store.activeLayer / selectedYear / geoLevel / metric
+                             ── writes store.selectedRegion / hovered* / colorStops
 ```
 
 The shape is intentionally flat:
@@ -178,7 +180,7 @@ type LayerKey =
   | "adjunctive";
 ```
 
-`LayerKey` is the spine of the app. `LAYER_CONFIGS: Record<LayerKey, LayerConfig>` and `LAYER_ORDER: LayerKey[]` both reference it, so adding a new category is a single-line change that the compiler propagates through: the `LayerControl`, `Legend`, `Tooltip`, color derivation, and map paint expressions all update without search-and-replace.
+`LayerKey` is the spine of the app. `LAYER_CONFIGS: Record<LayerKey, LayerConfig>` and `LAYER_ORDER: LayerKey[]` both reference it, so adding a new category is a single-line change that the compiler propagates through: the category picker, `Legend`, `Tooltip`, and CSV export all update without search-and-replace.
 
 ### 4.3 Export pipeline
 
@@ -202,7 +204,7 @@ This is the part most worth reading.
 
 ### 5.1 The three "states" of a feature
 
-Every state polygon and every ZIP3 polygon carries three feature-state fields:
+Every state, county, and ZIP3 polygon carries three feature-state fields:
 
 | Field      | Type    | Source       | Meaning                                                                                                                       |
 | ---------- | ------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------- |
@@ -210,14 +212,15 @@ Every state polygon and every ZIP3 polygon carries three feature-state fields:
 | `hover`    | boolean | Mouse events | Cursor is over this polygon                                                                                                   |
 | `selected` | boolean | Click events | Detail panel is open on this polygon                                                                                          |
 
-The paint expression (`buildColorExpression` in [`src/lib/mapStyles.ts`](../src/lib/mapStyles.ts)) collapses these into a `fill-color`:
+The paint expression (`fillColorExpression` in [`src/lib/mapStyles.ts`](../src/lib/mapStyles.ts)) collapses these into a `fill-color`:
 
 ```
 case
-  feature-state.selected   → HOVER_COLOR
-  feature-state.hover      → HOVER_COLOR
-  default                  → interpolate(linear, value, CHOROPLETH_STOPS)
+  feature-state.hover or feature-state.selected  → HIGHLIGHT_COLOR
+  default                                        → interpolate(linear, value, quantile stops)
 ```
+
+Fill opacity, stroke color, stroke width, and stroke opacity read the same two flags through `interactionExpr` in `MapContainer.tsx`.
 
 ### 5.2 Why `setFeatureState`, not `setData`
 
@@ -225,19 +228,30 @@ The naïve approach to a choropleth is: store the data in GeoJSON properties, an
 
 Instead:
 
-1. Geometry is loaded once, via PMTiles, at map `load`.
-2. `paintAllFeatureStates()` walks the in-memory caches and writes a `value` feature-state for every region.
-3. Year/category changes call `paintAllFeatureStates()` again — **no source upload, no tile re-parse**.
-4. Hover and selection write _different_ feature-state fields on the _single hovered/selected ID_, not the whole set.
+1. Geometry is loaded once at map `load` (GeoJSON for states and counties, PMTiles for ZIP3).
+2. `paintChoropleth()` walks the in-memory caches, writes a `value` feature-state for every region at all three levels, and sets each level's color stops from those same values.
+3. Year/category/metric changes call `paintChoropleth()` again — **no source upload, no tile re-parse**. Switching geography level only swaps which level is visible.
+4. Hover and selection write _different_ feature-state fields on the _single hovered/selected ID_, not the whole set. They never touch a paint property.
 
 The result: the map updates in a single frame on category/year change, and hover has no measurable overhead.
 
-### 5.3 Refs for hover/selection IDs
+### 5.3 One spec table for three levels
+
+State, county, and ZIP3 differ only in data: source file, layer ids, id property, and a few paint values. `GEO_LAYERS` in [`src/constants/map.ts`](../src/constants/map.ts) holds those per level, and `MapContainer.tsx` loops over it. There is one `addGeoLayers`, and one click / mousemove / mouseleave handler that takes the level as its first argument. `dataService.ts` keeps its caches as `Record<GeoLevel, …>` for the same reason, and `getRegionValue(level, id, period, layer, metric)` is the single lookup the map, tooltip, and export all call.
+
+### 5.4 Refs for hover/selection IDs
 
 ```ts
-const hoveredStateRef = useRef<string | null>(null);
-const selectedStateRef = useRef<string | null>(null);
-// ...and the same for zip3
+const hoveredRef = useRef<Record<GeoLevel, string | null>>({
+  state: null,
+  county: null,
+  zip3: null,
+});
+const selectedRef = useRef<Record<GeoLevel, string | null>>({
+  state: null,
+  county: null,
+  zip3: null,
+});
 ```
 
 These look like an escape hatch, but refs are the right tool here. The alternative is putting the IDs in Zustand and reacting to store changes — which would mean:
@@ -246,17 +260,17 @@ These look like an escape hatch, but refs are the right tool here. The alternati
 - Every Zustand write would trigger a render of every subscribed component.
 - Map event handlers re-create in `useCallback` on every ID change, blowing up the effect dependency graph.
 
-Instead, the refs hold the IDs, the handlers write directly to MapLibre's feature-state (which the GPU picks up on the next frame), and the store is only written when the _user-facing_ state changes (hovered region label, tooltip position, detail panel).
+Instead, the refs hold the IDs, the handlers write directly to MapLibre's feature-state (which the GPU picks up on the next frame), and the store is only written when the _user-facing_ state changes (hovered region label, tooltip position, detail panel). Handlers that need current store values read `useMapStore.getState()` rather than closing over render-time props.
 
 ## 6. State management
 
 Zustand was picked over Redux / Context / Jotai because:
 
-- The store has ~10 fields, not 100. A hand-written store with flat setters is legible.
-- Selector hooks avoid the Context-re-render tax. Components that read `activeLayer` don't re-render when `hoveredPoint` changes.
+- The store has ~15 fields, not 100. A hand-written store with flat setters is legible.
+- Selector hooks avoid the Context-re-render tax. Components subscribe through `useMapFields("activeLayer", …)`, so one that reads `activeLayer` doesn't re-render when `hoveredPoint` changes.
 - There's no middleware story to learn (thunks, sagas, RTK query). This app doesn't need one.
 
-The store's single interesting piece of logic is in `setSelectedYear`, which clears `selectedMonth` — so switching from "June 2022" to 2023 lands on "Annual 2023" instead of "June 2023", which most users don't expect to exist.
+The store's single interesting piece of logic is in `setGeoLevel`, which clears the region selection and closes the detail panel, since a selected id from one level doesn't exist at another. Year and month are independent: switching year keeps the picked month (June 2023 → June 2024).
 
 ## 7. Performance
 
@@ -268,8 +282,8 @@ The store's single interesting piece of logic is in `setSelectedYear`, which cle
 | CSS bundle                        | ~9.5 KB gzip      | On first load                                        |
 | `ExportModal` lazy chunk          | ~22 KB gzip       | On first **Export** button click                     |
 | `data/export/states-10m.json`     | 115 KB / 37 KB    | On first **Export** button click (us-atlas TopoJSON) |
-| `states.pmtiles`                  | ~105 KB           | On map `load`                                        |
-| `zip3.pmtiles`                    | ~1 MB             | On map `load`                                        |
+| `states.geojson`                  | 2.3 MB / 0.83 MB  | On map `load`                                        |
+| `zip3.pmtiles`                    | ~1.6 MB           | On map `load`                                        |
 | `counties.geojson`                | 2.7 MB / 0.85 MB  | On map `load` (county source)                        |
 | `…_annual_state.json`             | 0.45 MB / 60 KB   | On map `load`                                        |
 | `…_annual_county.json`            | 10 MB / 1.2 MB    | On map `load`                                        |
@@ -281,7 +295,7 @@ The store's single interesting piece of logic is in `setSelectedYear`, which cle
 | `…_monthly_county.json`           | 99 MB / 10.3 MB   | On first monthly slider interaction                  |
 | `…_monthly_zip3.json`             | 58 MB / 6.3 MB    | On first monthly slider interaction                  |
 
-Bundle budgets live in [`package.json`'s `size-limit` block](../package.json) — initial 300 KB, export chunk 40 KB, CSS 30 KB. CI runs `npm run size` so a regression on any of those fails the build before it merges.
+Bundle budgets live in [`package.json`'s `size-limit` block](../package.json) — initial 380 KB, export chunk 40 KB, CSS 30 KB. CI runs `npm run size` so a regression on any of those fails the build before it merges.
 
 Two elephants now: the deferred **monthly ZIP3 (58 MB)** and the new **monthly
 county (99 MB / 10.3 MB gzip)**, the largest artifact in the project. Both are

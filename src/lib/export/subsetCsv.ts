@@ -78,7 +78,7 @@ function regionName(level: GeoLevel, id: string, countyNames?: Record<string, st
 }
 
 // ACS is annual; monthly rows reuse the endpoint-year enrollment (same
-// convention as getValueForRegionMonthly). Returns null when the geography has
+// convention as getRegionValue in dataService). Returns null when the geography has
 // no enrollment record for that year — callers blank the columns rather than
 // emit a misleading 0.
 function enrolleesFor(
