@@ -15,9 +15,10 @@ export const N_STOPS = CHOROPLETH_COLORS.length; // 7
 
 // Placeholder stops used only for the brief moment a layer exists before data
 // loads; immediately replaced by data-driven stops (see quantileStops).
-export const DEFAULT_STOPS = Array.from({ length: N_STOPS }, (_, i) => i);
+const DEFAULT_STOPS = Array.from({ length: N_STOPS }, (_, i) => i);
 
-export const HOVER_COLOR = "#c8f0ed";
+// Fill for the hovered or selected region.
+const HIGHLIGHT_COLOR = "#c8f0ed";
 
 /**
  * Data-driven color stops. The choropleth re-scales to whatever slice is on
@@ -59,33 +60,27 @@ export function quantileStops(values: number[], metric: Metric): number[] {
     return stops;
 }
 
-/** Linear interpolation `fill-color` expression for an explicit stop array. */
-export function colorExpressionForStops(stops: number[]) {
-    return [
-        "interpolate",
-        ["linear"],
-        ["coalesce", ["feature-state", "value"], 0],
-        ...stops.flatMap((stop, i) => [stop, CHOROPLETH_COLORS[i]]),
-    ];
-}
-
-// Default expression for initial layer creation, before the first data-driven
-// repaint replaces it.
-export const colorExpression = colorExpressionForStops(DEFAULT_STOPS);
-
-export function buildColorExpression(
-    hoveredId: string | null,
-    selectedId: string | null,
-    idProperty: string,
-    stops: number[],
-) {
+/**
+ * `fill-color` for a choropleth layer: the highlight color while the feature's
+ * `hover` or `selected` feature-state is set, otherwise a linear ramp over its
+ * `value` feature-state. Called without stops it yields the placeholder ramp a
+ * layer is created with, before the first data-driven repaint.
+ */
+export function fillColorExpression(stops: number[] = DEFAULT_STOPS) {
     return [
         "case",
-        ["==", ["get", idProperty], hoveredId ?? ""],
-        HOVER_COLOR,
-        ["==", ["get", idProperty], selectedId ?? ""],
-        HOVER_COLOR,
-        colorExpressionForStops(stops),
+        [
+            "any",
+            ["boolean", ["feature-state", "hover"], false],
+            ["boolean", ["feature-state", "selected"], false],
+        ],
+        HIGHLIGHT_COLOR,
+        [
+            "interpolate",
+            ["linear"],
+            ["coalesce", ["feature-state", "value"], 0],
+            ...stops.flatMap((stop, i) => [stop, CHOROPLETH_COLORS[i]]),
+        ],
     ];
 }
 

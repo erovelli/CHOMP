@@ -101,8 +101,6 @@ export default function AboutPage({ page, onClose, onPageChange }: AboutPageProp
                     {content.title}
                 </h1>
 
-                {content.lede && <p className="chomp-about-page__lede">{content.lede}</p>}
-
                 <div className="chomp-about-page__sections">
                     {content.sections.map((section, i) => (
                         <SectionView key={i} section={section} />
@@ -167,14 +165,7 @@ function SectionView({ section }: { section: PageSection }) {
                 {section.heading && <SectionHeading>{section.heading}</SectionHeading>}
                 <ul className="chomp-about-page__list">
                     {section.items.map((item, i) => (
-                        <li
-                            key={i}
-                            className="chomp-about-page__list-item"
-                            style={{
-                                color: item.startsWith("[") ? "var(--ink-dim)" : "var(--ink-mid)",
-                                fontStyle: item.startsWith("[") ? "italic" : "normal",
-                            }}
-                        >
+                        <li key={i} className="chomp-about-page__list-item">
                             <span aria-hidden="true" className="chomp-about-page__list-marker" />
                             <span>{item}</span>
                         </li>

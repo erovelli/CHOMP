@@ -39,11 +39,8 @@ export interface EnrollmentRecord {
 }
 
 export interface LayerConfig {
-    key: LayerKey;
     label: string;
-    description: string;
     unit: string;
-    accent: string;
 }
 
 // total_beneficiaries_served is shipped in the NDJSON for use in side-panel
@@ -65,12 +62,19 @@ export interface MonthlyDataRecord {
     total_amount_paid: number;
 }
 
+/** A claims row at either time grain. */
+export type ClaimsRecord = DataRecord | MonthlyDataRecord;
+
+/** The period a claims row belongs to: "YYYY" for annual, "YYYY-MM" for monthly. */
+export function recordPeriod(record: ClaimsRecord): string {
+    return "year_month" in record ? record.year_month : record.year;
+}
+
 export interface RegionDetail {
     id: string;
     name: string;
     level: GeoLevel;
     records: DataRecord[];
-    monthlyRecords?: MonthlyDataRecord[];
 }
 
 // ── DQ Atlas overlay ─────────────────────────────────────────
@@ -107,7 +111,7 @@ export interface DqStateRecord {
     pct?: number;
 }
 
-export interface DqTopic {
+interface DqTopic {
     label: string;
     description: string;
     metric_label: string;

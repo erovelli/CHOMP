@@ -1,5 +1,12 @@
 import Papa from "papaparse";
-import type { DataRecord, MonthlyDataRecord, GeoLevel, LayerKey } from "../types";
+import {
+    recordPeriod,
+    type ClaimsRecord,
+    type DataRecord,
+    type MonthlyDataRecord,
+    type GeoLevel,
+    type LayerKey,
+} from "../types";
 import { CATEGORY_TO_KEY, LAYER_CONFIGS } from "../../constants/map";
 import { STATE_USPS_TO_NAME } from "../../constants/stateFips";
 
@@ -15,7 +22,7 @@ export const CSV_COLUMNS = [
     "total_amount_paid",
 ] as const;
 
-export type CsvColumn = (typeof CSV_COLUMNS)[number];
+type CsvColumn = (typeof CSV_COLUMNS)[number];
 export type CsvRow = Record<CsvColumn, string | number>;
 
 interface BuildRowsArgs {
@@ -46,13 +53,13 @@ interface RegionTotals {
  * recoverable from this aggregate).
  */
 function totalsForRegion(
-    records: Array<DataRecord | MonthlyDataRecord>,
-    matchesPeriod: (r: DataRecord | MonthlyDataRecord) => boolean,
+    records: ClaimsRecord[],
+    period: string,
     activeLayer: LayerKey,
 ): RegionTotals {
     const totals: RegionTotals = { claims: 0, beneficiaries: 0, amountPaid: 0 };
     for (const r of records) {
-        if (!matchesPeriod(r)) continue;
+        if (recordPeriod(r) !== period) continue;
         if (activeLayer !== "all" && CATEGORY_TO_KEY[r.category] !== activeLayer) continue;
         totals.claims += r.total_claims;
         totals.beneficiaries += r.total_beneficiaries_served;
@@ -81,45 +88,23 @@ export function buildCsvRows({
     const categoryLabel =
         activeLayer === "all" ? "All Categories" : LAYER_CONFIGS[activeLayer].label;
 
+    const data: Record<string, ClaimsRecord[]> = monthlyData ?? annualData ?? {};
     const rows: CsvRow[] = [];
-    if (monthlyData) {
-        const matchesPeriod = (r: DataRecord | MonthlyDataRecord) =>
-            (r as MonthlyDataRecord).year_month === period;
-        for (const [id, records] of Object.entries(monthlyData)) {
-            const totals = totalsForRegion(records, matchesPeriod, activeLayer);
-            if (totals.claims === 0 && totals.beneficiaries === 0 && totals.amountPaid === 0) {
-                continue;
-            }
-            rows.push({
-                region_id: id,
-                region_name: regionName(level, id),
-                level,
-                year: period,
-                category: categoryLabel,
-                total_claims: totals.claims,
-                total_beneficiaries_served: totals.beneficiaries,
-                total_amount_paid: totals.amountPaid,
-            });
+    for (const [id, records] of Object.entries(data)) {
+        const totals = totalsForRegion(records, period, activeLayer);
+        if (totals.claims === 0 && totals.beneficiaries === 0 && totals.amountPaid === 0) {
+            continue;
         }
-    } else if (annualData) {
-        const matchesPeriod = (r: DataRecord | MonthlyDataRecord) =>
-            (r as DataRecord).year === period;
-        for (const [id, records] of Object.entries(annualData)) {
-            const totals = totalsForRegion(records, matchesPeriod, activeLayer);
-            if (totals.claims === 0 && totals.beneficiaries === 0 && totals.amountPaid === 0) {
-                continue;
-            }
-            rows.push({
-                region_id: id,
-                region_name: regionName(level, id),
-                level,
-                year: period,
-                category: categoryLabel,
-                total_claims: totals.claims,
-                total_beneficiaries_served: totals.beneficiaries,
-                total_amount_paid: totals.amountPaid,
-            });
-        }
+        rows.push({
+            region_id: id,
+            region_name: regionName(level, id),
+            level,
+            year: period,
+            category: categoryLabel,
+            total_claims: totals.claims,
+            total_beneficiaries_served: totals.beneficiaries,
+            total_amount_paid: totals.amountPaid,
+        });
     }
     // Sort by region_id so the file is deterministic — diffable across exports.
     rows.sort((a, b) => String(a.region_id).localeCompare(String(b.region_id)));

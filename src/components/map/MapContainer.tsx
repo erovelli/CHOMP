@@ -1,8 +1,8 @@
 import { useEffect, useRef, useCallback } from "react";
 import maplibregl from "maplibre-gl";
 import { Protocol } from "pmtiles";
-import { useMapStore } from "../../lib/store";
-import type { DqTopicKey, DqData } from "../../lib/types";
+import { useMapStore, useMapFields } from "../../lib/store";
+import type { DqTopicKey, DqData, LayerKey, GeoLevel, Metric } from "../../lib/types";
 import {
     DQ_RING_HALO_LAYER,
     DQ_RING_WIDTH,
@@ -15,29 +15,23 @@ import {
     DQ_TIER_STACK_ORDER,
     dqTierLayerId,
 } from "../../constants/dq";
-import { loadDqAtlas } from "../../lib/dataService";
 import {
     fetchProtomapsStyle,
     minimizeProtomapsStyle,
     PROTOMAPS_FIRST_LABEL_LAYER,
-    buildColorExpression,
-    colorExpression,
+    fillColorExpression,
     quantileStops,
 } from "../../lib/mapStyles";
-import type { LayerKey, GeoLevel, Metric, RegionDetail } from "../../lib/types";
 import {
     loadAnnualData,
     loadMonthlyData,
-    getStateAnnualData,
-    getCountyAnnualData,
-    getZip3AnnualData,
+    loadDqAtlas,
+    dqHasYear,
     getAnnualDataForLevel,
     getMonthlyDataForLevel,
-    getValueForRegion,
-    getValueForRegionMonthly,
-    getEnrolleesFor,
+    getRegionValue,
+    isMonthlyPeriod,
 } from "../../lib/dataService";
-import type { DataRecord, MonthlyDataRecord } from "../../lib/types";
 import { MOBILE_MEDIA_QUERY, COARSE_POINTER_QUERY } from "../../constants/layout";
 import {
     MAP_CENTER,
@@ -45,21 +39,8 @@ import {
     MAP_MIN_ZOOM,
     MAP_MAX_ZOOM,
     CONUS_BOUNDS,
-    STATES_SOURCE,
-    STATES_FILL,
-    STATES_STROKE,
-    STATES_ID_PROP,
-    STATES_GEOJSON,
-    ZIP3_SOURCE,
-    ZIP3_FILL,
-    ZIP3_STROKE,
-    ZIP3_LAYER,
-    ZIP3_ID_PROP,
-    COUNTY_SOURCE,
-    COUNTY_FILL,
-    COUNTY_STROKE,
-    COUNTY_ID_PROP,
-    COUNTY_GEOJSON,
+    GEO_LAYERS,
+    GEO_LEVEL_KEYS,
     WORLD_SOURCE,
     WORLD_FILL,
     WORLD_STROKE,
@@ -71,32 +52,42 @@ import {
     WORLD_LINE_OPACITY,
     FALLBACK_BG_COLOR,
     STROKE_COLOR_ACTIVE,
-    STROKE_COLOR_DEFAULT_STATES,
-    STROKE_COLOR_DEFAULT_ZIP3,
-    STROKE_COLOR_DEFAULT_COUNTY,
-    STATES_FILL_OPACITY,
-    ZIP3_FILL_OPACITY,
-    COUNTY_FILL_OPACITY,
-    STATES_LINE_WIDTH,
-    ZIP3_LINE_WIDTH,
-    COUNTY_LINE_WIDTH,
-    STATES_LINE_OPACITY,
-    ZIP3_LINE_OPACITY,
-    COUNTY_LINE_OPACITY,
     OSM_ATTRIBUTION,
 } from "../../constants/map";
 
-// Per-level lookups for the dynamic-color logic.
-const LEVEL_FILL: Record<GeoLevel, string> = {
-    state: STATES_FILL,
-    county: COUNTY_FILL,
-    zip3: ZIP3_FILL,
+type LayerMouseEvent = maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] };
+type RegionIds = Record<GeoLevel, string | null>;
+
+const STATE_SOURCE = GEO_LAYERS.state.source;
+const STATE_STROKE = GEO_LAYERS.state.stroke;
+
+// How a feature is named in the hover tooltip and in the detail panel title.
+// `name` is the feature's own `name` property, when the geometry carries one.
+const REGION_LABELS: Record<
+    GeoLevel,
+    {
+        tooltip: (id: string, name?: string) => string;
+        detail: (id: string, name?: string) => string;
+    }
+> = {
+    state: { tooltip: (id) => id, detail: (id, name) => name || id },
+    county: {
+        tooltip: (id, name) => name || `County ${id}`,
+        detail: (id, name) => name || `County ${id}`,
+    },
+    zip3: { tooltip: (id) => `ZIP3 ${id}`, detail: (id) => `ZIP3 ${id}` },
 };
-const LEVEL_ID_PROP: Record<GeoLevel, string> = {
-    state: STATES_ID_PROP,
-    county: COUNTY_ID_PROP,
-    zip3: ZIP3_ID_PROP,
-};
+
+/** Feature-state target for a region; vector-tile sources also need the layer name. */
+function featureRef(level: GeoLevel, id: string): maplibregl.FeatureIdentifier {
+    const { source, sourceLayer } = GEO_LAYERS[level];
+    return sourceLayer ? { source, sourceLayer, id } : { source, id };
+}
+
+/** Claims cache for a level at the time grain `period` implies. */
+function dataForPeriod(level: GeoLevel, period: string) {
+    return isMonthlyPeriod(period) ? getMonthlyDataForLevel(level) : getAnnualDataForLevel(level);
+}
 
 // ── Layer helpers ────────────────────────────────────────────
 
@@ -141,72 +132,94 @@ function addWorldLayer(map: maplibregl.Map) {
     }
 }
 
-// `beforeId` (when supplied) pins data fills below the basemap's remaining
-// label layers, so water-body/city labels can float above the choropleth for
-// orientation instead of being buried by an opaque fill.
-function addStatesLayers(map: maplibregl.Map, beforeId?: string) {
+// ── Paint expressions keyed on feature-state ─────────────────
+
+/** `case` over the selected / hover feature-state flags. Omit `hover` for
+ * properties that don't react to it. */
+function interactionExpr<T extends string | number>(v: {
+    selected: T;
+    hover?: T;
+    default: T;
+}): maplibregl.ExpressionSpecification {
+    const expr: unknown[] = ["case", ["boolean", ["feature-state", "selected"], false], v.selected];
+    if (v.hover !== undefined) {
+        expr.push(["boolean", ["feature-state", "hover"], false], v.hover);
+    }
+    expr.push(v.default);
+    return expr as maplibregl.ExpressionSpecification;
+}
+
+/**
+ * The same `case` shape as interactionExpr with one value on every branch.
+ * setActiveGeoLayer uses it for hidden and context levels instead of a bare
+ * constant: MapLibre builds a layer's paint buffers for the kind of value a
+ * property had at the time (expression or constant), and a feature-state
+ * write that lands after the kind has flipped, but before the tiles reload,
+ * throws "this.expression.evaluate is not a function" from updatePaintArrays.
+ * Clearing a selection on a level switch is exactly that sequence.
+ */
+function flatExpr<T extends string | number>(value: T) {
+    return interactionExpr({ selected: value, hover: value, default: value });
+}
+
+function strokeColorExpr(level: GeoLevel) {
+    return interactionExpr({
+        selected: STROKE_COLOR_ACTIVE,
+        hover: STROKE_COLOR_ACTIVE,
+        default: GEO_LAYERS[level].strokeColor,
+    });
+}
+
+// Source + fill + stroke for one geography level. `beforeId` (when supplied)
+// pins data fills below the basemap's remaining label layers, so water-body /
+// city labels can float above the choropleth for orientation instead of being
+// buried by an opaque fill.
+function addGeoLayers(map: maplibregl.Map, level: GeoLevel, beforeId?: string) {
     const BASE = import.meta.env.BASE_URL;
+    const spec = GEO_LAYERS[level];
     const insertBefore = beforeId && map.getLayer(beforeId) ? beforeId : undefined;
+    const sourceLayer = spec.sourceLayer ? { "source-layer": spec.sourceLayer } : {};
 
-    if (!map.getSource(STATES_SOURCE)) {
-        map.addSource(STATES_SOURCE, {
-            type: "geojson",
-            data: `${BASE}${STATES_GEOJSON}`,
-            promoteId: STATES_ID_PROP,
-        });
+    if (!map.getSource(spec.source)) {
+        map.addSource(
+            spec.source,
+            spec.sourceLayer
+                ? {
+                      type: "vector",
+                      url: `pmtiles://${BASE}${spec.file}`,
+                      promoteId: { [spec.sourceLayer]: spec.idProp },
+                  }
+                : { type: "geojson", data: `${BASE}${spec.file}`, promoteId: spec.idProp },
+        );
     }
 
-    if (!map.getLayer(STATES_FILL)) {
+    if (!map.getLayer(spec.fill)) {
         map.addLayer(
             {
-                id: STATES_FILL,
+                id: spec.fill,
                 type: "fill",
-                source: STATES_SOURCE,
+                source: spec.source,
+                ...sourceLayer,
                 paint: {
-                    "fill-color": colorExpression as maplibregl.ExpressionSpecification,
-                    "fill-opacity": [
-                        "case",
-                        ["boolean", ["feature-state", "selected"], false],
-                        STATES_FILL_OPACITY.selected,
-                        ["boolean", ["feature-state", "hover"], false],
-                        STATES_FILL_OPACITY.hover,
-                        STATES_FILL_OPACITY.default,
-                    ],
+                    "fill-color": fillColorExpression() as maplibregl.ExpressionSpecification,
+                    "fill-opacity": interactionExpr(spec.fillOpacity),
                 },
             },
             insertBefore,
         );
     }
 
-    if (!map.getLayer(STATES_STROKE)) {
+    if (!map.getLayer(spec.stroke)) {
         map.addLayer(
             {
-                id: STATES_STROKE,
+                id: spec.stroke,
                 type: "line",
-                source: STATES_SOURCE,
+                source: spec.source,
+                ...sourceLayer,
                 paint: {
-                    "line-color": [
-                        "case",
-                        ["boolean", ["feature-state", "selected"], false],
-                        STROKE_COLOR_ACTIVE,
-                        ["boolean", ["feature-state", "hover"], false],
-                        STROKE_COLOR_ACTIVE,
-                        STROKE_COLOR_DEFAULT_STATES,
-                    ],
-                    "line-width": [
-                        "case",
-                        ["boolean", ["feature-state", "selected"], false],
-                        STATES_LINE_WIDTH.selected,
-                        ["boolean", ["feature-state", "hover"], false],
-                        STATES_LINE_WIDTH.hover,
-                        STATES_LINE_WIDTH.default,
-                    ],
-                    "line-opacity": [
-                        "case",
-                        ["boolean", ["feature-state", "selected"], false],
-                        STATES_LINE_OPACITY.selected,
-                        STATES_LINE_OPACITY.default,
-                    ],
+                    "line-color": strokeColorExpr(level),
+                    "line-width": interactionExpr(spec.lineWidth),
+                    "line-opacity": interactionExpr(spec.lineOpacity),
                 },
             },
             insertBefore,
@@ -214,260 +227,32 @@ function addStatesLayers(map: maplibregl.Map, beforeId?: string) {
     }
 }
 
-function addCountyLayers(map: maplibregl.Map, beforeId?: string) {
-    const BASE = import.meta.env.BASE_URL;
-    const insertBefore = beforeId && map.getLayer(beforeId) ? beforeId : undefined;
-
-    if (!map.getSource(COUNTY_SOURCE)) {
-        map.addSource(COUNTY_SOURCE, {
-            type: "geojson",
-            data: `${BASE}${COUNTY_GEOJSON}`,
-            promoteId: COUNTY_ID_PROP,
-        });
-    }
-
-    if (!map.getLayer(COUNTY_FILL)) {
-        map.addLayer(
-            {
-                id: COUNTY_FILL,
-                type: "fill",
-                source: COUNTY_SOURCE,
-                paint: {
-                    "fill-color": colorExpression as maplibregl.ExpressionSpecification,
-                    "fill-opacity": [
-                        "case",
-                        ["boolean", ["feature-state", "selected"], false],
-                        COUNTY_FILL_OPACITY.selected,
-                        ["boolean", ["feature-state", "hover"], false],
-                        COUNTY_FILL_OPACITY.hover,
-                        COUNTY_FILL_OPACITY.default,
-                    ],
-                },
-            },
-            insertBefore,
-        );
-    }
-
-    if (!map.getLayer(COUNTY_STROKE)) {
-        map.addLayer(
-            {
-                id: COUNTY_STROKE,
-                type: "line",
-                source: COUNTY_SOURCE,
-                paint: {
-                    "line-color": [
-                        "case",
-                        ["boolean", ["feature-state", "selected"], false],
-                        STROKE_COLOR_ACTIVE,
-                        ["boolean", ["feature-state", "hover"], false],
-                        STROKE_COLOR_ACTIVE,
-                        STROKE_COLOR_DEFAULT_COUNTY,
-                    ],
-                    "line-width": [
-                        "case",
-                        ["boolean", ["feature-state", "selected"], false],
-                        COUNTY_LINE_WIDTH.selected,
-                        ["boolean", ["feature-state", "hover"], false],
-                        COUNTY_LINE_WIDTH.hover,
-                        COUNTY_LINE_WIDTH.default,
-                    ],
-                    "line-opacity": [
-                        "case",
-                        ["boolean", ["feature-state", "selected"], false],
-                        COUNTY_LINE_OPACITY.selected,
-                        COUNTY_LINE_OPACITY.default,
-                    ],
-                },
-            },
-            insertBefore,
-        );
-    }
-}
-
-function addZip3Layers(map: maplibregl.Map, beforeId?: string) {
-    const BASE = import.meta.env.BASE_URL;
-    const insertBefore = beforeId && map.getLayer(beforeId) ? beforeId : undefined;
-
-    if (!map.getSource(ZIP3_SOURCE)) {
-        map.addSource(ZIP3_SOURCE, {
-            type: "vector",
-            url: `pmtiles://${BASE}zip3.pmtiles`,
-            promoteId: { [ZIP3_LAYER]: ZIP3_ID_PROP },
-        });
-    }
-
-    if (!map.getLayer(ZIP3_FILL)) {
-        map.addLayer(
-            {
-                id: ZIP3_FILL,
-                type: "fill",
-                source: ZIP3_SOURCE,
-                "source-layer": ZIP3_LAYER,
-                paint: {
-                    "fill-color": colorExpression as maplibregl.ExpressionSpecification,
-                    "fill-opacity": [
-                        "case",
-                        ["boolean", ["feature-state", "selected"], false],
-                        ZIP3_FILL_OPACITY.selected,
-                        ["boolean", ["feature-state", "hover"], false],
-                        ZIP3_FILL_OPACITY.hover,
-                        ZIP3_FILL_OPACITY.default,
-                    ],
-                },
-            },
-            insertBefore,
-        );
-    }
-
-    if (!map.getLayer(ZIP3_STROKE)) {
-        map.addLayer(
-            {
-                id: ZIP3_STROKE,
-                type: "line",
-                source: ZIP3_SOURCE,
-                "source-layer": ZIP3_LAYER,
-                paint: {
-                    "line-color": [
-                        "case",
-                        ["boolean", ["feature-state", "selected"], false],
-                        STROKE_COLOR_ACTIVE,
-                        ["boolean", ["feature-state", "hover"], false],
-                        STROKE_COLOR_ACTIVE,
-                        STROKE_COLOR_DEFAULT_ZIP3,
-                    ],
-                    "line-width": [
-                        "case",
-                        ["boolean", ["feature-state", "selected"], false],
-                        ZIP3_LINE_WIDTH.selected,
-                        ["boolean", ["feature-state", "hover"], false],
-                        ZIP3_LINE_WIDTH.hover,
-                        ZIP3_LINE_WIDTH.default,
-                    ],
-                    "line-opacity": [
-                        "case",
-                        ["boolean", ["feature-state", "selected"], false],
-                        ZIP3_LINE_OPACITY.selected,
-                        ZIP3_LINE_OPACITY.default,
-                    ],
-                },
-            },
-            insertBefore,
-        );
-    }
-}
-
-// Non-active geography levels are fully hidden — only the level the user
-// selected is rendered.
-const DIMMED_FILL_OPACITY = 0;
-const DIMMED_LINE_OPACITY = 0;
-const DIMMED_LINE_WIDTH = 0;
-
-// Exception: when the user is on County or ZIP3, faint state borders stay
-// visible as spatial context (no fill, just the outline). This is one-way —
-// the State view does NOT show county/zip3 outlines underneath. Values mirror
-// STATES_LINE_OPACITY.default / STATES_LINE_WIDTH.default so the at-rest
-// border looks identical whether the user is on State, County, or ZIP3.
-const CONTEXT_STATE_LINE_OPACITY = STATES_LINE_OPACITY.default;
-const CONTEXT_STATE_LINE_WIDTH = STATES_LINE_WIDTH.default;
-
-// State stroke line-color case expression — extracted so we can restore it
-// when state becomes active again after a context-mode override.
-function activeStateLineColorExpr() {
-    return [
-        "case",
-        ["boolean", ["feature-state", "selected"], false],
-        STROKE_COLOR_ACTIVE,
-        ["boolean", ["feature-state", "hover"], false],
-        STROKE_COLOR_ACTIVE,
-        STROKE_COLOR_DEFAULT_STATES,
-    ];
-}
-
-const LEVEL_STROKE: Record<GeoLevel, string> = {
-    state: STATES_STROKE,
-    county: COUNTY_STROKE,
-    zip3: ZIP3_STROKE,
-};
-
-function activeFillOpacityExpr(opa: { selected: number; hover: number; default: number }) {
-    return [
-        "case",
-        ["boolean", ["feature-state", "selected"], false],
-        opa.selected,
-        ["boolean", ["feature-state", "hover"], false],
-        opa.hover,
-        opa.default,
-    ];
-}
-
-function activeLineOpacityExpr(opa: { selected: number; default: number }) {
-    return ["case", ["boolean", ["feature-state", "selected"], false], opa.selected, opa.default];
-}
-
-function activeLineWidthExpr(w: { selected: number; hover: number; default: number }) {
-    return [
-        "case",
-        ["boolean", ["feature-state", "selected"], false],
-        w.selected,
-        ["boolean", ["feature-state", "hover"], false],
-        w.hover,
-        w.default,
-    ];
-}
-
-const FILL_OPA_BY_LEVEL = {
-    state: STATES_FILL_OPACITY,
-    county: COUNTY_FILL_OPACITY,
-    zip3: ZIP3_FILL_OPACITY,
-} as const;
-const LINE_OPA_BY_LEVEL = {
-    state: STATES_LINE_OPACITY,
-    county: COUNTY_LINE_OPACITY,
-    zip3: ZIP3_LINE_OPACITY,
-} as const;
-const LINE_W_BY_LEVEL = {
-    state: STATES_LINE_WIDTH,
-    county: COUNTY_LINE_WIDTH,
-    zip3: ZIP3_LINE_WIDTH,
-} as const;
-
-// Promote the chosen level to interactive opacities; hide everything else,
-// except keep faint state borders as spatial context when the user is on
-// County or ZIP3.
-function setActiveGeoLayer(map: maplibregl.Map, level: GeoLevel) {
-    const levels: GeoLevel[] = ["state", "county", "zip3"];
-    for (const lvl of levels) {
-        const fill = LEVEL_FILL[lvl];
-        const stroke = LEVEL_STROKE[lvl];
-        if (!map.getLayer(fill) || !map.getLayer(stroke)) continue;
-        if (lvl === level) {
-            map.setPaintProperty(
-                fill,
-                "fill-opacity",
-                activeFillOpacityExpr(FILL_OPA_BY_LEVEL[lvl]),
-            );
-            map.setPaintProperty(
-                stroke,
-                "line-opacity",
-                activeLineOpacityExpr(LINE_OPA_BY_LEVEL[lvl]),
-            );
-            map.setPaintProperty(stroke, "line-width", activeLineWidthExpr(LINE_W_BY_LEVEL[lvl]));
-            if (lvl === "state") {
-                // Restore the case-expression line-color in case we came back
-                // from context mode (which pinned it to the default constant).
-                map.setPaintProperty(stroke, "line-color", activeStateLineColorExpr());
+// Promote the chosen level to interactive paint and hide the others. The one
+// exception: on County or ZIP3 the state outline stays visible as spatial
+// context (no fill), looking the same as an at-rest border in State view.
+// This is one-way; State view does not show county/zip3 outlines underneath.
+function setActiveGeoLayer(map: maplibregl.Map, active: GeoLevel) {
+    for (const level of GEO_LEVEL_KEYS) {
+        const spec = GEO_LAYERS[level];
+        if (!map.getLayer(spec.fill) || !map.getLayer(spec.stroke)) continue;
+        if (level === active) {
+            map.setPaintProperty(spec.fill, "fill-opacity", interactionExpr(spec.fillOpacity));
+            map.setPaintProperty(spec.stroke, "line-opacity", interactionExpr(spec.lineOpacity));
+            map.setPaintProperty(spec.stroke, "line-width", interactionExpr(spec.lineWidth));
+            if (level === "state") {
+                // Restore the interactive line-color in case we came back
+                // from context mode (which pinned it to the default color).
+                map.setPaintProperty(spec.stroke, "line-color", strokeColorExpr(level));
             }
-        } else if (lvl === "state") {
-            // Context mode: no fill; outline matches State view's at-rest look
-            // (same opacity, width, and greenish-grey default color).
-            map.setPaintProperty(fill, "fill-opacity", 0);
-            map.setPaintProperty(stroke, "line-opacity", CONTEXT_STATE_LINE_OPACITY);
-            map.setPaintProperty(stroke, "line-width", CONTEXT_STATE_LINE_WIDTH);
-            map.setPaintProperty(stroke, "line-color", STROKE_COLOR_DEFAULT_STATES);
+        } else if (level === "state") {
+            map.setPaintProperty(spec.fill, "fill-opacity", flatExpr(0));
+            map.setPaintProperty(spec.stroke, "line-opacity", flatExpr(spec.lineOpacity.default));
+            map.setPaintProperty(spec.stroke, "line-width", flatExpr(spec.lineWidth.default));
+            map.setPaintProperty(spec.stroke, "line-color", flatExpr(spec.strokeColor));
         } else {
-            map.setPaintProperty(fill, "fill-opacity", DIMMED_FILL_OPACITY);
-            map.setPaintProperty(stroke, "line-opacity", DIMMED_LINE_OPACITY);
-            map.setPaintProperty(stroke, "line-width", DIMMED_LINE_WIDTH);
+            map.setPaintProperty(spec.fill, "fill-opacity", flatExpr(0));
+            map.setPaintProperty(spec.stroke, "line-opacity", flatExpr(0));
+            map.setPaintProperty(spec.stroke, "line-width", flatExpr(0));
         }
     }
     // Make sure the state stroke sits ABOVE the active level's fill so the
@@ -475,75 +260,76 @@ function setActiveGeoLayer(map: maplibregl.Map, level: GeoLevel) {
     // are added world→state→county→zip3, so without this the state stroke is
     // buried beneath county fills and only shows through over water/no-fill
     // areas — which is what produced the bold-on-lakes / faint-inland mismatch.)
-    if (map.getLayer(STATES_STROKE)) {
-        map.moveLayer(STATES_STROKE);
+    if (map.getLayer(STATE_STROKE)) {
+        map.moveLayer(STATE_STROKE);
     }
 }
 
-// ── Paint per-region values into feature-state (all three levels) ────
+// ── Choropleth paint (all three levels) ──────────────────────
 
+type StopsByLevel = Record<GeoLevel, number[]>;
+
+// Write every region's value into feature-state, derive the color stops from
+// those same values, and set each level's fill-color ramp. Returns the stops
+// so the caller can hand the visible level's scale to the Legend.
+//
 // `period` is either a 4-digit year ("2023") for the annual view, or a
-// "YYYY-MM" string ("2023-06") for the monthly view. `monthly` decides which
-// cache + value function to use.
-function paintValues(
+// "YYYY-MM" string ("2023-06") for the monthly view.
+//
+// Scale rule:
+// - Volume (claims count): per-level quantile stops. Magnitudes differ by
+//   10–100× across state → county → ZIP3, so a shared scale would wash the
+//   smaller-grain levels into the light end of the palette.
+// - Per-enrollee rate: SHARED stops across all three levels, computed on
+//   the union of values. A rate is unit-free — "1.32 claims / enrollee"
+//   means the same thing at every level, so color should mean the same
+//   thing too.
+function paintChoropleth(
     map: maplibregl.Map,
     period: string,
     activeLayer: LayerKey,
     metric: Metric,
-    monthly: boolean,
-) {
-    const stateData = monthly ? getMonthlyDataForLevel("state") : getStateAnnualData();
-    const countyData = monthly ? getMonthlyDataForLevel("county") : getCountyAnnualData();
-    const zip3Data = monthly ? getMonthlyDataForLevel("zip3") : getZip3AnnualData();
+): StopsByLevel {
+    const valuesByLevel = {} as Record<GeoLevel, number[]>;
+    for (const level of GEO_LEVEL_KEYS) {
+        const values: number[] = [];
+        for (const id of Object.keys(dataForPeriod(level, period))) {
+            const value = getRegionValue(level, id, period, activeLayer, metric);
+            values.push(value);
+            // The per-enrollee metric is NaN when ACS has no record for the
+            // geography (e.g. territories, PO-box ZIPs — see L26/L37).
+            // MapLibre's `interpolate` doesn't handle NaN, so coerce to 0 at
+            // the GPU boundary; quantileStops already drops non-positive
+            // values, so a coerced 0 paints as the lightest band rather than
+            // skewing the scale. getRegionValue itself still returns NaN so
+            // the tooltip can tell "no data" from a true zero.
+            map.setFeatureState(featureRef(level, id), {
+                value: Number.isFinite(value) ? value : 0,
+            });
+        }
+        valuesByLevel[level] = values;
+    }
 
-    // ACS denominator is annual; for monthly mode the period is "YYYY-MM" — use
-    // the year prefix as the ACS endpoint-year lookup key.
-    const enrollmentYear = monthly ? period.slice(0, 4) : period;
-    const needsEnroll = metric === "enrollees";
-    const valueOf = (
-        level: GeoLevel,
-        id: string,
-        records: DataRecord[] | MonthlyDataRecord[],
-    ): number => {
-        const enrollees = needsEnroll ? getEnrolleesFor(level, id, enrollmentYear) : null;
-        return monthly
-            ? getValueForRegionMonthly(
-                  records as MonthlyDataRecord[],
-                  period,
-                  activeLayer,
-                  metric,
-                  enrollees,
-              )
-            : getValueForRegion(records as DataRecord[], period, activeLayer, metric, enrollees);
-    };
+    const sharedStops =
+        metric === "enrollees" ? quantileStops(Object.values(valuesByLevel).flat(), metric) : null;
 
-    // valueOf can return NaN for the per-enrollee metric when ACS has no
-    // record for the geography (e.g. territories, PO-box ZIPs — see L26/L37).
-    // MapLibre's `interpolate` paint expression doesn't handle NaN gracefully,
-    // so we coerce to 0 at the GPU boundary; the rate-metric's quantileStops
-    // already filters non-positive values out of the scale, so a coerced 0
-    // paints as the lightest band rather than skewing the quantiles. The
-    // value functions themselves still return NaN so tooltip/panel code can
-    // distinguish "no data" from "true zero".
-    const safe = (v: number): number => (Number.isFinite(v) ? v : 0);
-    for (const [id, records] of Object.entries(stateData)) {
-        map.setFeatureState(
-            { source: STATES_SOURCE, id },
-            { value: safe(valueOf("state", id, records)) },
-        );
+    const stopsByLevel = {} as StopsByLevel;
+    for (const level of GEO_LEVEL_KEYS) {
+        const stops = sharedStops ?? quantileStops(valuesByLevel[level], metric);
+        stopsByLevel[level] = stops;
+        map.setPaintProperty(GEO_LAYERS[level].fill, "fill-color", fillColorExpression(stops));
     }
-    for (const [id, records] of Object.entries(countyData)) {
-        map.setFeatureState(
-            { source: COUNTY_SOURCE, id },
-            { value: safe(valueOf("county", id, records)) },
-        );
-    }
-    for (const [id, records] of Object.entries(zip3Data)) {
-        map.setFeatureState(
-            { source: ZIP3_SOURCE, sourceLayer: ZIP3_LAYER, id },
-            { value: safe(valueOf("zip3", id, records)) },
-        );
-    }
+    return stopsByLevel;
+}
+
+// The period the choropleth shows: "YYYY-MM" once the user has picked a month
+// AND the monthly data has loaded; the bare year until then, so the map never
+// goes blank while we wait on a ~16 MB gzipped fetch.
+function currentPeriod(): string {
+    const { selectedYear, selectedMonth, monthlyDataLoaded } = useMapStore.getState();
+    return selectedMonth !== null && monthlyDataLoaded
+        ? `${selectedYear}-${selectedMonth.padStart(2, "0")}`
+        : selectedYear;
 }
 
 // ── DQ Atlas overlay ────────────────────────────────────────
@@ -563,7 +349,7 @@ function addDqRingLayers(map: maplibregl.Map) {
         map.addLayer({
             id: DQ_RING_HALO_LAYER,
             type: "line",
-            source: STATES_SOURCE,
+            source: STATE_SOURCE,
             layout: { visibility: "none" },
             paint: {
                 "line-color": [
@@ -584,7 +370,7 @@ function addDqRingLayers(map: maplibregl.Map) {
         map.addLayer({
             id,
             type: "line",
-            source: STATES_SOURCE,
+            source: STATE_SOURCE,
             layout: { visibility: "none" },
             paint: {
                 "line-color": color,
@@ -625,10 +411,8 @@ function setDqVisibility(map: maplibregl.Map, visible: boolean) {
     }
 }
 
-// Iterate the (topic, year) bucket and write the resolved swatch color into
-// each state's feature-state. States absent from the bucket keep the previous
-// paint until this or the next paint pass clears them — call clearDqRings
-// first when switching topic/year to avoid stale colors leaking through.
+// Write the (topic, year) bucket's swatch colors into each state's
+// feature-state, clearing every known state first.
 function paintDqRings(
     map: maplibregl.Map,
     data: DqData,
@@ -640,12 +424,12 @@ function paintDqRings(
     // Clear every known state first so states missing from this year's bucket
     // don't keep their previous color from a prior (topic, year) pass.
     for (const id of knownStates) {
-        map.setFeatureState({ source: STATES_SOURCE, id }, { dqColor: "" });
+        map.setFeatureState({ source: STATE_SOURCE, id }, { dqColor: "" });
     }
     for (const [postal, rec] of Object.entries(yearBucket)) {
         const color = DQ_ASSESSMENT_COLORS[rec.assessment];
         if (color) {
-            map.setFeatureState({ source: STATES_SOURCE, id: postal }, { dqColor: color });
+            map.setFeatureState({ source: STATE_SOURCE, id: postal }, { dqColor: color });
         }
     }
 }
@@ -655,12 +439,10 @@ function paintDqRings(
 export default function MapContainer() {
     const mapContainer = useRef<HTMLDivElement>(null);
     const map = useRef<maplibregl.Map | null>(null);
-    const hoveredStateRef = useRef<string | null>(null);
-    const hoveredCountyRef = useRef<string | null>(null);
-    const hoveredZip3Ref = useRef<string | null>(null);
-    const selectedStateRef = useRef<string | null>(null);
-    const selectedCountyRef = useRef<string | null>(null);
-    const selectedZip3Ref = useRef<string | null>(null);
+    // Hovered / selected region id per level. Refs rather than state: the
+    // handlers run on every mouse move and write straight to feature-state.
+    const hoveredRef = useRef<RegionIds>({ state: null, county: null, zip3: null });
+    const selectedRef = useRef<RegionIds>({ state: null, county: null, zip3: null });
 
     const {
         activeLayer,
@@ -679,173 +461,61 @@ export default function MapContainer() {
         dqOverlayVisible,
         dqData,
         setDqData,
-    } = useMapStore();
+    } = useMapFields(
+        "activeLayer",
+        "selectedYear",
+        "selectedMonth",
+        "selectedRegion",
+        "geoLevel",
+        "metric",
+        "monthlyDataLoaded",
+        "setMonthlyDataLoaded",
+        "setSelectedRegion",
+        "setHovered",
+        "setColorStops",
+        "dismissHint",
+        "dqTopic",
+        "dqOverlayVisible",
+        "dqData",
+        "setDqData",
+    );
     // Set of state ids that have DQ feature-state set. Used to clear stale
     // colors when topic/year changes so a state present last pass but missing
     // this pass doesn't keep its old ring color.
     const dqKnownStatesRef = useRef<Set<string>>(new Set());
-    const activeLayerRef = useRef<LayerKey>(activeLayer);
-    const selectedYearRef = useRef<string>(selectedYear);
-    const selectedMonthRef = useRef<string | null>(selectedMonth);
-    const metricRef = useRef<Metric>(metric);
-    const geoLevelRef = useRef<GeoLevel>(geoLevel);
-    const monthlyLoadedRef = useRef<boolean>(monthlyDataLoaded);
-    // Current data-driven color stops, shared with hover/select handlers.
-    const stopsRef = useRef<number[]>([]);
+    // Color stops from the last repaint, kept per level so a geography switch
+    // can hand the Legend its scale without recomputing every value.
+    const stopsRef = useRef<StopsByLevel | null>(null);
     // True once the load handler has added our layers, loaded annual data, and
     // done the first paint. The repaint effects gate on this rather than
     // map.isStyleLoaded(): isStyleLoaded() goes false during transient tile /
     // glyph fetches (e.g. right after a year change), and an effect that bails
     // then never re-runs — leaving the map painted for a stale metric/level.
-    // Before this flips, the effects only update refs and the load handler's
-    // first paint picks them up.
+    // The load handler's first paint reads the store directly, so anything
+    // the user changed before this flips is picked up there.
     const mapReadyRef = useRef(false);
 
-    // The map paints monthly values only once the monthly data has actually
-    // loaded; until then it stays on the annual view (so the choropleth never
-    // goes blank while we wait on a ~16 MB gzipped fetch). These helpers all
-    // read from refs, so empty deps keep them referentially stable across
-    // renders (the handler useCallbacks below depend on them).
-    const isMonthlyMode = useCallback((): boolean => {
-        return selectedMonthRef.current !== null && monthlyLoadedRef.current;
-    }, []);
-    const currentPeriod = useCallback((): string => {
-        const m = selectedMonthRef.current;
-        if (m !== null && monthlyLoadedRef.current) {
-            return `${selectedYearRef.current}-${m.padStart(2, "0")}`;
-        }
-        return selectedYearRef.current;
-    }, []);
-    const hoveredValueForLevel = useCallback(
-        (level: GeoLevel, id: string): number => {
-            const monthly = isMonthlyMode();
-            const data = monthly ? getMonthlyDataForLevel(level) : getAnnualDataForLevel(level);
-            const records = data[id];
-            if (!records) return 0;
-            const period = currentPeriod();
-            const enrollees =
-                metricRef.current === "enrollees"
-                    ? getEnrolleesFor(level, id, monthly ? period.slice(0, 4) : period)
-                    : null;
-            return monthly
-                ? getValueForRegionMonthly(
-                      records as MonthlyDataRecord[],
-                      period,
-                      activeLayerRef.current,
-                      metricRef.current,
-                      enrollees,
-                  )
-                : getValueForRegion(
-                      records as DataRecord[],
-                      period,
-                      activeLayerRef.current,
-                      metricRef.current,
-                      enrollees,
-                  );
-        },
-        [isMonthlyMode, currentPeriod],
-    );
-
-    const hoveredRefFor = (lvl: GeoLevel) =>
-        lvl === "state" ? hoveredStateRef : lvl === "county" ? hoveredCountyRef : hoveredZip3Ref;
-    const selectedRefFor = (lvl: GeoLevel) =>
-        lvl === "state" ? selectedStateRef : lvl === "county" ? selectedCountyRef : selectedZip3Ref;
-
-    // Recompute the dynamic color scale and re-apply fill-color per level.
-    //
-    // Scale rule:
-    // - Volume (claims count): per-level quantile stops. Magnitudes differ by
-    //   10–100× across state → county → ZIP3, so a shared scale would wash the
-    //   smaller-grain levels into the light end of the palette.
-    // - Per-enrollee rate: SHARED stops across all three levels, computed on
-    //   the union of values. A rate is unit-free — "1.32 claims / enrollee"
-    //   means the same thing at every level, so color should mean the same
-    //   thing too. The shared scale is also what the Legend reads.
-    const applyActiveColors = useCallback(() => {
+    // Repaint values and rescale every level from the current store state.
+    // Reads the store imperatively so it stays referentially stable for the
+    // load handler and the effects that call it.
+    const repaint = useCallback(() => {
         if (!map.current) return;
-        const active = geoLevelRef.current;
-        const monthly = isMonthlyMode();
-        const period = currentPeriod();
-        const levels: GeoLevel[] = ["state", "county", "zip3"];
-        const enrollmentYear = monthly ? period.slice(0, 4) : period;
-        const needsEnroll = metricRef.current === "enrollees";
+        const state = useMapStore.getState();
+        const stops = paintChoropleth(
+            map.current,
+            currentPeriod(),
+            state.activeLayer,
+            state.metric,
+        );
+        stopsRef.current = stops;
+        setColorStops(stops[state.geoLevel]);
+    }, [setColorStops]);
 
-        const valuesByLevel: Record<GeoLevel, number[]> = {
-            state: [],
-            county: [],
-            zip3: [],
-        };
-        for (const level of levels) {
-            const data = monthly ? getMonthlyDataForLevel(level) : getAnnualDataForLevel(level);
-            valuesByLevel[level] = Object.entries(data).map(([id, recs]) => {
-                const enrollees = needsEnroll ? getEnrolleesFor(level, id, enrollmentYear) : null;
-                return monthly
-                    ? getValueForRegionMonthly(
-                          recs as MonthlyDataRecord[],
-                          period,
-                          activeLayerRef.current,
-                          metricRef.current,
-                          enrollees,
-                      )
-                    : getValueForRegion(
-                          recs as DataRecord[],
-                          period,
-                          activeLayerRef.current,
-                          metricRef.current,
-                          enrollees,
-                      );
-            });
-        }
-
-        const sharedStops = needsEnroll
-            ? quantileStops(
-                  [...valuesByLevel.state, ...valuesByLevel.county, ...valuesByLevel.zip3],
-                  metricRef.current,
-              )
-            : null;
-
-        for (const level of levels) {
-            const stops = sharedStops ?? quantileStops(valuesByLevel[level], metricRef.current);
-            if (level === active) {
-                stopsRef.current = stops;
-                setColorStops(stops);
-            }
-            map.current.setPaintProperty(
-                LEVEL_FILL[level],
-                "fill-color",
-                buildColorExpression(
-                    hoveredRefFor(level).current,
-                    selectedRefFor(level).current,
-                    LEVEL_ID_PROP[level],
-                    stops,
-                ),
-            );
-        }
-    }, [setColorStops, currentPeriod, isMonthlyMode]);
-
-    // Repaint values + rescale when category, year, month, monthly-load, or
-    // metric changes. The choropleth shows monthly values once the user has
-    // picked a month AND the monthly NDJSON has finished loading.
+    // Repaint when category, year, month, monthly-load, or metric changes.
     useEffect(() => {
-        activeLayerRef.current = activeLayer;
-        selectedYearRef.current = selectedYear;
-        selectedMonthRef.current = selectedMonth;
-        metricRef.current = metric;
-        monthlyLoadedRef.current = monthlyDataLoaded;
-        if (!map.current || !mapReadyRef.current) return;
-        const monthly = isMonthlyMode();
-        paintValues(map.current, currentPeriod(), activeLayer, metric, monthly);
-        applyActiveColors();
-    }, [
-        activeLayer,
-        selectedYear,
-        selectedMonth,
-        metric,
-        monthlyDataLoaded,
-        applyActiveColors,
-        currentPeriod,
-        isMonthlyMode,
-    ]);
+        if (!mapReadyRef.current) return;
+        repaint();
+    }, [activeLayer, selectedYear, selectedMonth, metric, monthlyDataLoaded, repaint]);
 
     // Lazy-load the monthly NDJSON the first time the user picks a month.
     useEffect(() => {
@@ -860,18 +530,18 @@ export default function MapContainer() {
         };
     }, [selectedMonth, monthlyDataLoaded, setMonthlyDataLoaded]);
 
-    // Switch the visible geography level and rescale to its distribution.
+    // Switch the visible geography level. Every level is already painted, so
+    // this only swaps which one is shown and which scale the Legend reads.
     useEffect(() => {
-        geoLevelRef.current = geoLevel;
         if (!map.current || !mapReadyRef.current) return;
         setActiveGeoLayer(map.current, geoLevel);
-        applyActiveColors();
-        // setActiveGeoLayer hoists STATES_STROKE to keep the state border
+        // setActiveGeoLayer hoists the state stroke to keep the state border
         // above county/zip3 fills; the DQ overlay is state-scoped too and
         // needs to sit above that stroke, so re-hoist it after every level
         // change (halo first, then each severity tier in order).
         hoistDqLayers(map.current);
-    }, [geoLevel, applyActiveColors]);
+        if (stopsRef.current) setColorStops(stopsRef.current[geoLevel]);
+    }, [geoLevel, setColorStops]);
 
     // DQ overlay paint + visibility. Repaints when (dqData, dqTopic,
     // selectedYear) change. Hides the overlay entirely when the topic has no
@@ -885,11 +555,7 @@ export default function MapContainer() {
         const m = map.current;
         if (!m || !m.getLayer(DQ_RING_HALO_LAYER)) return;
 
-        const hasYearData =
-            !!dqData &&
-            !!dqData.topics[dqTopic]?.years[selectedYear] &&
-            Object.keys(dqData.topics[dqTopic].years[selectedYear]).length > 0;
-        const shouldShow = dqOverlayVisible && hasYearData;
+        const shouldShow = dqOverlayVisible && dqHasYear(dqData, dqTopic, selectedYear);
 
         if (shouldShow && dqData) {
             paintDqRings(m, dqData, dqTopic, selectedYear, dqKnownStatesRef.current);
@@ -897,322 +563,91 @@ export default function MapContainer() {
         setDqVisibility(m, shouldShow);
     }, [dqData, dqTopic, dqOverlayVisible, selectedYear]);
 
-    // Reset paint when panel is closed
+    // Drop the selection highlight when the panel closes.
     useEffect(() => {
         if (selectedRegion !== null) return;
         if (!map.current) return;
 
-        if (selectedStateRef.current) {
-            map.current.setFeatureState(
-                { source: STATES_SOURCE, id: selectedStateRef.current },
-                { selected: false },
-            );
-            selectedStateRef.current = null;
+        for (const level of GEO_LEVEL_KEYS) {
+            const id = selectedRef.current[level];
+            if (!id) continue;
+            map.current.setFeatureState(featureRef(level, id), { selected: false });
+            selectedRef.current[level] = null;
         }
-        if (selectedCountyRef.current) {
-            map.current.setFeatureState(
-                { source: COUNTY_SOURCE, id: selectedCountyRef.current },
-                { selected: false },
-            );
-            selectedCountyRef.current = null;
-        }
-        if (selectedZip3Ref.current) {
-            map.current.setFeatureState(
-                { source: ZIP3_SOURCE, sourceLayer: ZIP3_LAYER, id: selectedZip3Ref.current },
-                { selected: false },
-            );
-            selectedZip3Ref.current = null;
-        }
+    }, [selectedRegion]);
 
-        // Redraw the active layer (no selection highlight) with current stops.
-        applyActiveColors();
-    }, [selectedRegion, applyActiveColors]);
+    // ── Pointer handlers (one set, registered once per level) ────
+    // Every level's fill layer stays mounted, so each handler first checks
+    // that its level is the one on screen. Hover and selection are written to
+    // feature-state only; the layers' paint expressions do the rest.
 
-    // ── Click handlers ───────────────────────────────────────
-
-    const handleStateClick = useCallback(
-        (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
-            if (geoLevelRef.current !== "state") return;
+    const handleClick = useCallback(
+        (level: GeoLevel, e: LayerMouseEvent) => {
+            if (useMapStore.getState().geoLevel !== level) return;
             if (!e.features?.length || !map.current) return;
-            const postal = e.features[0].properties?.[STATES_ID_PROP] as string;
-            const name = e.features[0].properties?.name as string;
-            if (!postal) return;
+            const props = e.features[0].properties;
+            const id = props?.[GEO_LAYERS[level].idProp] as string;
+            if (!id) return;
 
-            if (selectedStateRef.current) {
-                map.current.setFeatureState(
-                    {
-                        source: STATES_SOURCE,
-                        id: selectedStateRef.current,
-                    },
-                    { selected: false },
-                );
+            const previous = selectedRef.current[level];
+            if (previous) {
+                map.current.setFeatureState(featureRef(level, previous), { selected: false });
             }
+            selectedRef.current[level] = id;
+            map.current.setFeatureState(featureRef(level, id), { selected: true });
 
-            selectedStateRef.current = postal;
-            map.current.setFeatureState({ source: STATES_SOURCE, id: postal }, { selected: true });
-            map.current.setPaintProperty(
-                STATES_FILL,
-                "fill-color",
-                buildColorExpression(
-                    hoveredStateRef.current,
-                    postal,
-                    STATES_ID_PROP,
-                    stopsRef.current,
-                ),
-            );
-
-            const records = getStateAnnualData()[postal] ?? [];
-            const detail: RegionDetail = {
-                id: postal,
-                name: name || postal,
-                level: "state",
-                records,
-            };
-            setSelectedRegion(postal, detail);
+            setSelectedRegion(id, {
+                id,
+                name: REGION_LABELS[level].detail(id, props?.name as string | undefined),
+                level,
+                records: getAnnualDataForLevel(level)[id] ?? [],
+            });
             dismissHint();
         },
         [setSelectedRegion, dismissHint],
     );
 
-    const handleCountyClick = useCallback(
-        (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
-            if (geoLevelRef.current !== "county") return;
-            if (!e.features?.length || !map.current) return;
-            const fips = e.features[0].properties?.[COUNTY_ID_PROP] as string;
-            const name = e.features[0].properties?.name as string;
-            if (!fips) return;
-
-            if (selectedCountyRef.current) {
-                map.current.setFeatureState(
-                    { source: COUNTY_SOURCE, id: selectedCountyRef.current },
-                    { selected: false },
-                );
-            }
-
-            selectedCountyRef.current = fips;
-            map.current.setFeatureState({ source: COUNTY_SOURCE, id: fips }, { selected: true });
-            map.current.setPaintProperty(
-                COUNTY_FILL,
-                "fill-color",
-                buildColorExpression(
-                    hoveredCountyRef.current,
-                    fips,
-                    COUNTY_ID_PROP,
-                    stopsRef.current,
-                ),
-            );
-
-            const records = getCountyAnnualData()[fips] ?? [];
-            const detail: RegionDetail = {
-                id: fips,
-                name: name || `County ${fips}`,
-                level: "county",
-                records,
-            };
-            setSelectedRegion(fips, detail);
-            dismissHint();
-        },
-        [setSelectedRegion, dismissHint],
-    );
-
-    const handleZip3Click = useCallback(
-        (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
-            if (geoLevelRef.current !== "zip3") return;
-            if (!e.features?.length || !map.current) return;
-            const zip3 = e.features[0].properties?.[ZIP3_ID_PROP] as string;
-            if (!zip3) return;
-
-            if (selectedZip3Ref.current) {
-                map.current.setFeatureState(
-                    { source: ZIP3_SOURCE, sourceLayer: ZIP3_LAYER, id: selectedZip3Ref.current },
-                    { selected: false },
-                );
-            }
-
-            selectedZip3Ref.current = zip3;
-            map.current.setFeatureState(
-                { source: ZIP3_SOURCE, sourceLayer: ZIP3_LAYER, id: zip3 },
-                { selected: true },
-            );
-            map.current.setPaintProperty(
-                ZIP3_FILL,
-                "fill-color",
-                buildColorExpression(hoveredZip3Ref.current, zip3, ZIP3_ID_PROP, stopsRef.current),
-            );
-
-            const records = getZip3AnnualData()[zip3] ?? [];
-            const detail: RegionDetail = { id: zip3, name: `ZIP3 ${zip3}`, level: "zip3", records };
-            setSelectedRegion(zip3, detail);
-            dismissHint();
-        },
-        [setSelectedRegion, dismissHint],
-    );
-
-    // ── Hover handlers ───────────────────────────────────────
-
-    const handleStateMouseMove = useCallback(
-        (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
-            if (geoLevelRef.current !== "state") return;
+    const handleMouseMove = useCallback(
+        (level: GeoLevel, e: LayerMouseEvent) => {
+            if (useMapStore.getState().geoLevel !== level) return;
             if (!map.current || !e.features?.length) return;
             map.current.getCanvas().style.cursor = "pointer";
-            const postal = e.features[0].properties?.[STATES_ID_PROP] as string;
-            if (!postal) return;
+            const props = e.features[0].properties;
+            const id = props?.[GEO_LAYERS[level].idProp] as string;
+            if (!id) return;
 
-            if (hoveredStateRef.current && hoveredStateRef.current !== postal) {
-                map.current.setFeatureState(
-                    {
-                        source: STATES_SOURCE,
-                        id: hoveredStateRef.current,
-                    },
-                    { hover: false },
-                );
+            const previous = hoveredRef.current[level];
+            if (previous && previous !== id) {
+                map.current.setFeatureState(featureRef(level, previous), { hover: false });
             }
+            hoveredRef.current[level] = id;
+            map.current.setFeatureState(featureRef(level, id), { hover: true });
 
-            hoveredStateRef.current = postal;
-            map.current.setFeatureState({ source: STATES_SOURCE, id: postal }, { hover: true });
-            map.current.setPaintProperty(
-                STATES_FILL,
-                "fill-color",
-                buildColorExpression(
-                    postal,
-                    selectedStateRef.current,
-                    STATES_ID_PROP,
-                    stopsRef.current,
-                ),
-            );
-
-            const val = hoveredValueForLevel("state", postal);
-            setHovered(postal, val, { x: e.point.x, y: e.point.y });
+            const { activeLayer, metric } = useMapStore.getState();
+            const value = getRegionValue(level, id, currentPeriod(), activeLayer, metric);
+            setHovered(REGION_LABELS[level].tooltip(id, props?.name as string | undefined), value, {
+                x: e.point.x,
+                y: e.point.y,
+            });
         },
-        [setHovered, hoveredValueForLevel],
+        [setHovered],
     );
 
-    const handleCountyMouseMove = useCallback(
-        (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
-            if (geoLevelRef.current !== "county") return;
-            if (!map.current || !e.features?.length) return;
-            map.current.getCanvas().style.cursor = "pointer";
-            const fips = e.features[0].properties?.[COUNTY_ID_PROP] as string;
-            const name = e.features[0].properties?.name as string;
-            if (!fips) return;
+    const handleMouseLeave = useCallback(
+        (level: GeoLevel) => {
+            if (useMapStore.getState().geoLevel !== level) return;
+            if (!map.current) return;
+            map.current.getCanvas().style.cursor = "";
 
-            if (hoveredCountyRef.current && hoveredCountyRef.current !== fips) {
-                map.current.setFeatureState(
-                    { source: COUNTY_SOURCE, id: hoveredCountyRef.current },
-                    { hover: false },
-                );
+            const previous = hoveredRef.current[level];
+            if (previous) {
+                map.current.setFeatureState(featureRef(level, previous), { hover: false });
             }
-
-            hoveredCountyRef.current = fips;
-            map.current.setFeatureState({ source: COUNTY_SOURCE, id: fips }, { hover: true });
-            map.current.setPaintProperty(
-                COUNTY_FILL,
-                "fill-color",
-                buildColorExpression(
-                    fips,
-                    selectedCountyRef.current,
-                    COUNTY_ID_PROP,
-                    stopsRef.current,
-                ),
-            );
-
-            const val = hoveredValueForLevel("county", fips);
-            setHovered(name || `County ${fips}`, val, { x: e.point.x, y: e.point.y });
+            hoveredRef.current[level] = null;
+            setHovered(null, null, null);
         },
-        [setHovered, hoveredValueForLevel],
+        [setHovered],
     );
-
-    const handleZip3MouseMove = useCallback(
-        (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
-            if (geoLevelRef.current !== "zip3") return;
-            if (!map.current || !e.features?.length) return;
-            map.current.getCanvas().style.cursor = "pointer";
-            const zip3 = e.features[0].properties?.[ZIP3_ID_PROP] as string;
-            if (!zip3) return;
-
-            if (hoveredZip3Ref.current && hoveredZip3Ref.current !== zip3) {
-                map.current.setFeatureState(
-                    { source: ZIP3_SOURCE, sourceLayer: ZIP3_LAYER, id: hoveredZip3Ref.current },
-                    { hover: false },
-                );
-            }
-
-            hoveredZip3Ref.current = zip3;
-            map.current.setFeatureState(
-                { source: ZIP3_SOURCE, sourceLayer: ZIP3_LAYER, id: zip3 },
-                { hover: true },
-            );
-            map.current.setPaintProperty(
-                ZIP3_FILL,
-                "fill-color",
-                buildColorExpression(zip3, selectedZip3Ref.current, ZIP3_ID_PROP, stopsRef.current),
-            );
-
-            const val = hoveredValueForLevel("zip3", zip3);
-            setHovered(`ZIP3 ${zip3}`, val, { x: e.point.x, y: e.point.y });
-        },
-        [setHovered, hoveredValueForLevel],
-    );
-
-    const handleStateMouseLeave = useCallback(() => {
-        if (geoLevelRef.current !== "state") return;
-        if (!map.current) return;
-        map.current.getCanvas().style.cursor = "";
-
-        if (hoveredStateRef.current) {
-            map.current.setFeatureState(
-                { source: STATES_SOURCE, id: hoveredStateRef.current },
-                { hover: false },
-            );
-        }
-        hoveredStateRef.current = null;
-        setHovered(null, null, null);
-        map.current.setPaintProperty(
-            STATES_FILL,
-            "fill-color",
-            buildColorExpression(null, selectedStateRef.current, STATES_ID_PROP, stopsRef.current),
-        );
-    }, [setHovered]);
-
-    const handleCountyMouseLeave = useCallback(() => {
-        if (geoLevelRef.current !== "county") return;
-        if (!map.current) return;
-        map.current.getCanvas().style.cursor = "";
-
-        if (hoveredCountyRef.current) {
-            map.current.setFeatureState(
-                { source: COUNTY_SOURCE, id: hoveredCountyRef.current },
-                { hover: false },
-            );
-        }
-        hoveredCountyRef.current = null;
-        setHovered(null, null, null);
-        map.current.setPaintProperty(
-            COUNTY_FILL,
-            "fill-color",
-            buildColorExpression(null, selectedCountyRef.current, COUNTY_ID_PROP, stopsRef.current),
-        );
-    }, [setHovered]);
-
-    const handleZip3MouseLeave = useCallback(() => {
-        if (geoLevelRef.current !== "zip3") return;
-        if (!map.current) return;
-        map.current.getCanvas().style.cursor = "";
-
-        if (hoveredZip3Ref.current) {
-            map.current.setFeatureState(
-                { source: ZIP3_SOURCE, sourceLayer: ZIP3_LAYER, id: hoveredZip3Ref.current },
-                { hover: false },
-            );
-        }
-        hoveredZip3Ref.current = null;
-        setHovered(null, null, null);
-        map.current.setPaintProperty(
-            ZIP3_FILL,
-            "fill-color",
-            buildColorExpression(null, selectedZip3Ref.current, ZIP3_ID_PROP, stopsRef.current),
-        );
-    }, [setHovered]);
 
     // ── Map initialization ───────────────────────────────────
 
@@ -1307,46 +742,39 @@ export default function MapContainer() {
                 // choropleth for orientation at deep zoom, rather than being
                 // buried by an opaque fill.
                 const labelAnchor = apiKey ? PROTOMAPS_FIRST_LABEL_LAYER : undefined;
-                addStatesLayers(map.current, labelAnchor);
-                addCountyLayers(map.current, labelAnchor);
-                addZip3Layers(map.current, labelAnchor);
+                for (const level of GEO_LEVEL_KEYS) {
+                    addGeoLayers(map.current, level, labelAnchor);
+                }
                 // DQ overlay shares the states source; add after states so
                 // the source already exists. Layers start hidden — turned on
                 // by the visibility effect once dqData resolves.
                 addDqRingLayers(map.current);
-                setActiveGeoLayer(map.current, geoLevelRef.current);
-                // setActiveGeoLayer hoists states-stroke to the top for
+                setActiveGeoLayer(map.current, useMapStore.getState().geoLevel);
+                // setActiveGeoLayer hoists the state stroke to the top for
                 // county/zip3 spatial context; the DQ overlay belongs above
                 // that, so hoist it again as the final step.
                 hoistDqLayers(map.current);
 
-                map.current.on("click", STATES_FILL, handleStateClick);
-                map.current.on("mousemove", STATES_FILL, handleStateMouseMove);
-                map.current.on("mouseleave", STATES_FILL, handleStateMouseLeave);
-
-                map.current.on("click", COUNTY_FILL, handleCountyClick);
-                map.current.on("mousemove", COUNTY_FILL, handleCountyMouseMove);
-                map.current.on("mouseleave", COUNTY_FILL, handleCountyMouseLeave);
-
-                map.current.on("click", ZIP3_FILL, handleZip3Click);
-                map.current.on("mousemove", ZIP3_FILL, handleZip3MouseMove);
-                map.current.on("mouseleave", ZIP3_FILL, handleZip3MouseLeave);
+                for (const level of GEO_LEVEL_KEYS) {
+                    const { fill } = GEO_LAYERS[level];
+                    map.current.on("click", fill, (e) => handleClick(level, e));
+                    map.current.on("mousemove", fill, (e) => handleMouseMove(level, e));
+                    map.current.on("mouseleave", fill, () => handleMouseLeave(level));
+                }
 
                 await loadAnnualData();
-                paintValues(
-                    map.current,
-                    currentPeriod(),
-                    activeLayerRef.current,
-                    metricRef.current,
-                    isMonthlyMode(),
-                );
-                applyActiveColors();
+                if (!map.current) return;
+                // The level effect is a no-op until mapReadyRef flips, so
+                // re-apply the level in case it changed during the fetch.
+                setActiveGeoLayer(map.current, useMapStore.getState().geoLevel);
+                hoistDqLayers(map.current);
+                repaint();
                 mapReadyRef.current = true;
                 // Track every state id the annual data knows about so the DQ
                 // ring pass can wipe stale colors from states not present in
                 // the current (topic, year) bucket. Uses annual state ids as
                 // the universe — the ring layer is state-scoped anyway.
-                dqKnownStatesRef.current = new Set(Object.keys(getStateAnnualData()));
+                dqKnownStatesRef.current = new Set(Object.keys(getAnnualDataForLevel("state")));
                 // Kick off DQ overlay fetch in parallel; overlay is optional
                 // and never blocks the main map from becoming interactive.
                 loadDqAtlas().then((data) => {
@@ -1362,20 +790,7 @@ export default function MapContainer() {
             map.current?.remove();
             map.current = null;
         };
-    }, [
-        applyActiveColors,
-        currentPeriod,
-        isMonthlyMode,
-        handleStateClick,
-        handleStateMouseMove,
-        handleStateMouseLeave,
-        handleCountyClick,
-        handleCountyMouseMove,
-        handleCountyMouseLeave,
-        handleZip3Click,
-        handleZip3MouseMove,
-        handleZip3MouseLeave,
-    ]);
+    }, [repaint, handleClick, handleMouseMove, handleMouseLeave, setDqData]);
 
     return (
         <div

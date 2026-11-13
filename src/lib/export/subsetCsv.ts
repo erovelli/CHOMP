@@ -1,5 +1,13 @@
 import Papa from "papaparse";
-import type { DataRecord, MonthlyDataRecord, EnrollmentRecord, GeoLevel, LayerKey } from "../types";
+import {
+    recordPeriod,
+    type ClaimsRecord,
+    type DataRecord,
+    type MonthlyDataRecord,
+    type EnrollmentRecord,
+    type GeoLevel,
+    type LayerKey,
+} from "../types";
 import { CATEGORY_TO_KEY, LAYER_CONFIGS } from "../../constants/map";
 import { STATE_USPS_TO_NAME } from "../../constants/stateFips";
 
@@ -21,14 +29,14 @@ export const SUBSET_CSV_COLUMNS = [
     "claims_per_enrollee",
 ] as const;
 
-export type SubsetCsvColumn = (typeof SUBSET_CSV_COLUMNS)[number];
+type SubsetCsvColumn = (typeof SUBSET_CSV_COLUMNS)[number];
 export type SubsetCsvRow = Record<SubsetCsvColumn, string | number>;
 
 export type Grain = "annual" | "monthly";
 
 // Pseudo-category label for the optional summed-across-all-categories row.
 // Matches the live map / csv.ts "All Categories" wording.
-export const ALL_CATEGORIES_LABEL = "All Categories";
+const ALL_CATEGORIES_LABEL = "All Categories";
 
 interface BuildSubsetRowsArgs {
     level: GeoLevel;
@@ -70,7 +78,7 @@ function regionName(level: GeoLevel, id: string, countyNames?: Record<string, st
 }
 
 // ACS is annual; monthly rows reuse the endpoint-year enrollment (same
-// convention as getValueForRegionMonthly). Returns null when the geography has
+// convention as getRegionValue in dataService). Returns null when the geography has
 // no enrollment record for that year — callers blank the columns rather than
 // emit a misleading 0.
 function enrolleesFor(
@@ -117,11 +125,8 @@ export function buildSubsetCsvRows({
     enrollment,
     countyNames,
 }: BuildSubsetRowsArgs): SubsetCsvRow[] {
-    const data: Record<string, Array<DataRecord | MonthlyDataRecord>> = grain === "monthly"
-        ? (monthlyData ?? {})
-        : (annualData ?? {});
-    const periodOf = (r: DataRecord | MonthlyDataRecord): string =>
-        grain === "monthly" ? (r as MonthlyDataRecord).year_month : (r as DataRecord).year;
+    const data: Record<string, ClaimsRecord[]> =
+        grain === "monthly" ? (monthlyData ?? {}) : (annualData ?? {});
 
     const wantedCategories = new Set<LayerKey>(categories);
     const rows: SubsetCsvRow[] = [];
@@ -139,7 +144,7 @@ export function buildSubsetCsvRows({
             let sawAny = false;
 
             for (const r of records) {
-                if (periodOf(r) !== period) continue;
+                if (recordPeriod(r) !== period) continue;
                 sawAny = true;
                 if (includeAllCategoriesTotal) {
                     allTotals.claims += r.total_claims;

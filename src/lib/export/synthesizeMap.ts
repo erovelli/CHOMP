@@ -14,7 +14,7 @@ import { CHOROPLETH_COLORS, N_STOPS, quantileStops } from "../mapStyles";
 import { LAYER_CONFIGS, COUNTY_GEOJSON } from "../../constants/map";
 import { STATE_FIPS_TO_USPS, PR_FIPS, TERRITORY_NON_PR_FIPS } from "../../constants/stateFips";
 import { colorForValue } from "./colorScale";
-import { getAnnualDataForLevel, getEnrolleesFor, getValueForRegion } from "../dataService";
+import { getRegionValue } from "../dataService";
 
 // ── Canvas / layout ───────────────────────────────────────────
 //
@@ -381,52 +381,22 @@ export async function renderSynthesizedMap(args: RenderArgs): Promise<HTMLCanvas
     const { activeLayer, year, metric, level, scale = 1 } = args;
 
     const features = await getFeaturesForLevel(level);
-    const annualData = getAnnualDataForLevel(level);
 
     // Resolve a value for every feature plus, at state level, the territory
     // chips. Stops use the same quantileStops as the live map so the export
-    // matches the on-screen ramp by construction. Values are computed inline
-    // from the level's annual cache — no intermediate lookup table to drift
-    // out of sync with the render loop.
-    const featureValue = (f: LevelFeature): number => {
-        const id = f.properties.id;
-        const enrollees = metric === "enrollees" ? getEnrolleesFor(level, id, year) : null;
-        return getValueForRegion(annualData[id], year, activeLayer, metric, enrollees);
-    };
+    // matches the on-screen ramp by construction (quantileStops ignores the
+    // NaN / zero values itself).
+    const valueOf = (id: string): number => getRegionValue(level, id, year, activeLayer, metric);
+    const featureValue = (f: LevelFeature): number => valueOf(f.properties.id);
 
-    const values: number[] = [];
-    for (const f of features.main) {
-        const v = featureValue(f);
-        if (Number.isFinite(v) && v > 0) values.push(v);
-    }
-    for (const f of features.pr) {
-        const v = featureValue(f);
-        if (Number.isFinite(v) && v > 0) values.push(v);
-    }
+    const territoryValues: Record<string, number> = {};
     if (level === "state") {
-        for (const postal of TERRITORY_POSTALS) {
-            const enrollees = metric === "enrollees" ? getEnrolleesFor(level, postal, year) : null;
-            const v = getValueForRegion(annualData[postal], year, activeLayer, metric, enrollees);
-            if (Number.isFinite(v) && v > 0) values.push(v);
-        }
+        for (const postal of TERRITORY_POSTALS) territoryValues[postal] = valueOf(postal);
     }
-    const stops = quantileStops(values, metric);
-
-    // Build a value lookup for the chip drawer (state only) so it doesn't
-    // need to recompute.
-    const valueForChip: Record<string, number> = {};
-    if (level === "state") {
-        for (const postal of TERRITORY_POSTALS) {
-            const enrollees = metric === "enrollees" ? getEnrolleesFor(level, postal, year) : null;
-            valueForChip[postal] = getValueForRegion(
-                annualData[postal],
-                year,
-                activeLayer,
-                metric,
-                enrollees,
-            );
-        }
-    }
+    const stops = quantileStops(
+        [...features.main, ...features.pr].map(featureValue).concat(Object.values(territoryValues)),
+        metric,
+    );
 
     const canvas = document.createElement("canvas");
     canvas.width = Math.round(REFERENCE_W * scale);
@@ -476,7 +446,7 @@ export async function renderSynthesizedMap(args: RenderArgs): Promise<HTMLCanvas
     // Territory chips lookup by USPS postal — not defined at county/ZIP3, so
     // skip there. The county/ZIP3 polygons for those territories project to
     // null on AlbersUsa and are silently dropped (documented limitation).
-    if (level === "state") drawTerritoryChips(ctx, valueForChip, stops);
+    if (level === "state") drawTerritoryChips(ctx, territoryValues, stops);
 
     const layerLabel = LAYER_CONFIGS[activeLayer]?.label ?? activeLayer;
     const metricLabel = metric === "enrollees" ? "Per Medicaid enrollee" : "Volume";

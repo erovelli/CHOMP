@@ -24,7 +24,7 @@ Closes #
 - [ ] Bug fix (non-breaking change that fixes an issue)
 - [ ] New feature (non-breaking change that adds functionality)
 - [ ] Breaking change (behavior or API shape changes in a way a consumer would notice)
-- [ ] Data-pipeline change (SQL migration, view, or export)
+- [ ] Data-pipeline change (script, aggregate, or export)
 - [ ] Docs / chore / refactor (no runtime behavior change)
 - [ ] CI / tooling
 

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { useShallow } from "zustand/react/shallow";
 import type { LayerKey, GeoLevel, Metric, RegionDetail, DqTopicKey, DqData } from "./types";
 import { DEFAULT_YEAR } from "../constants/time";
 import { DEFAULT_DQ_TOPIC } from "../constants/dq";
@@ -122,3 +123,19 @@ export const useMapStore = create<MapState>((set) => ({
     dqData: null,
     setDqData: (data) => set({ dqData: data }),
 }));
+
+/**
+ * Subscribe to the named store fields only. A bare `useMapStore()` re-renders
+ * its component on every store write, including the `setHovered` call that
+ * fires on each mouse move over the map; this re-renders only when one of the
+ * picked fields changes.
+ */
+export function useMapFields<K extends keyof MapState>(...keys: K[]): Pick<MapState, K> {
+    return useMapStore(
+        useShallow((state) => {
+            const picked = {} as Pick<MapState, K>;
+            for (const key of keys) picked[key] = state[key];
+            return picked;
+        }),
+    );
+}

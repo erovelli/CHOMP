@@ -64,7 +64,7 @@ FIPS_TO_USPS = {
     "60": "AS", "66": "GU", "69": "MP", "72": "PR", "78": "VI",
 }
 
-# HCPCS D-code numeric range -> category (mirrors migration 006 exactly).
+# HCPCS D-code numeric range -> category.
 CATEGORY_CASE = """
     CASE
         WHEN hcpcs_numeric BETWEEN 100 AND 999   THEN 'Diagnostic'
@@ -82,11 +82,6 @@ CATEGORY_CASE = """
         ELSE 'Uncategorized'
     END
 """
-
-# Each output: (filename, geo key column, period column + JSON field name)
-EXPORTS = [
-    # (level, grain) -> resolved below
-]
 
 
 def build_base(con: duckdb.DuckDBPyConnection, csv_path: Path) -> None:

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
-import { useMapStore } from "../../../lib/store";
+import { useMapFields } from "../../../lib/store";
 import type { RegionDetail, MonthlyDataRecord } from "../../../lib/types";
-import { getMonthlyRecords, getEnrolleesFor } from "../../../lib/dataService";
+import { getMonthlyDataForLevel, getEnrolleesFor } from "../../../lib/dataService";
 import { formatCurrency } from "../../../lib/formatters";
 import { MONTH_NAMES } from "../../../constants/time";
 import StatCard from "./StatCard";
@@ -15,17 +15,23 @@ export default function PanelContent({
     detail: RegionDetail;
     onClose: () => void;
 }) {
-    // Year + month live in the main-menu TimeControl now; the panel just reads
-    // them from the store so the displayed stats follow whatever period the
-    // user picked up there.
-    const { selectedYear, selectedMonth, monthlyDataLoaded } = useMapStore();
+    // Year + month are picked in the LeftRail / FilterSheet; the panel reads
+    // them from the store so the displayed stats follow that period.
+    const { selectedYear, selectedMonth, monthlyDataLoaded } = useMapFields(
+        "selectedYear",
+        "selectedMonth",
+        "monthlyDataLoaded",
+    );
     const isMonthly = selectedMonth !== null;
     const yearMonth = isMonthly ? `${selectedYear}-${selectedMonth}` : null;
 
     // Monthly records are a synchronous lookup from the already-loaded cache, so
     // derive them during render rather than mirroring into state via an effect.
     const monthlyRecords = useMemo<MonthlyDataRecord[]>(
-        () => (isMonthly && monthlyDataLoaded ? getMonthlyRecords(detail.id, detail.level) : []),
+        () =>
+            isMonthly && monthlyDataLoaded
+                ? (getMonthlyDataForLevel(detail.level)[detail.id] ?? [])
+                : [],
         [detail.id, detail.level, isMonthly, monthlyDataLoaded],
     );
 

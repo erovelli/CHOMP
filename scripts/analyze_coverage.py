@@ -112,7 +112,7 @@ def main() -> int:
     # ---- compute per-month drop & recovery ----
     rows = []
     print()
-    for i, ym in enumerate(months):
+    for ym in months:
         # HHS dental row counts and per-NPI counts (only servicing_npi column)
         dental = pd.read_parquet(dental_dir / f"{ym}.parquet", columns=["servicing_npi"])
         n_dental = len(dental)

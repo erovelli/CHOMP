@@ -1,5 +1,3 @@
-import { INFO_MODAL_BODY, INFO_MODAL_NOTES } from "./infoModal";
-
 export const NAV_PAGES = ["project", "data", "team", "credits", "contact"] as const;
 export type NavPage = (typeof NAV_PAGES)[number];
 
@@ -16,7 +14,7 @@ export const REPO_URL = "https://github.com/erovelli/CHOMP";
 /** One run of paragraph text. A bare string is a plain run; an object with
  * `href` renders as an inline link. Use the array form when a paragraph
  * needs an inline hyperlink (e.g. "…contact <Kenneth Liu>."). */
-export type ParagraphSegment = string | { text: string; href: string };
+type ParagraphSegment = string | { text: string; href: string };
 
 export type PageSection =
     | { kind: "paragraph"; body: string | readonly ParagraphSegment[] }
@@ -38,14 +36,33 @@ export type PageSection =
 
 export interface PageContent {
     title: string;
-    lede?: string;
     sections: readonly PageSection[];
 }
+
+const PROJECT_BODY =
+    "CHOMP illustrates the 2018–2024 Medicaid dental claims data released by Health and Human " +
+    "Services (HHS) Open Data on February 8th, 2026. We used the National Plan and Provider " +
+    "Enumeration System (NPPES) to connect each claim to a ZIP3, enabling a geographical view " +
+    "of the data. Medicaid dental coverage varies from state-to-state, with some states covering " +
+    "different populations and different procedures. This may account for some level of the " +
+    "perceived trends seen on this site. Our intention is to transform a massive dataset into " +
+    "digestible, actionable insights at the local, state, and national level. We hope this tool " +
+    "and the corresponding framework to organize the data can be useful for policymakers, " +
+    "providers, researchers, and all others interested in improving oral and systemic health.";
+
+const DATA_NOTES: readonly string[] = [
+    "HHS cell-suppresses any code-month under 12 claims or 12 unique beneficiaries.",
+    "Geography floored at ZIP3 to prevent provider-level re-identification.",
+    "Per-enrollee denominator uses 5-year pooled ACS C27007.",
+    "Attribution to the servicing provider's practice address, not the patient's residence.",
+    "0.1% of claims dropped for missing NPIs.",
+    "County and state maps exclude ~3% of rows with malformed servicing IDs, addresses that failed to geocode, and U.S. territories without standard county FIPS.",
+];
 
 export const PAGE_CONTENT: Record<NavPage, PageContent> = {
     project: {
         title: "About the project",
-        sections: [{ kind: "paragraph", body: INFO_MODAL_BODY }],
+        sections: [{ kind: "paragraph", body: PROJECT_BODY }],
     },
     data: {
         title: "Data & methodology",
@@ -67,7 +84,7 @@ export const PAGE_CONTENT: Record<NavPage, PageContent> = {
                     },
                 ],
             },
-            { kind: "list", heading: "Important notes", items: INFO_MODAL_NOTES },
+            { kind: "list", heading: "Important notes", items: DATA_NOTES },
         ],
     },
     team: {

@@ -1,4 +1,4 @@
-import { useMapStore } from "../../../lib/store";
+import { useMapFields } from "../../../lib/store";
 import { getDqRecord } from "../../../lib/dataService";
 import { DQ_ASSESSMENT_COLORS, DQ_TOPIC_LABELS, DQ_TOPIC_ORDER } from "../../../constants/dq";
 import type { DqTopicKey } from "../../../lib/types";
@@ -10,7 +10,13 @@ import type { DqTopicKey } from "../../../lib/types";
  * state view — DQ Atlas data is state-only.
  */
 export default function DqRibbon({ stateUsps }: { stateUsps: string }) {
-    const { dqData, dqTopic, setDqTopic, setDqOverlayVisible, selectedYear } = useMapStore();
+    const { dqData, dqTopic, setDqTopic, setDqOverlayVisible, selectedYear } = useMapFields(
+        "dqData",
+        "dqTopic",
+        "setDqTopic",
+        "setDqOverlayVisible",
+        "selectedYear",
+    );
 
     if (!dqData) return null;
 

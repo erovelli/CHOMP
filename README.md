@@ -15,9 +15,9 @@ A full-stack data visualization project that transforms ~60 GB of raw HHS Open D
 [![Staging deploy](https://github.com/erovelli/CHOMP/actions/workflows/deploy.yml/badge.svg)](https://github.com/erovelli/CHOMP/actions/workflows/deploy.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-informational.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6.svg)](tsconfig.json)
-[![React 18](https://img.shields.io/badge/React-18-61dafb.svg)](https://react.dev)
-[![Vite](https://img.shields.io/badge/Vite-5-646cff.svg)](https://vitejs.dev)
-[![MapLibre GL](https://img.shields.io/badge/MapLibre%20GL-4-396cb2.svg)](https://maplibre.org)
+[![React 19](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev)
+[![Vite](https://img.shields.io/badge/Vite-8-646cff.svg)](https://vitejs.dev)
+[![MapLibre GL](https://img.shields.io/badge/MapLibre%20GL-5-396cb2.svg)](https://maplibre.org)
 [![PMTiles](https://img.shields.io/badge/PMTiles-v3-1e8a7e.svg)](https://protomaps.com/docs/pmtiles)
 
 </div>
@@ -79,15 +79,15 @@ The design is deliberately constrained:
                                              ▼
           ┌──────────────────────── RUNTIME (in browser) ────────────────────────┐
           │                                                                      │
-          │   React 18 + TS-strict + Vite                                        │
+          │   React 19 + TS-strict + Vite                                        │
           │   ┌────────────┐   ┌─────────────────────────┐   ┌────────────────┐  │
-          │   │  Zustand   │   │      MapLibre GL JS     │   │    PMTiles     │  │
-          │   │   store    │◄──┤   (feature-state API)   ├──►│  states.pmtiles│  │
+          │   │  Zustand   │   │      MapLibre GL JS     │   │ GeoJSON+PMTiles│  │
+          │   │   store    │◄──┤   (feature-state API)   ├──►│ states/counties│  │
           │   │            │   │                         │   │  zip3.pmtiles  │  │
           │   └─────┬──────┘   └─────────────────────────┘   └────────────────┘  │
           │         │                                                            │
           │         ▼                                                            │
-          │   DetailPanel · LayerControl · Legend · Tooltip · InfoModal          │
+          │   LeftRail · DetailPanel · Legend · Tooltip · AboutPage              │
           │                                                                      │
           └──────────────────────────────────────────────────────────────────────┘
 ```
@@ -101,7 +101,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the long-form write-up, i
 | **Renderer**    | MapLibre GL JS                                      | GPU-accelerated, hardware-composited vector tiles; supports `setFeatureState` for per-feature updates without rebuilding sources.                                                                                       |
 | **Tile format** | [PMTiles](https://protomaps.com/docs/pmtiles) v3    | Single-file vector tiles served over static HTTPS with range requests — no tile server to run.                                                                                                                          |
 | **Basemap**     | Protomaps                                           | Paid-tier vector basemap (key in `.env.local`); gracefully degrades to a blank background when no key is present.                                                                                                       |
-| **Framework**   | React 18 + Vite 5                                   | Fast HMR; `React.StrictMode` in dev catches double-mount regressions in the map lifecycle.                                                                                                                              |
+| **Framework**   | React 19 + Vite 8                                   | Fast HMR; `React.StrictMode` in dev catches double-mount regressions in the map lifecycle.                                                                                                                              |
 | **Language**    | TypeScript `strict`                                 | Every layer is typed end-to-end: `LayerKey` union ↔ `LAYER_CONFIGS` record enforces exhaustiveness at compile time.                                                                                                     |
 | **State**       | [Zustand](https://zustand-demo.pmnd.rs/)            | Single small store with selector-hooks; avoids the provider-tree churn a Context-based solution would introduce in a map app that re-renders on every hover event.                                                      |
 | **Data shape**  | NDJSON of `{ key: records[] }` objects              | Streamable, append-only, gzips well. The browser consumes all four files through a single `fetchNDJSON` helper.                                                                                                         |
@@ -114,9 +114,9 @@ A few decisions worth calling out in a code review:
 
 - **Feature-state paint expressions instead of data-driven filters.** Hover/selection/value are all feature-state fields; the paint expression (`src/lib/mapStyles.ts`) interpolates over those fields. Switching year or category dispatches a single `setFeatureState` loop — no source rebuild, no GL re-upload.
 - **Two-tier loading.** Annual data (~2.3 MB gzip total across state + county + zip3) is fetched on map `load` so the full-nation view is immediate. Monthly data (~16 MB gzip) is lazy-loaded the first time the user picks a specific month, guarded by a `monthlyDataLoaded` flag in the store.
-- **Single source of truth for procedure categories.** `CATEGORY_TO_KEY` in [`src/constants/map.ts`](src/constants/map.ts) maps HHS category strings to the app's `LayerKey` union. `CATEGORY_COLORS` and `LAYER_ORDER` are _derived_ from it — adding a new category is a one-line change.
+- **Single source of truth for procedure categories.** `CATEGORY_TO_KEY` in [`src/constants/map.ts`](src/constants/map.ts) maps HHS category strings to the app's `LayerKey` union. `LAYER_CONFIGS` is a `Record<LayerKey, …>`, so a category added to the union without a label fails the type check.
 - **Refs, not state, for hover and selection IDs.** The map's event handlers run on every mouse move at 60 Hz; routing those through React state would trigger cascading re-renders of the entire tree. Hover/selection are held in `useRef` and written back to MapLibre's feature-state directly.
-- **Constants are colocated.** `src/constants/{map,time,layout,infoModal}.ts` means no magic numbers appear in component files. Every z-index, transition, and API path is nameable and greppable.
+- **Constants are colocated.** `src/constants/{map,time,layout,dq,pages}.ts` means no magic numbers appear in component files. Every z-index, transition, and API path is nameable and greppable.
 - **Data pipeline mirrors the frontend.** The `provider_procedure_category_aggregate_{annual,monthly}_{state,county,zip3}` file names map 1:1 to the `DATA_PATHS` constants — the naming discipline is deliberate.
 
 ## Getting started
@@ -219,49 +219,62 @@ CHOMP/
 │   ├── components/
 │   │   ├── map/MapContainer.tsx   # Map lifecycle, event handlers, feature-state paint
 │   │   └── ui/
-│   │       ├── Header.tsx         # Top bar + Export button (lazy-loads ExportModal)
-│   │       ├── LayerControl.tsx   # Procedure-category picker
-│   │       ├── GeoLevelControl.tsx # State / County / ZIP3 toggle
-│   │       ├── MetricControl.tsx  # Volume / Per-enrollee toggle
-│   │       ├── TimeControl.tsx    # Year + monthly slider
+│   │       ├── Header.tsx         # Top bar, nav, Export button (lazy-loads ExportModal)
+│   │       ├── LeftRail.tsx       # Desktop control card: geography, metric, time, DQ, category
+│   │       ├── FilterSheet.tsx    # Mobile bottom sheet with the same controls
+│   │       ├── Controls.tsx       # Segmented toggle + select shared by the two above
+│   │       ├── SheetHandle.tsx    # Drag-to-resize grab handle for bottom sheets
 │   │       ├── Legend.tsx         # Choropleth scale
 │   │       ├── Tooltip.tsx        # Pixel-anchored hover readout
-│   │       ├── ClickHint.tsx      # Dismissable onboarding nudge
-│   │       ├── InfoModal.tsx      # First-load about/caveats dialog
+│   │       ├── ClickHint.tsx      # Onboarding nudge, dismissed on first click
+│   │       ├── AboutPage.tsx      # Project / Data / Team / Credits / Contact pages
 │   │       ├── ExportModal.tsx    # PNG / JPEG / CSV save modal (lazy chunk)
+│   │       ├── SubsetExportPanel.tsx # Custom-dataset CSV builder inside the modal
 │   │       └── DetailPanel/
-│   │           ├── index.tsx              # Slide-in right-rail
-│   │           ├── PanelContent.tsx       # Year/month controls, stats
+│   │           ├── index.tsx              # Right rail on desktop, bottom sheet on mobile
+│   │           ├── PanelContent.tsx       # Region header and stat cards
 │   │           ├── StatCard.tsx           # Single big-number tile
+│   │           ├── DqRibbon.tsx           # Per-topic CMS data-quality chips (state only)
 │   │           └── CategoryBreakdown.tsx  # Horizontal-bar breakdown
 │   ├── lib/
-│   │   ├── store.ts               # Zustand store
-│   │   ├── dataService.ts         # NDJSON fetch + in-memory caches
-│   │   ├── mapStyles.ts           # Choropleth color expressions
+│   │   ├── store.ts               # Zustand store + useMapFields slice hook
+│   │   ├── dataService.ts         # NDJSON fetch, per-level caches, value lookup
+│   │   ├── mapStyles.ts           # Color stops, fill-color expression, basemap pruning
 │   │   ├── formatters.ts          # $1.2M / 450k helpers
 │   │   ├── types.ts               # Shared domain types
 │   │   ├── urlState.ts            # ?layer=…&year=…&month=… round-trip
 │   │   ├── useUrlSync.ts          # Sync store ↔ URL search params
+│   │   ├── useMediaQuery.ts       # Reactive media queries (mobile, coarse pointer)
+│   │   ├── useSheetDrag.ts        # Pointer handlers behind SheetHandle
 │   │   └── export/                # PNG/JPEG/CSV synthesis (lazy-loaded)
 │   │       ├── colorScale.ts      # Pure-JS port of MapLibre's interpolate(linear)
 │   │       ├── csv.ts             # Current-view CSV builder + downloader
-│   │       └── synthesizeMap.ts   # d3-geo + Canvas state choropleth renderer
-│   └── constants/                 # Map, layout, time, info-modal, state-FIPS constants
+│   │       ├── subsetCsv.ts       # Custom-dataset CSV builder (long format)
+│   │       └── synthesizeMap.ts   # d3-geo + Canvas choropleth renderer
+│   └── constants/                 # map, layout, time, dq, pages, stateFips
 ├── public/
-│   ├── states.pmtiles             # U.S. state polygons (vector tiles)
-│   ├── zip3.pmtiles               # ZIP3 polygons (vector tiles)
+│   ├── states.geojson             # U.S. state polygons (Census cb_2023, postal-keyed)
 │   ├── counties.geojson           # U.S. county polygons (FIPS-keyed)
-│   ├── world.geojson              # Non-US country backdrop (State Dept World Polygons)
-│   ├── data/*.json                # NDJSON exports consumed at runtime
-│   └── data/export/states-10m.json # us-atlas TopoJSON for the synthesized PNG/JPEG export
+│   ├── zip3.pmtiles               # ZIP3 polygons (vector tiles) for the live map
+│   ├── zip3codes.geojson          # ZIP3 polygons for the synthesized export
+│   ├── world.geojson              # Non-US country backdrop (no-basemap fallback)
+│   ├── data/*.json                # NDJSON aggregates, ACS enrollment, DQ Atlas
+│   ├── data/export/states-10m.json # us-atlas TopoJSON for the synthesized PNG/JPEG export
+│   └── team/                      # Team page headshots
 ├── scripts/
 │   ├── merge_hhs_nppes.py         # HHS × NPPES inner join (streaming)
-│   ├── join_geocoded.py           # Joins ArcGIS geocoder output back onto claims
+│   ├── extract_geocoding_input.py # Deduplicated address list for the geocoder
+│   ├── join_geocoded.py           # Joins geocoder output back onto claims
 │   ├── build_aggregates.py        # DuckDB → 6 NDJSON files
-│   ├── fetch_county_geometry.py   # plotly counties → public/counties.geojson
+│   ├── fetch_state_geometry.py    # Census states → public/states.geojson
+│   ├── fetch_county_geometry.py   # Census counties → public/counties.geojson
 │   ├── fetch_world_geometry.py    # State Dept World Polygons → public/world.geojson
 │   ├── fetch_acs_medicaid.py      # ACS C27007 → data/ACS medicaid enrollment/
-│   └── build_medicaid_enrollment.py  # ACS roll-up → public/data/medicaid_enrollment_*.json
+│   ├── build_medicaid_enrollment.py  # ACS roll-up → public/data/medicaid_enrollment_*.json
+│   ├── build_dq_atlas.py          # DQ Atlas CSVs → public/data/dq_atlas.json
+│   ├── analyze_coverage.py, diagnose_drops.py, categorize_servicing_ids.py
+│   │                              # NPPES merge-coverage diagnostics
+│   └── validate_*.py, plot_nhe.py # Reproducibility, linkage, and NHE benchmark checks
 ├── docs/                          # ARCHITECTURE, ADRs
 └── .github/                       # Workflows, templates, policies
 ```
@@ -270,7 +283,7 @@ CHOMP/
 
 - [ ] **Accessibility pass.** Tab-trap the modal, focus-visible styles for the category picker, and aria-live announcements on region selection.
 - [x] **Unit tests.** `vitest` harness with coverage for `formatters`, `dataService.getValueForRegion`, and URL-state round-trips. More coverage to come for store slicing and the detail panel.
-- [ ] **Component tests.** `@testing-library/react` coverage for `DetailPanel`, `LayerControl`, `InfoModal`.
+- [ ] **Component tests.** `@testing-library/react` coverage for `DetailPanel`, `LeftRail`, `AboutPage`.
 - [ ] **Visual regression.** Playwright screenshot diffs of the three primary layouts (empty, state-selected, zip3-selected).
 - [x] **Per-capita normalization.** ACS C27007 Medicaid enrollment drives the "Per Medicaid enrollee" metric at all three geographies; cross-level shared color scale winsorized at p95.
 - [ ] **Time-series chart.** Spark-line of the selected region + category in the detail panel.

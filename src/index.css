@@ -117,15 +117,6 @@ button {
     color: var(--ink);
     margin-bottom: 28px;
 }
-.chomp-about-page__lede {
-    font-family: var(--ff-serif);
-    font-size: 20px;
-    font-weight: 400;
-    line-height: 1.55;
-    color: var(--ink);
-    margin-bottom: 36px;
-    max-width: 60ch;
-}
 .chomp-about-page__sections {
     display: flex;
     flex-direction: column;
@@ -165,6 +156,7 @@ button {
     font-family: var(--ff-serif);
     font-size: 15px;
     line-height: 1.65;
+    color: var(--ink-mid);
 }
 .chomp-about-page__list-marker {
     flex-shrink: 0;
@@ -203,9 +195,6 @@ button {
     }
     .chomp-about-page__title {
         font-size: 30px;
-    }
-    .chomp-about-page__lede {
-        font-size: 17px;
     }
 }
 
@@ -411,19 +400,10 @@ button {
 }
 
 /* ──────────────────────────────────────────────────────────────────────
-   Left rail — single considered control panel that replaces the four
-   floating widgets on desktop. Pattern used by NYT interactives, The
-   Pudding, Kontinentalist, Reuters Graphics: one grouped card with small
-   editorial section headings, vertical radio lists for short options, chip
-   grids for long ones, and category dots for the color-mapped layer picker.
-
-   Deliberate design choices:
-   - Section headings are all-caps sans in ink-dim — magazine section cue.
-   - Radio items communicate selection via a 2px accent bar on the left
-     edge + bold ink text, not a filled pill. Reserves the accent color.
-   - Chips are text-first with a subtle surface2 pill for the active state.
-   - Category rows carry a colored dot (the layer's accent) that stays even
-     when inactive — the palette itself is information.
+   Left rail: the single desktop control card. Grouped sections with small
+   headings; short option sets are segmented toggles (.chomp-toggle), long
+   ones are native selects (.chomp-select), year and month are sliders.
+   The mobile FilterSheet reuses the toggle and select styles.
    ────────────────────────────────────────────────────────────────────── */
 .chomp-rail-card {
     background: var(--surface);
@@ -667,10 +647,6 @@ button {
 .chomp-rail-slider:focus-visible::-moz-range-thumb {
     transform: scale(1.2);
 }
-.chomp-rail-slider:disabled {
-    cursor: default;
-    opacity: 0.35;
-}
 .chomp-rail-slider-track {
     position: relative;
     padding: 4px 6px 0;
@@ -686,68 +662,6 @@ button {
     color: var(--ink-dim);
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1;
-}
-
-/* ──────────────────────────────────────────────────────────────────────
-   Segmented control — retained for the mobile bottom sheet (FilterSheet)
-   which still uses horizontal chip clusters at touch-target sizes.
-   Desktop no longer uses this; see .chomp-rail-* above.
-   ────────────────────────────────────────────────────────────────────── */
-.chomp-segmented {
-    display: flex;
-    gap: 1px;
-    padding: 3px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
-}
-.chomp-segmented--stack {
-    flex-direction: column;
-    gap: 2px;
-}
-.chomp-segmented--row {
-    align-items: center;
-    gap: 1px;
-}
-.chomp-segmented__btn {
-    padding: 6px 12px;
-    background: transparent;
-    border: none;
-    border-radius: 3px;
-    cursor: pointer;
-    font-family: var(--ff-sans);
-    font-size: 12px;
-    font-weight: 500;
-    letter-spacing: 0.005em;
-    color: var(--ink-mid);
-    line-height: 1.1;
-    transition:
-        background var(--dur-fast) var(--ease-out),
-        color var(--dur-fast) var(--ease-out);
-    white-space: nowrap;
-}
-.chomp-segmented__btn:hover {
-    color: var(--ink);
-    background: var(--surface2);
-}
-.chomp-segmented__btn[aria-pressed="true"] {
-    color: var(--ink);
-    font-weight: 600;
-    background: var(--surface2);
-    box-shadow: inset 0 0 0 1px var(--border);
-}
-.chomp-segmented__btn--compact {
-    padding: 5px 8px;
-    font-size: 11px;
-    font-variant-numeric: tabular-nums;
-    font-feature-settings: "tnum" 1;
-}
-.chomp-segmented__divider {
-    align-self: stretch;
-    width: 1px;
-    background: var(--border);
-    margin: 4px 2px;
 }
 
 /* Modal primary action — accent-owned; hover deepens rather than colorshifts,

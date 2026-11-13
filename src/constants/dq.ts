@@ -6,7 +6,7 @@ export const DQ_DATA_PATH = "data/dq_atlas.json";
 
 /** Default topic on first load; also the topic re-selected when the URL asks
  * for the overlay but doesn't name a topic. Kept in one place so the store,
- * DqControl, and URL parser agree. */
+ * LeftRail, and URL parser agree. */
 export const DEFAULT_DQ_TOPIC: DqTopicKey = "claims-volume";
 
 /** Ordered list of the 10 topics the overlay surfaces. Drives the sidebar

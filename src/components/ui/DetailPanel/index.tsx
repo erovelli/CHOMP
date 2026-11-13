@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { useMapStore } from "../../../lib/store";
+import { useMapFields } from "../../../lib/store";
 import {
     HEADER_HEIGHT,
     Z_INDEX,
@@ -14,7 +14,11 @@ import PanelContent from "./PanelContent";
 export default function DetailPanel() {
     const isMobile = useIsMobile();
     const sheetRef = useRef<HTMLDivElement>(null);
-    const { panelOpen, selectedDetail, setSelectedRegion } = useMapStore();
+    const { panelOpen, selectedDetail, setSelectedRegion } = useMapFields(
+        "panelOpen",
+        "selectedDetail",
+        "setSelectedRegion",
+    );
     const close = () => setSelectedRegion(null, null);
 
     // Mobile: bottom sheet sliding up over the map (the map above it stays

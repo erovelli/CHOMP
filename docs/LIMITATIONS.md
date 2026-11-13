@@ -200,7 +200,7 @@ The script also runs integrity checks — no unused geocoded addresses, and per-
 
 **Issue.** Adult Medicaid dental benefits vary dramatically by state: from comprehensive (NY, CA) to emergency-only (TN, AL) to none (DE). Pediatric coverage is more uniform (federally mandated under EPSDT).
 **Impact.** Raw claim counts and dollars are not comparable across states for adult dental services. A "low" map value in TN reflects benefit policy, not lack of need.
-**Mitigation.** Already surfaced in the InfoModal on the Harvard production site. Worth a paragraph in any policy interpretation of the map.
+**Mitigation.** Already surfaced on the About → Project page of the Harvard production site. Worth a paragraph in any policy interpretation of the map.
 
 ### L21 ⬜ Indian Health Service / tribal dental
 
@@ -332,7 +332,7 @@ from the ZIP3 map too.
 **Issue.** 316,734 rows carry territory county FIPS (PR `72`, GU `66`, VI `78`,
 MP `69`). `build_aggregates.py` maps these to USPS postals (`PR/GU/VI/MP`) so they
 roll into `state` and keep the `state == SUM(county)` invariant. But
-`states.pmtiles` and `counties.geojson` may not include territory polygons.
+`states.geojson` and `counties.geojson` may not include territory polygons.
 **Impact.** Territory keys exist in the data files but render nowhere on the map
 (the UI silently ignores keys with no matching feature). Territory claims are in
 the national `state`/`county` totals but invisible spatially.
@@ -399,8 +399,8 @@ provider-attribution piece is L37 specifically.
 
 **Mitigation.** No code-level mitigation in the map (would require a
 patient-residence attribution pass not available in HHS Open Data). Disclose
-in methods notes for any per-enrollee map. The InfoModal carries a one-line
-caveat to that effect.
+in methods notes for any per-enrollee map. The About → Data page carries a
+one-line caveat to that effect.
 **Status.** Structural; documented and surfaced.
 
 ---
