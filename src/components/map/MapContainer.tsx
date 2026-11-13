@@ -19,14 +19,14 @@ import {
     fetchProtomapsStyle,
     minimizeProtomapsStyle,
     PROTOMAPS_FIRST_LABEL_LAYER,
-    buildColorExpression,
-    colorExpression,
+    fillColorExpression,
     quantileStops,
 } from "../../lib/mapStyles";
 import {
     loadAnnualData,
     loadMonthlyData,
     loadDqAtlas,
+    dqHasYear,
     getAnnualDataForLevel,
     getMonthlyDataForLevel,
     getRegionValue,
@@ -188,7 +188,7 @@ function addGeoLayers(map: maplibregl.Map, level: GeoLevel, beforeId?: string) {
                 source: spec.source,
                 ...sourceLayer,
                 paint: {
-                    "fill-color": colorExpression as maplibregl.ExpressionSpecification,
+                    "fill-color": fillColorExpression() as maplibregl.ExpressionSpecification,
                     "fill-opacity": interactionExpr(spec.fillOpacity),
                 },
             },
@@ -252,14 +252,37 @@ function setActiveGeoLayer(map: maplibregl.Map, active: GeoLevel) {
     }
 }
 
-// ── Paint per-region values into feature-state (all three levels) ────
+// ── Choropleth paint (all three levels) ──────────────────────
 
+type StopsByLevel = Record<GeoLevel, number[]>;
+
+// Write every region's value into feature-state, derive the color stops from
+// those same values, and set each level's fill-color ramp. Returns the stops
+// so the caller can hand the visible level's scale to the Legend.
+//
 // `period` is either a 4-digit year ("2023") for the annual view, or a
 // "YYYY-MM" string ("2023-06") for the monthly view.
-function paintValues(map: maplibregl.Map, period: string, activeLayer: LayerKey, metric: Metric) {
+//
+// Scale rule:
+// - Volume (claims count): per-level quantile stops. Magnitudes differ by
+//   10–100× across state → county → ZIP3, so a shared scale would wash the
+//   smaller-grain levels into the light end of the palette.
+// - Per-enrollee rate: SHARED stops across all three levels, computed on
+//   the union of values. A rate is unit-free — "1.32 claims / enrollee"
+//   means the same thing at every level, so color should mean the same
+//   thing too.
+function paintChoropleth(
+    map: maplibregl.Map,
+    period: string,
+    activeLayer: LayerKey,
+    metric: Metric,
+): StopsByLevel {
+    const valuesByLevel = {} as Record<GeoLevel, number[]>;
     for (const level of GEO_LEVEL_KEYS) {
+        const values: number[] = [];
         for (const id of Object.keys(dataForPeriod(level, period))) {
             const value = getRegionValue(level, id, period, activeLayer, metric);
+            values.push(value);
             // The per-enrollee metric is NaN when ACS has no record for the
             // geography (e.g. territories, PO-box ZIPs — see L26/L37).
             // MapLibre's `interpolate` doesn't handle NaN, so coerce to 0 at
@@ -271,7 +294,29 @@ function paintValues(map: maplibregl.Map, period: string, activeLayer: LayerKey,
                 value: Number.isFinite(value) ? value : 0,
             });
         }
+        valuesByLevel[level] = values;
     }
+
+    const sharedStops =
+        metric === "enrollees" ? quantileStops(Object.values(valuesByLevel).flat(), metric) : null;
+
+    const stopsByLevel = {} as StopsByLevel;
+    for (const level of GEO_LEVEL_KEYS) {
+        const stops = sharedStops ?? quantileStops(valuesByLevel[level], metric);
+        stopsByLevel[level] = stops;
+        map.setPaintProperty(GEO_LAYERS[level].fill, "fill-color", fillColorExpression(stops));
+    }
+    return stopsByLevel;
+}
+
+// The period the choropleth shows: "YYYY-MM" once the user has picked a month
+// AND the monthly data has loaded; the bare year until then, so the map never
+// goes blank while we wait on a ~16 MB gzipped fetch.
+function currentPeriod(): string {
+    const { selectedYear, selectedMonth, monthlyDataLoaded } = useMapStore.getState();
+    return selectedMonth !== null && monthlyDataLoaded
+        ? `${selectedYear}-${selectedMonth.padStart(2, "0")}`
+        : selectedYear;
 }
 
 // ── DQ Atlas overlay ────────────────────────────────────────
@@ -353,10 +398,8 @@ function setDqVisibility(map: maplibregl.Map, visible: boolean) {
     }
 }
 
-// Iterate the (topic, year) bucket and write the resolved swatch color into
-// each state's feature-state. States absent from the bucket keep the previous
-// paint until this or the next paint pass clears them — call clearDqRings
-// first when switching topic/year to avoid stale colors leaking through.
+// Write the (topic, year) bucket's swatch colors into each state's
+// feature-state, clearing every known state first.
 function paintDqRings(
     map: maplibregl.Map,
     data: DqData,
@@ -410,107 +453,39 @@ export default function MapContainer() {
     // colors when topic/year changes so a state present last pass but missing
     // this pass doesn't keep its old ring color.
     const dqKnownStatesRef = useRef<Set<string>>(new Set());
-    const activeLayerRef = useRef<LayerKey>(activeLayer);
-    const selectedYearRef = useRef<string>(selectedYear);
-    const selectedMonthRef = useRef<string | null>(selectedMonth);
-    const metricRef = useRef<Metric>(metric);
-    const geoLevelRef = useRef<GeoLevel>(geoLevel);
-    const monthlyLoadedRef = useRef<boolean>(monthlyDataLoaded);
-    // Current data-driven color stops, shared with hover/select handlers.
-    const stopsRef = useRef<number[]>([]);
+    // Color stops from the last repaint, kept per level so a geography switch
+    // can hand the Legend its scale without recomputing every value.
+    const stopsRef = useRef<StopsByLevel | null>(null);
     // True once the load handler has added our layers, loaded annual data, and
     // done the first paint. The repaint effects gate on this rather than
     // map.isStyleLoaded(): isStyleLoaded() goes false during transient tile /
     // glyph fetches (e.g. right after a year change), and an effect that bails
     // then never re-runs — leaving the map painted for a stale metric/level.
-    // Before this flips, the effects only update refs and the load handler's
-    // first paint picks them up.
+    // The load handler's first paint reads the store directly, so anything
+    // the user changed before this flips is picked up there.
     const mapReadyRef = useRef(false);
 
-    // "YYYY-MM" once the user has picked a month AND the monthly data has
-    // loaded; the bare year until then, so the choropleth never goes blank
-    // while we wait on a ~16 MB gzipped fetch. Reads only refs, so empty deps
-    // keep it referentially stable (the handlers below depend on it).
-    const currentPeriod = useCallback((): string => {
-        const m = selectedMonthRef.current;
-        if (m !== null && monthlyLoadedRef.current) {
-            return `${selectedYearRef.current}-${m.padStart(2, "0")}`;
-        }
-        return selectedYearRef.current;
-    }, []);
-
-    // Re-apply one level's fill-color with its current hover/selection baked in.
-    const applyFillColor = useCallback((level: GeoLevel, stops: number[]) => {
-        map.current?.setPaintProperty(
-            GEO_LAYERS[level].fill,
-            "fill-color",
-            buildColorExpression(
-                hoveredRef.current[level],
-                selectedRef.current[level],
-                GEO_LAYERS[level].idProp,
-                stops,
-            ),
-        );
-    }, []);
-
-    // Recompute the dynamic color scale and re-apply fill-color per level.
-    //
-    // Scale rule:
-    // - Volume (claims count): per-level quantile stops. Magnitudes differ by
-    //   10–100× across state → county → ZIP3, so a shared scale would wash the
-    //   smaller-grain levels into the light end of the palette.
-    // - Per-enrollee rate: SHARED stops across all three levels, computed on
-    //   the union of values. A rate is unit-free — "1.32 claims / enrollee"
-    //   means the same thing at every level, so color should mean the same
-    //   thing too. The shared scale is also what the Legend reads.
-    const applyActiveColors = useCallback(() => {
+    // Repaint values and rescale every level from the current store state.
+    // Reads the store imperatively so it stays referentially stable for the
+    // load handler and the effects that call it.
+    const repaint = useCallback(() => {
         if (!map.current) return;
-        const period = currentPeriod();
-        const metric = metricRef.current;
+        const state = useMapStore.getState();
+        const stops = paintChoropleth(
+            map.current,
+            currentPeriod(),
+            state.activeLayer,
+            state.metric,
+        );
+        stopsRef.current = stops;
+        setColorStops(stops[state.geoLevel]);
+    }, [setColorStops]);
 
-        const valuesByLevel = {} as Record<GeoLevel, number[]>;
-        for (const level of GEO_LEVEL_KEYS) {
-            valuesByLevel[level] = Object.keys(dataForPeriod(level, period)).map((id) =>
-                getRegionValue(level, id, period, activeLayerRef.current, metric),
-            );
-        }
-
-        const sharedStops =
-            metric === "enrollees"
-                ? quantileStops(Object.values(valuesByLevel).flat(), metric)
-                : null;
-
-        for (const level of GEO_LEVEL_KEYS) {
-            const stops = sharedStops ?? quantileStops(valuesByLevel[level], metric);
-            if (level === geoLevelRef.current) {
-                stopsRef.current = stops;
-                setColorStops(stops);
-            }
-            applyFillColor(level, stops);
-        }
-    }, [setColorStops, currentPeriod, applyFillColor]);
-
-    // Repaint values + rescale when category, year, month, monthly-load, or
-    // metric changes. The choropleth shows monthly values once the user has
-    // picked a month AND the monthly NDJSON has finished loading.
+    // Repaint when category, year, month, monthly-load, or metric changes.
     useEffect(() => {
-        activeLayerRef.current = activeLayer;
-        selectedYearRef.current = selectedYear;
-        selectedMonthRef.current = selectedMonth;
-        metricRef.current = metric;
-        monthlyLoadedRef.current = monthlyDataLoaded;
-        if (!map.current || !mapReadyRef.current) return;
-        paintValues(map.current, currentPeriod(), activeLayer, metric);
-        applyActiveColors();
-    }, [
-        activeLayer,
-        selectedYear,
-        selectedMonth,
-        metric,
-        monthlyDataLoaded,
-        applyActiveColors,
-        currentPeriod,
-    ]);
+        if (!mapReadyRef.current) return;
+        repaint();
+    }, [activeLayer, selectedYear, selectedMonth, metric, monthlyDataLoaded, repaint]);
 
     // Lazy-load the monthly NDJSON the first time the user picks a month.
     useEffect(() => {
@@ -525,18 +500,18 @@ export default function MapContainer() {
         };
     }, [selectedMonth, monthlyDataLoaded, setMonthlyDataLoaded]);
 
-    // Switch the visible geography level and rescale to its distribution.
+    // Switch the visible geography level. Every level is already painted, so
+    // this only swaps which one is shown and which scale the Legend reads.
     useEffect(() => {
-        geoLevelRef.current = geoLevel;
         if (!map.current || !mapReadyRef.current) return;
         setActiveGeoLayer(map.current, geoLevel);
-        applyActiveColors();
         // setActiveGeoLayer hoists the state stroke to keep the state border
         // above county/zip3 fills; the DQ overlay is state-scoped too and
         // needs to sit above that stroke, so re-hoist it after every level
         // change (halo first, then each severity tier in order).
         hoistDqLayers(map.current);
-    }, [geoLevel, applyActiveColors]);
+        if (stopsRef.current) setColorStops(stopsRef.current[geoLevel]);
+    }, [geoLevel, setColorStops]);
 
     // DQ overlay paint + visibility. Repaints when (dqData, dqTopic,
     // selectedYear) change. Hides the overlay entirely when the topic has no
@@ -550,11 +525,7 @@ export default function MapContainer() {
         const m = map.current;
         if (!m || !m.getLayer(DQ_RING_HALO_LAYER)) return;
 
-        const hasYearData =
-            !!dqData &&
-            !!dqData.topics[dqTopic]?.years[selectedYear] &&
-            Object.keys(dqData.topics[dqTopic].years[selectedYear]).length > 0;
-        const shouldShow = dqOverlayVisible && hasYearData;
+        const shouldShow = dqOverlayVisible && dqHasYear(dqData, dqTopic, selectedYear);
 
         if (shouldShow && dqData) {
             paintDqRings(m, dqData, dqTopic, selectedYear, dqKnownStatesRef.current);
@@ -562,7 +533,7 @@ export default function MapContainer() {
         setDqVisibility(m, shouldShow);
     }, [dqData, dqTopic, dqOverlayVisible, selectedYear]);
 
-    // Reset paint when panel is closed
+    // Drop the selection highlight when the panel closes.
     useEffect(() => {
         if (selectedRegion !== null) return;
         if (!map.current) return;
@@ -573,18 +544,16 @@ export default function MapContainer() {
             map.current.setFeatureState(featureRef(level, id), { selected: false });
             selectedRef.current[level] = null;
         }
-
-        // Redraw the active layer (no selection highlight) with current stops.
-        applyActiveColors();
-    }, [selectedRegion, applyActiveColors]);
+    }, [selectedRegion]);
 
     // ── Pointer handlers (one set, registered once per level) ────
     // Every level's fill layer stays mounted, so each handler first checks
-    // that its level is the one on screen.
+    // that its level is the one on screen. Hover and selection are written to
+    // feature-state only; the layers' paint expressions do the rest.
 
     const handleClick = useCallback(
         (level: GeoLevel, e: LayerMouseEvent) => {
-            if (geoLevelRef.current !== level) return;
+            if (useMapStore.getState().geoLevel !== level) return;
             if (!e.features?.length || !map.current) return;
             const props = e.features[0].properties;
             const id = props?.[GEO_LAYERS[level].idProp] as string;
@@ -596,7 +565,6 @@ export default function MapContainer() {
             }
             selectedRef.current[level] = id;
             map.current.setFeatureState(featureRef(level, id), { selected: true });
-            applyFillColor(level, stopsRef.current);
 
             setSelectedRegion(id, {
                 id,
@@ -606,12 +574,12 @@ export default function MapContainer() {
             });
             dismissHint();
         },
-        [setSelectedRegion, dismissHint, applyFillColor],
+        [setSelectedRegion, dismissHint],
     );
 
     const handleMouseMove = useCallback(
         (level: GeoLevel, e: LayerMouseEvent) => {
-            if (geoLevelRef.current !== level) return;
+            if (useMapStore.getState().geoLevel !== level) return;
             if (!map.current || !e.features?.length) return;
             map.current.getCanvas().style.cursor = "pointer";
             const props = e.features[0].properties;
@@ -624,26 +592,20 @@ export default function MapContainer() {
             }
             hoveredRef.current[level] = id;
             map.current.setFeatureState(featureRef(level, id), { hover: true });
-            applyFillColor(level, stopsRef.current);
 
-            const value = getRegionValue(
-                level,
-                id,
-                currentPeriod(),
-                activeLayerRef.current,
-                metricRef.current,
-            );
+            const { activeLayer, metric } = useMapStore.getState();
+            const value = getRegionValue(level, id, currentPeriod(), activeLayer, metric);
             setHovered(REGION_LABELS[level].tooltip(id, props?.name as string | undefined), value, {
                 x: e.point.x,
                 y: e.point.y,
             });
         },
-        [setHovered, currentPeriod, applyFillColor],
+        [setHovered],
     );
 
     const handleMouseLeave = useCallback(
         (level: GeoLevel) => {
-            if (geoLevelRef.current !== level) return;
+            if (useMapStore.getState().geoLevel !== level) return;
             if (!map.current) return;
             map.current.getCanvas().style.cursor = "";
 
@@ -653,9 +615,8 @@ export default function MapContainer() {
             }
             hoveredRef.current[level] = null;
             setHovered(null, null, null);
-            applyFillColor(level, stopsRef.current);
         },
-        [setHovered, applyFillColor],
+        [setHovered],
     );
 
     // ── Map initialization ───────────────────────────────────
@@ -758,7 +719,7 @@ export default function MapContainer() {
                 // the source already exists. Layers start hidden — turned on
                 // by the visibility effect once dqData resolves.
                 addDqRingLayers(map.current);
-                setActiveGeoLayer(map.current, geoLevelRef.current);
+                setActiveGeoLayer(map.current, useMapStore.getState().geoLevel);
                 // setActiveGeoLayer hoists the state stroke to the top for
                 // county/zip3 spatial context; the DQ overlay belongs above
                 // that, so hoist it again as the final step.
@@ -772,13 +733,12 @@ export default function MapContainer() {
                 }
 
                 await loadAnnualData();
-                paintValues(
-                    map.current,
-                    currentPeriod(),
-                    activeLayerRef.current,
-                    metricRef.current,
-                );
-                applyActiveColors();
+                if (!map.current) return;
+                // The level effect is a no-op until mapReadyRef flips, so
+                // re-apply the level in case it changed during the fetch.
+                setActiveGeoLayer(map.current, useMapStore.getState().geoLevel);
+                hoistDqLayers(map.current);
+                repaint();
                 mapReadyRef.current = true;
                 // Track every state id the annual data knows about so the DQ
                 // ring pass can wipe stale colors from states not present in
@@ -800,14 +760,7 @@ export default function MapContainer() {
             map.current?.remove();
             map.current = null;
         };
-    }, [
-        applyActiveColors,
-        currentPeriod,
-        handleClick,
-        handleMouseMove,
-        handleMouseLeave,
-        setDqData,
-    ]);
+    }, [repaint, handleClick, handleMouseMove, handleMouseLeave, setDqData]);
 
     return (
         <div
