@@ -1,4 +1,4 @@
-import { useMapStore } from "../../lib/store";
+import { useMapFields } from "../../lib/store";
 import { LAYER_CONFIGS, LAYER_ORDER, GEO_LEVELS, METRIC_OPTIONS } from "../../constants/map";
 import { AVAILABLE_YEARS, MONTH_NAMES } from "../../constants/time";
 import { HEADER_HEIGHT, Z_INDEX } from "../../constants/layout";
@@ -30,7 +30,22 @@ export default function LeftRail() {
         dqOverlayVisible,
         setDqOverlayVisible,
         dqData,
-    } = useMapStore();
+    } = useMapFields(
+        "activeLayer",
+        "setActiveLayer",
+        "geoLevel",
+        "setGeoLevel",
+        "metric",
+        "setMetric",
+        "selectedMonth",
+        "selectedYear",
+        "monthlyDataLoaded",
+        "dqTopic",
+        "setDqTopic",
+        "dqOverlayVisible",
+        "setDqOverlayVisible",
+        "dqData",
+    );
     const loadingMonthly = selectedMonth !== null && !monthlyDataLoaded;
     const isAllMonths = selectedMonth === null;
     const currentMonthLabel = isAllMonths
@@ -180,7 +195,7 @@ function HeadingValue({ children, muted }: { children: React.ReactNode; muted?: 
 }
 
 function YearSlider() {
-    const { selectedYear, setSelectedYear } = useMapStore();
+    const { selectedYear, setSelectedYear } = useMapFields("selectedYear", "setSelectedYear");
     const min = parseInt(AVAILABLE_YEARS[0], 10);
     const max = parseInt(AVAILABLE_YEARS[AVAILABLE_YEARS.length - 1], 10);
     const value = parseInt(selectedYear, 10);
@@ -208,7 +223,7 @@ function YearSlider() {
 }
 
 function MonthSlider() {
-    const { selectedMonth, setSelectedMonth } = useMapStore();
+    const { selectedMonth, setSelectedMonth } = useMapFields("selectedMonth", "setSelectedMonth");
     // Slider is always enabled — dragging always sets a specific month, which
     // is the natural way to leave the All state.
     const monthInt = selectedMonth === null ? 1 : parseInt(selectedMonth, 10);

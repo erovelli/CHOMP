@@ -1,4 +1,4 @@
-import { useMapStore } from "../../lib/store";
+import { useMapFields } from "../../lib/store";
 import { LAYER_CONFIGS } from "../../constants/map";
 import { CHOROPLETH_COLORS } from "../../lib/mapStyles";
 import { formatStop, formatRatio } from "../../lib/formatters";
@@ -7,7 +7,7 @@ import { useIsMobile } from "../../lib/useMediaQuery";
 
 export default function Legend() {
     const isMobile = useIsMobile();
-    const { activeLayer, metric, colorStops } = useMapStore();
+    const { activeLayer, metric, colorStops } = useMapFields("activeLayer", "metric", "colorStops");
     const cfg = LAYER_CONFIGS[activeLayer];
     const fmt = metric === "enrollees" ? formatRatio : formatStop;
     const unit =

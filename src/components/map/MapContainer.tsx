@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import maplibregl from "maplibre-gl";
 import { Protocol } from "pmtiles";
-import { useMapStore } from "../../lib/store";
+import { useMapStore, useMapFields } from "../../lib/store";
 import type { DqTopicKey, DqData, LayerKey, GeoLevel, Metric } from "../../lib/types";
 import {
     DQ_RING_HALO_LAYER,
@@ -448,7 +448,24 @@ export default function MapContainer() {
         dqOverlayVisible,
         dqData,
         setDqData,
-    } = useMapStore();
+    } = useMapFields(
+        "activeLayer",
+        "selectedYear",
+        "selectedMonth",
+        "selectedRegion",
+        "geoLevel",
+        "metric",
+        "monthlyDataLoaded",
+        "setMonthlyDataLoaded",
+        "setSelectedRegion",
+        "setHovered",
+        "setColorStops",
+        "dismissHint",
+        "dqTopic",
+        "dqOverlayVisible",
+        "dqData",
+        "setDqData",
+    );
     // Set of state ids that have DQ feature-state set. Used to clear stale
     // colors when topic/year changes so a state present last pass but missing
     // this pass doesn't keep its old ring color.

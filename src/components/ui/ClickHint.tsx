@@ -1,10 +1,10 @@
-import { useMapStore } from "../../lib/store";
+import { useMapFields } from "../../lib/store";
 import { DETAIL_PANEL_WIDTH, HEADER_HEIGHT, Z_INDEX } from "../../constants/layout";
 import { useIsMobile } from "../../lib/useMediaQuery";
 
 export default function ClickHint() {
     const isMobile = useIsMobile();
-    const { hintVisible, panelOpen } = useMapStore();
+    const { hintVisible, panelOpen } = useMapFields("hintVisible", "panelOpen");
 
     // Mobile: top-center under the header (the bottom strip belongs to the
     // legend and the desktop spot would collide with it).

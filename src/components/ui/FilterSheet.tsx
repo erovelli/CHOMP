@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useMapStore } from "../../lib/store";
+import { useMapFields } from "../../lib/store";
 import { LAYER_CONFIGS, LAYER_ORDER, GEO_LEVELS, METRIC_OPTIONS } from "../../constants/map";
 import { AVAILABLE_YEARS, MONTH_OPTIONS } from "../../constants/time";
 import { Z_INDEX, SHEET_MAX_WIDTH, PANEL_TRANSITION } from "../../constants/layout";
@@ -35,7 +35,23 @@ export default function FilterSheet({ open, onClose }: { open: boolean; onClose:
         setDqTopic,
         dqOverlayVisible,
         setDqOverlayVisible,
-    } = useMapStore();
+    } = useMapFields(
+        "activeLayer",
+        "setActiveLayer",
+        "geoLevel",
+        "setGeoLevel",
+        "metric",
+        "setMetric",
+        "selectedYear",
+        "setSelectedYear",
+        "selectedMonth",
+        "setSelectedMonth",
+        "monthlyDataLoaded",
+        "dqTopic",
+        "setDqTopic",
+        "dqOverlayVisible",
+        "setDqOverlayVisible",
+    );
     const sheetRef = useRef<HTMLDivElement>(null);
     const loadingMonthly = selectedMonth !== null && !monthlyDataLoaded;
 

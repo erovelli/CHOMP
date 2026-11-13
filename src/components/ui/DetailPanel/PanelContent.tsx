@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useMapStore } from "../../../lib/store";
+import { useMapFields } from "../../../lib/store";
 import type { RegionDetail, MonthlyDataRecord } from "../../../lib/types";
 import { getMonthlyDataForLevel, getEnrolleesFor } from "../../../lib/dataService";
 import { formatCurrency } from "../../../lib/formatters";
@@ -17,7 +17,11 @@ export default function PanelContent({
 }) {
     // Year + month are picked in the LeftRail / FilterSheet; the panel reads
     // them from the store so the displayed stats follow that period.
-    const { selectedYear, selectedMonth, monthlyDataLoaded } = useMapStore();
+    const { selectedYear, selectedMonth, monthlyDataLoaded } = useMapFields(
+        "selectedYear",
+        "selectedMonth",
+        "monthlyDataLoaded",
+    );
     const isMonthly = selectedMonth !== null;
     const yearMonth = isMonthly ? `${selectedYear}-${selectedMonth}` : null;
 

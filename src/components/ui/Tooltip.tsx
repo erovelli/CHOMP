@@ -1,4 +1,4 @@
-import { useMapStore } from "../../lib/store";
+import { useMapFields } from "../../lib/store";
 import { LAYER_CONFIGS } from "../../constants/map";
 import { Z_INDEX } from "../../constants/layout";
 import { formatRatio } from "../../lib/formatters";
@@ -6,7 +6,13 @@ import { useIsCoarsePointer } from "../../lib/useMediaQuery";
 
 export default function Tooltip() {
     const coarsePointer = useIsCoarsePointer();
-    const { hoveredRegion, hoveredValue, hoveredPoint, activeLayer, metric } = useMapStore();
+    const { hoveredRegion, hoveredValue, hoveredPoint, activeLayer, metric } = useMapFields(
+        "hoveredRegion",
+        "hoveredValue",
+        "hoveredPoint",
+        "activeLayer",
+        "metric",
+    );
     const cfg = LAYER_CONFIGS[activeLayer];
 
     // Touch devices have no hover; a tap would pin the tooltip at the tap
