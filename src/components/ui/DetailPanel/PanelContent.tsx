@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useMapStore } from "../../../lib/store";
 import type { RegionDetail, MonthlyDataRecord } from "../../../lib/types";
-import { getMonthlyRecords, getEnrolleesFor } from "../../../lib/dataService";
+import { getMonthlyDataForLevel, getEnrolleesFor } from "../../../lib/dataService";
 import { formatCurrency } from "../../../lib/formatters";
 import { MONTH_NAMES } from "../../../constants/time";
 import StatCard from "./StatCard";
@@ -24,7 +24,10 @@ export default function PanelContent({
     // Monthly records are a synchronous lookup from the already-loaded cache, so
     // derive them during render rather than mirroring into state via an effect.
     const monthlyRecords = useMemo<MonthlyDataRecord[]>(
-        () => (isMonthly && monthlyDataLoaded ? getMonthlyRecords(detail.id, detail.level) : []),
+        () =>
+            isMonthly && monthlyDataLoaded
+                ? (getMonthlyDataForLevel(detail.level)[detail.id] ?? [])
+                : [],
         [detail.id, detail.level, isMonthly, monthlyDataLoaded],
     );
 

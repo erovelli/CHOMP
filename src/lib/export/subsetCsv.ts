@@ -1,5 +1,13 @@
 import Papa from "papaparse";
-import type { DataRecord, MonthlyDataRecord, EnrollmentRecord, GeoLevel, LayerKey } from "../types";
+import {
+    recordPeriod,
+    type ClaimsRecord,
+    type DataRecord,
+    type MonthlyDataRecord,
+    type EnrollmentRecord,
+    type GeoLevel,
+    type LayerKey,
+} from "../types";
 import { CATEGORY_TO_KEY, LAYER_CONFIGS } from "../../constants/map";
 import { STATE_USPS_TO_NAME } from "../../constants/stateFips";
 
@@ -117,11 +125,8 @@ export function buildSubsetCsvRows({
     enrollment,
     countyNames,
 }: BuildSubsetRowsArgs): SubsetCsvRow[] {
-    const data: Record<string, Array<DataRecord | MonthlyDataRecord>> = grain === "monthly"
-        ? (monthlyData ?? {})
-        : (annualData ?? {});
-    const periodOf = (r: DataRecord | MonthlyDataRecord): string =>
-        grain === "monthly" ? (r as MonthlyDataRecord).year_month : (r as DataRecord).year;
+    const data: Record<string, ClaimsRecord[]> =
+        grain === "monthly" ? (monthlyData ?? {}) : (annualData ?? {});
 
     const wantedCategories = new Set<LayerKey>(categories);
     const rows: SubsetCsvRow[] = [];
@@ -139,7 +144,7 @@ export function buildSubsetCsvRows({
             let sawAny = false;
 
             for (const r of records) {
-                if (periodOf(r) !== period) continue;
+                if (recordPeriod(r) !== period) continue;
                 sawAny = true;
                 if (includeAllCategoriesTotal) {
                     allTotals.claims += r.total_claims;

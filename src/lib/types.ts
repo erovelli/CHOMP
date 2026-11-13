@@ -62,6 +62,14 @@ export interface MonthlyDataRecord {
     total_amount_paid: number;
 }
 
+/** A claims row at either time grain. */
+export type ClaimsRecord = DataRecord | MonthlyDataRecord;
+
+/** The period a claims row belongs to: "YYYY" for annual, "YYYY-MM" for monthly. */
+export function recordPeriod(record: ClaimsRecord): string {
+    return "year_month" in record ? record.year_month : record.year;
+}
+
 export interface RegionDetail {
     id: string;
     name: string;
