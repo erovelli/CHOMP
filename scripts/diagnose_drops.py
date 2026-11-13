@@ -35,7 +35,7 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
-from analyze_coverage import _load_npi_set, _shift_yyyymm  # noqa: E402
+from analyze_coverage import _load_npi_set  # noqa: E402
 
 
 def main() -> int:

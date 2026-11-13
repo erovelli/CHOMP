@@ -21,14 +21,14 @@ export const SUBSET_CSV_COLUMNS = [
     "claims_per_enrollee",
 ] as const;
 
-export type SubsetCsvColumn = (typeof SUBSET_CSV_COLUMNS)[number];
+type SubsetCsvColumn = (typeof SUBSET_CSV_COLUMNS)[number];
 export type SubsetCsvRow = Record<SubsetCsvColumn, string | number>;
 
 export type Grain = "annual" | "monthly";
 
 // Pseudo-category label for the optional summed-across-all-categories row.
 // Matches the live map / csv.ts "All Categories" wording.
-export const ALL_CATEGORIES_LABEL = "All Categories";
+const ALL_CATEGORIES_LABEL = "All Categories";
 
 interface BuildSubsetRowsArgs {
     level: GeoLevel;

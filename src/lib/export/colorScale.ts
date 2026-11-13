@@ -40,9 +40,8 @@ function lerpRgb(a: Rgb, b: Rgb, t: number): Rgb {
 
 const PALETTE_RGB: Rgb[] = CHOROPLETH_COLORS.map(hexToRgb);
 
-// Color shown for missing/NaN values — matches the InfoModal's "no data" mood.
-// Kept exported so callers (legend, modal preview) can render a swatch for it.
-export const NO_DATA_COLOR = "#eaeae6";
+// Color shown for missing/NaN values.
+const NO_DATA_COLOR = "#eaeae6";
 
 /**
  * Color a single value into a hex string, using the same linear interpolation

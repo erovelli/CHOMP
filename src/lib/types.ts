@@ -39,11 +39,8 @@ export interface EnrollmentRecord {
 }
 
 export interface LayerConfig {
-    key: LayerKey;
     label: string;
-    description: string;
     unit: string;
-    accent: string;
 }
 
 // total_beneficiaries_served is shipped in the NDJSON for use in side-panel
@@ -70,7 +67,6 @@ export interface RegionDetail {
     name: string;
     level: GeoLevel;
     records: DataRecord[];
-    monthlyRecords?: MonthlyDataRecord[];
 }
 
 // ── DQ Atlas overlay ─────────────────────────────────────────
@@ -107,7 +103,7 @@ export interface DqStateRecord {
     pct?: number;
 }
 
-export interface DqTopic {
+interface DqTopic {
     label: string;
     description: string;
     metric_label: string;

@@ -57,7 +57,7 @@ export const GEO_LEVELS: { key: GeoLevel; label: string }[] = [
     { key: "zip3", label: "ZIP3" },
 ];
 
-// ── Metric toggle (shared by MetricControl and the mobile FilterSheet) ──
+// ── Metric toggle (shared by LeftRail and the mobile FilterSheet) ──
 export const METRIC_OPTIONS: { key: Metric; label: string }[] = [
     { key: "claims", label: "Volume" },
     { key: "enrollees", label: "Per enrollee" },
@@ -108,8 +108,8 @@ export const ZIP3_LINE_OPACITY = { selected: 1, default: 0.4 } as const;
 export const COUNTY_LINE_OPACITY = { selected: 1, default: 0.35 } as const;
 
 // ── Category mapping ──────────────────────────────────────────
-// Bridges the SQL category strings (built by scripts/build_aggregates.py and
-// migration 006) to the UI LayerKey. Every CDT/ADA category present in the data
+// Bridges the category strings emitted by scripts/build_aggregates.py to the
+// UI LayerKey. Every CDT/ADA category present in the data
 // has its own selectable layer.
 export const CATEGORY_TO_KEY: Record<string, LayerKey> = {
     Diagnostic: "diagnostic",
@@ -129,95 +129,56 @@ export const CATEGORY_TO_KEY: Record<string, LayerKey> = {
 // ── Layer configs ─────────────────────────────────────────────
 export const LAYER_CONFIGS: Record<LayerKey, LayerConfig> = {
     all: {
-        key: "all",
         label: "All categories",
-        description: "Total across all procedure types",
         unit: "total claims",
-        accent: "#1e8a7e",
     },
     diagnostic: {
-        key: "diagnostic",
         label: "Diagnostic",
-        description: "Exams, x-rays, evaluations",
         unit: "claims",
-        accent: "#4a7fcb",
     },
     preventive: {
-        key: "preventive",
         label: "Preventive",
-        description: "Cleanings, fluoride, sealants",
         unit: "claims",
-        accent: "#2ca58d",
     },
     restorative: {
-        key: "restorative",
         label: "Restorative",
-        description: "Fillings, crowns, inlays",
         unit: "claims",
-        accent: "#c87d2a",
     },
     endodontics: {
-        key: "endodontics",
         label: "Endodontics",
-        description: "Root canals, pulp therapy",
         unit: "claims",
-        accent: "#d4694a",
     },
     periodontics: {
-        key: "periodontics",
         label: "Periodontics",
-        description: "Gum disease treatment",
         unit: "claims",
-        accent: "#5c9e7a",
     },
     prosthodontics_removable: {
-        key: "prosthodontics_removable",
         label: "Removable Prosthodontics",
-        description: "Dentures, partials",
         unit: "claims",
-        accent: "#6b8cae",
     },
     maxillofacial_prosthetics: {
-        key: "maxillofacial_prosthetics",
         label: "Maxillofacial Prosthetics",
-        description: "Surgical obturators, facial-defect prostheses",
         unit: "claims",
-        accent: "#a07ba8",
     },
     implant_services: {
-        key: "implant_services",
         label: "Implant Services",
-        description: "Surgical implants",
         unit: "claims",
-        accent: "#4d7a91",
     },
     prosthodontics_fixed: {
-        key: "prosthodontics_fixed",
         label: "Fixed Prosthodontics",
-        description: "Fixed bridges, retainers",
         unit: "claims",
-        accent: "#5e7799",
     },
     oral_max_surgery: {
-        key: "oral_max_surgery",
         label: "Oral & Maxillofacial Surgery",
-        description: "Extractions, surgical procedures",
         unit: "claims",
-        accent: "#b03a3a",
     },
     orthodontics: {
-        key: "orthodontics",
         label: "Orthodontics",
-        description: "Braces, retainers",
         unit: "claims",
-        accent: "#7a5cb8",
     },
     adjunctive: {
-        key: "adjunctive",
         label: "Adjunctive General Services",
-        description: "Anesthesia, drugs, palliative care",
         unit: "claims",
-        accent: "#8c7853",
     },
 };
 
@@ -237,8 +198,3 @@ export const LAYER_ORDER: LayerKey[] = [
     "orthodontics",
     "adjunctive",
 ];
-
-/** Derive category→color map from LAYER_CONFIGS via CATEGORY_TO_KEY */
-export const CATEGORY_COLORS: Record<string, string> = Object.fromEntries(
-    Object.entries(CATEGORY_TO_KEY).map(([cat, key]) => [cat, LAYER_CONFIGS[key].accent]),
-);

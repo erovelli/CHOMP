@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useState } from "react";
+import { Suspense, lazy, useCallback, useState } from "react";
 import LeftRail from "./LeftRail";
 import FilterSheet from "./FilterSheet";
 import DetailPanel from "./DetailPanel/index";
@@ -8,7 +8,7 @@ import ClickHint from "./ClickHint";
 import AboutPage from "./AboutPage";
 import { HEADER_HEIGHT, Z_INDEX } from "../../constants/layout";
 import { NAV_PAGES, NAV_LABELS, REPO_URL, type NavPage } from "../../constants/pages";
-import { useIsMobile } from "../../lib/useMediaQuery";
+import { useIsMobile, useMediaQuery } from "../../lib/useMediaQuery";
 
 // Export deps (d3-geo, topojson-client, papaparse) are only needed once the
 // user opens the modal — load them lazily so they stay out of the critical
@@ -96,7 +96,7 @@ export default function Header() {
                                 fontFamily: "var(--ff-sans)",
                                 fontSize: 13,
                                 fontWeight: 400,
-                                color: "var(--ink-muted, var(--ink))",
+                                color: "var(--ink)",
                                 opacity: 0.7,
                                 whiteSpace: "nowrap",
                                 // Belt-and-suspenders: if a future font-metric
@@ -296,19 +296,4 @@ function GitHubGlyph() {
             />
         </svg>
     );
-}
-
-// Local hook — avoids re-exporting from useMediaQuery just for one call.
-function useMediaQuery(query: string): boolean {
-    const [matches, setMatches] = useState(() =>
-        typeof window === "undefined" ? false : window.matchMedia(query).matches,
-    );
-    useEffect(() => {
-        const mql = window.matchMedia(query);
-        const onChange = () => setMatches(mql.matches);
-        onChange();
-        mql.addEventListener("change", onChange);
-        return () => mql.removeEventListener("change", onChange);
-    }, [query]);
-    return matches;
 }

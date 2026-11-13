@@ -1,7 +1,7 @@
 export const AVAILABLE_YEARS = ["2018", "2019", "2020", "2021", "2022", "2023", "2024"];
 export const DEFAULT_YEAR = "2024";
 
-// "All" + 12 months, shared by TimeControl and the mobile FilterSheet.
+// "All" + 12 months, used by the mobile FilterSheet's month picker.
 // Picking a month repaints the choropleth with monthly values (lazy-loads the
 // monthly NDJSON on first use); null ("All") reverts to the annual view.
 export const MONTH_OPTIONS: { value: string | null; label: string }[] = [

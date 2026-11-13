@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatCurrency, formatNumber, formatStop } from "./formatters";
+import { formatCurrency, formatStop } from "./formatters";
 
 describe("formatCurrency", () => {
     it("renders millions with up to three decimals and an M suffix", () => {
@@ -33,12 +33,5 @@ describe("formatStop", () => {
         expect(formatStop(1_500_000)).toBe("1.5M");
         expect(formatStop(50_000)).toBe("50k");
         expect(formatStop(0)).toBe("0");
-    });
-});
-
-describe("formatNumber", () => {
-    it("adds locale-aware thousands separators", () => {
-        expect(formatNumber(1234567)).toBe("1,234,567");
-        expect(formatNumber(0)).toBe("0");
     });
 });

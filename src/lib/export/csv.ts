@@ -15,7 +15,7 @@ export const CSV_COLUMNS = [
     "total_amount_paid",
 ] as const;
 
-export type CsvColumn = (typeof CSV_COLUMNS)[number];
+type CsvColumn = (typeof CSV_COLUMNS)[number];
 export type CsvRow = Record<CsvColumn, string | number>;
 
 interface BuildRowsArgs {

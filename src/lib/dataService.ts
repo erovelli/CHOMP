@@ -266,8 +266,8 @@ export function getDqRecord(
     return data?.topics[topic]?.years[year]?.[stateUsps];
 }
 
-/** True if the atlas has data for (topic, year). Used by DqLegend to decide
- * between the swatch row and the "no data for this year" note. */
+/** True if the atlas has data for (topic, year). LeftRail uses it to show a
+ * "no data for <year>" hint next to the Data quality heading. */
 export function dqHasYear(data: DqData | null, topic: DqTopicKey, year: string): boolean {
     const yearBucket = data?.topics[topic]?.years[year];
     return !!yearBucket && Object.keys(yearBucket).length > 0;

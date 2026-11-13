@@ -1,13 +1,11 @@
 export const HEADER_HEIGHT = 52;
 export const DETAIL_PANEL_WIDTH = 360;
 
-// At or below this width the floating control chrome (category list, centered
-// geo/metric/time controls) collapses into the Filters bottom sheet and the
-// detail panel becomes a bottom sheet. 900 keeps iPad portrait (≤834px) on the
-// touch layout — the centered TimeControl (~380px wide) collides with the
-// 220px category panel below ~850px — while iPad landscape (1024px) gets the
-// full desktop chrome.
-export const MOBILE_BREAKPOINT = 900;
+// At or below this width the left rail collapses into the Filters bottom sheet
+// and the detail panel becomes a bottom sheet. 900 keeps iPad portrait (≤834px)
+// on the touch layout, while iPad landscape (1024px) gets the full desktop
+// chrome.
+const MOBILE_BREAKPOINT = 900;
 export const MOBILE_MEDIA_QUERY = `(max-width: ${MOBILE_BREAKPOINT}px)`;
 // Touch-first devices (no hover) — used to suppress hover-only affordances
 // like the cursor tooltip and the zoom-button control.

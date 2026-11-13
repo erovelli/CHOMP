@@ -15,9 +15,8 @@ export default function PanelContent({
     detail: RegionDetail;
     onClose: () => void;
 }) {
-    // Year + month live in the main-menu TimeControl now; the panel just reads
-    // them from the store so the displayed stats follow whatever period the
-    // user picked up there.
+    // Year + month are picked in the LeftRail / FilterSheet; the panel reads
+    // them from the store so the displayed stats follow that period.
     const { selectedYear, selectedMonth, monthlyDataLoaded } = useMapStore();
     const isMonthly = selectedMonth !== null;
     const yearMonth = isMonthly ? `${selectedYear}-${selectedMonth}` : null;
