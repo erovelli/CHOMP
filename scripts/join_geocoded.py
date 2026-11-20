@@ -2,7 +2,7 @@
 merged_hhs_nppes.csv, producing merged_hhs_nppes_geo.csv.
 
 The geocoding collaborator runs the deduplicated address list through
-ArcGIS and returns Dental_Provider_Locations.csv -- the unique-addresses
+ArcGIS and returns Psych_Provider_Locations.csv -- the unique-addresses
 file we sent, with ArcGIS columns appended. This script keeps six of
 them and renames to canonical snake_case:
 
@@ -41,12 +41,12 @@ an n_rows mismatch make the script exit non-zero; `geocoder_unmatched`
 is expected loss (see L13) and does not.
 
 Inputs (defaults; data/ lives inside the repo and is git-ignored):
-    data/MergedHHS-NPI/merged_hhs_nppes.csv          (the big merge)
-    data/Geocoded/Dental_Provider_Locations.csv      (from collaborator)
+    data/MergedHHS-NPI-Psych/merged_hhs_nppes.csv          (the big merge)
+    data/Geocoded/Psych_Provider_Locations.csv      (from collaborator)
 
 Outputs:
-    data/MergedHHS-NPI/merged_hhs_nppes_geo.csv      (claims + geo)
-    data/MergedHHS-NPI/geocode_failures.csv          (per-address failures)
+    data/MergedHHS-NPI-Psych/merged_hhs_nppes_geo.csv      (claims + geo)
+    data/MergedHHS-NPI-Psych/geocode_failures.csv          (per-address failures)
 
 Usage (from repo root):
     python scripts/join_geocoded.py
@@ -266,7 +266,7 @@ def report(
 
 def main() -> int:
     data_root = _data_root()
-    merged_dir = data_root / "MergedHHS-NPI"
+    merged_dir = data_root / "MergedHHS-NPI-Psych"
 
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -274,7 +274,7 @@ def main() -> int:
     p.add_argument("--merged-csv", type=Path, default=merged_dir / "merged_hhs_nppes.csv")
     p.add_argument(
         "--geocoded-csv", type=Path,
-        default=data_root / "Geocoded" / "Dental_Provider_Locations.csv",
+        default=data_root / "Geocoded" / "Psych_Provider_Locations.csv",
     )
     p.add_argument("--output-csv", type=Path, default=merged_dir / "merged_hhs_nppes_geo.csv")
     p.add_argument(

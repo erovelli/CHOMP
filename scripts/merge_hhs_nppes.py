@@ -1,4 +1,4 @@
-"""Merge HHS Medicaid dental spending against NPPES practice-location data,
+"""Merge HHS Medicaid psychiatric spending against NPPES practice-location data,
 one month at a time, without ever loading the full NPPES corpus into memory.
 
 The merge runs in Python rather than SQL because NPPES archives use
@@ -10,10 +10,19 @@ build_aggregates.py (DuckDB).
 Default layout (data/ is a sibling of the repo, not inside it):
     ../data/HHS/medicaid-provider-spending.csv  <- HHS CSV
     ../data/NPPES/npi_raw_YYYYMM.zip            <- one NPPES zip per month
-    ../data/MergedHHS-NPI/                      <- output (created by this script)
+    ../data/MergedHHS-NPI-Psych/                <- output (created by this script)
         merged_hhs_nppes.csv                    <- the single growing output CSV
         .processed_months.txt                   <- tracker; lets re-runs skip done months
-        hhs_dental/                             <- internal cache (parquet per month)
+        hhs_psych/                              <- internal cache (parquet per month)
+
+The output directory is deliberately separate from the dental pipeline's
+../data/MergedHHS-NPI/. Both read the same HHS CSV and NPPES zips, but sharing
+the output directory would let the dental .processed_months.txt tracker skip
+every month here.
+
+Rows are kept when HCPCS_CODE is in psych_codes.PSYCH_CODES. Each row also gets
+the primary NPPES taxonomy of its billing NPI (billing_taxonomy_code), which
+build_aggregates.py uses to infer setting of care.
 
 Usage (from repo root):
     python scripts/merge_hhs_nppes.py
@@ -38,6 +47,9 @@ from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from psych_codes import PSYCH_CODES  # noqa: E402
 
 # NBER's larger NPPES archives use deflate64 compression (method 9). Neither
 # Python's stdlib zipfile nor Windows' bundled tar/libarchive supports it.
@@ -155,6 +167,7 @@ OUTPUT_COLUMNS = [
     "practice_zip5",
     "practice_country_code",
     "primary_taxonomy_code",
+    "billing_taxonomy_code",
 ]
 
 
@@ -163,14 +176,14 @@ def hhs_year_month_to_yyyymm(s: pd.Series) -> pd.Series:
     return s.astype(str).str.replace(r"[^0-9]", "", regex=True).str[:6]
 
 
-def phase_a_prefilter_hhs(hhs_csv: Path, dental_dir: Path, force: bool) -> None:
-    """Read HHS CSV once, write one parquet per year_month containing only D-codes."""
-    dental_dir.mkdir(parents=True, exist_ok=True)
-    if not force and any(dental_dir.glob("*.parquet")):
-        print(f"[phase A] skip: {dental_dir} already populated (use --force to redo)")
+def phase_a_prefilter_hhs(hhs_csv: Path, psych_dir: Path, force: bool) -> None:
+    """Read HHS CSV once, write one parquet per year_month containing only psych codes."""
+    psych_dir.mkdir(parents=True, exist_ok=True)
+    if not force and any(psych_dir.glob("*.parquet")):
+        print(f"[phase A] skip: {psych_dir} already populated (use --force to redo)")
         return
     if force:
-        for f in dental_dir.glob("*.parquet"):
+        for f in psych_dir.glob("*.parquet"):
             f.unlink()
 
     print(f"[phase A] reading {hhs_csv} (chunked)...")
@@ -187,21 +200,23 @@ def phase_a_prefilter_hhs(hhs_csv: Path, dental_dir: Path, force: bool) -> None:
     for i, chunk in enumerate(chunks):
         rows_in += len(chunk)
         chunk = chunk.rename(columns=HHS_RENAME)
-        dental = chunk[chunk["hcpcs_code"].str.startswith("D", na=False)].copy()
-        if dental.empty:
+        codes = chunk["hcpcs_code"].str.strip().str.upper()
+        psych = chunk[codes.isin(PSYCH_CODES).fillna(False)].copy()
+        psych["hcpcs_code"] = codes[psych.index]
+        if psych.empty:
             continue
-        rows_out += len(dental)
-        dental["__ym"] = hhs_year_month_to_yyyymm(dental["year_month"])
-        for ym, group in dental.groupby("__ym", sort=False):
+        rows_out += len(psych)
+        psych["__ym"] = hhs_year_month_to_yyyymm(psych["year_month"])
+        for ym, group in psych.groupby("__ym", sort=False):
             by_month.setdefault(ym, []).append(group.drop(columns="__ym"))
         if (i + 1) % 10 == 0:
-            print(f"[phase A]  chunk {i + 1}: {rows_in:,} read, {rows_out:,} dental kept")
+            print(f"[phase A]  chunk {i + 1}: {rows_in:,} read, {rows_out:,} psych kept")
 
     print(f"[phase A] writing {len(by_month)} month parquet files...")
     for ym, parts in by_month.items():
         df = pd.concat(parts, ignore_index=True) if len(parts) > 1 else parts[0]
-        df.to_parquet(dental_dir / f"{ym}.parquet", index=False)
-    print(f"[phase A] done: {rows_in:,} HHS rows read, {rows_out:,} dental rows written")
+        df.to_parquet(psych_dir / f"{ym}.parquet", index=False)
+    print(f"[phase A] done: {rows_in:,} HHS rows read, {rows_out:,} psych rows written")
 
 
 def _find_nppes_csv(zip_path: Path) -> str:
@@ -297,7 +312,14 @@ def merge_one_month(
 
     hhs = pd.read_parquet(hhs_parquet)
     merged = hhs.merge(nppes_slim, left_on="servicing_npi", right_on="NPI", how="inner")
-    merged = merged.drop(columns="NPI")[OUTPUT_COLUMNS]
+    merged = merged.drop(columns="NPI")
+    # Billing-NPI taxonomy: facilities usually bill under their own NPI, so this
+    # is the main signal for inpatient / residential setting. Left join: a
+    # missing billing NPI leaves the column empty, it never drops the row.
+    billing_tax = nppes[["NPI", "primary_taxonomy_code"]].rename(
+        columns={"NPI": "billing_npi", "primary_taxonomy_code": "billing_taxonomy_code"}
+    )
+    merged = merged.merge(billing_tax, on="billing_npi", how="left")[OUTPUT_COLUMNS]
 
     output_csv.parent.mkdir(parents=True, exist_ok=True)
     merged.to_csv(output_csv, mode="a", header=write_header, index=False)
@@ -318,7 +340,7 @@ def _append_tracker(tracker: Path, ym: str) -> None:
 
 def phase_b_merge(
     nppes_dir: Path,
-    dental_dir: Path,
+    psych_dir: Path,
     output_csv: Path,
     tracker: Path,
     force: bool,
@@ -343,7 +365,7 @@ def phase_b_merge(
         print(f"[phase B] no NPPES zips found in {nppes_dir}")
         return
 
-    available_hhs = {p.stem for p in dental_dir.glob("*.parquet")}
+    available_hhs = {p.stem for p in psych_dir.glob("*.parquet")}
     already_done = _read_tracker(tracker)
 
     processed = 0
@@ -357,12 +379,12 @@ def phase_b_merge(
             skipped_done += 1
             continue
         if ym not in available_hhs:
-            print(f"[phase B] skip {ym}: no HHS dental rows for this month")
+            print(f"[phase B] skip {ym}: no HHS psych rows for this month")
             skipped_no_hhs += 1
             continue
         print(f"[phase B] {ym}: merging {zp.name}...")
         write_header = not output_csv.exists()
-        n = merge_one_month(zp, dental_dir / f"{ym}.parquet", output_csv, write_header)
+        n = merge_one_month(zp, psych_dir / f"{ym}.parquet", output_csv, write_header)
         _append_tracker(tracker, ym)
         print(f"[phase B] {ym}: appended {n:,} rows -> {output_csv}")
         processed += 1
@@ -399,7 +421,7 @@ def main() -> int:
     data_root = Path("../data")
     default_hhs = data_root / "HHS" / "medicaid-provider-spending.csv"
     default_nppes = data_root / "NPPES"
-    default_output = data_root / "MergedHHS-NPI"
+    default_output = data_root / "MergedHHS-NPI-Psych"
 
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--hhs-csv", type=Path, default=None, help=f"HHS spending CSV (default: {default_hhs}; falls back to any single .csv in HHS/)")
@@ -420,7 +442,7 @@ def main() -> int:
         print(f"error: NPPES directory not found: {args.nppes_dir}", file=sys.stderr)
         return 2
 
-    dental_dir = args.output_dir / "hhs_dental"
+    psych_dir = args.output_dir / "hhs_psych"
     output_csv = args.output_dir / "merged_hhs_nppes.csv"
     tracker = args.output_dir / ".processed_months.txt"
 
@@ -428,8 +450,8 @@ def main() -> int:
     print(f"nppes_dir:  {args.nppes_dir}")
     print(f"output_dir: {args.output_dir}")
 
-    phase_a_prefilter_hhs(hhs_csv, dental_dir, args.force)
-    phase_b_merge(args.nppes_dir, dental_dir, output_csv, tracker, args.force)
+    phase_a_prefilter_hhs(hhs_csv, psych_dir, args.force)
+    phase_b_merge(args.nppes_dir, psych_dir, output_csv, tracker, args.force)
     return 0
 
 

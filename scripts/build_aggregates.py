@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Build the procedure-category aggregate NDJSON files from the merged+geocoded CSV.
+"""Build the psychiatric service aggregate NDJSON files from the merged+geocoded CSV.
 
-DuckDB aggregator. Reads the single merged/geocoded claims CSV (~23M rows) and
-emits the six NDJSON files the frontend consumes:
+DuckDB aggregator. Reads the merged/geocoded psych claims CSV and emits the six NDJSON files the frontend consumes:
 
     provider_procedure_category_aggregate_{annual,monthly}_{state,county,zip3}.json
 
@@ -18,8 +17,10 @@ construction. Rows with NULL county_fips (the ~32k geocode failures per L13/L32)
 are therefore excluded from county AND state totals. This is the "pure county
 sum" rollup. See docs/LIMITATIONS.md.
 
-CATEGORY_CASE below is the single source of truth for the HCPCS → category
-mapping; it must stay in sync with CATEGORY_TO_KEY in src/constants/map.ts.
+Every record is keyed by (period, category, setting). scripts/psych_codes.py
+is the single source of truth for the code -> category mapping and the
+setting-of-care rule; its strings must stay in sync with CATEGORY_TO_KEY and
+SETTING_TO_KEY in src/constants/map.ts.
 
 Usage
 -----
@@ -38,9 +39,12 @@ from pathlib import Path
 
 import duckdb
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from psych_codes import category_case_sql, setting_case_sql  # noqa: E402
+
 # ── Paths ─────────────────────────────────────────────────────────────────────
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_CSV = REPO_ROOT / "data" / "MergedHHS-NPI" / "merged_hhs_nppes_geo.csv"
+DEFAULT_CSV = REPO_ROOT / "data" / "MergedHHS-NPI-Psych" / "merged_hhs_nppes_geo.csv"
 DEFAULT_OUT = REPO_ROOT / "public" / "data"
 
 # ── 2-digit state FIPS -> USPS postal ───────────────────────────────────────────
@@ -63,26 +67,6 @@ FIPS_TO_USPS = {
     # Inhabited territories
     "60": "AS", "66": "GU", "69": "MP", "72": "PR", "78": "VI",
 }
-
-# HCPCS D-code numeric range -> category.
-CATEGORY_CASE = """
-    CASE
-        WHEN hcpcs_numeric BETWEEN 100 AND 999   THEN 'Diagnostic'
-        WHEN hcpcs_numeric BETWEEN 1000 AND 1999 THEN 'Preventive'
-        WHEN hcpcs_numeric BETWEEN 2000 AND 2999 THEN 'Restorative'
-        WHEN hcpcs_numeric BETWEEN 3000 AND 3999 THEN 'Endodontics'
-        WHEN hcpcs_numeric BETWEEN 4000 AND 4999 THEN 'Periodontics'
-        WHEN hcpcs_numeric BETWEEN 5000 AND 5899 THEN 'Prosthodontics (removable)'
-        WHEN hcpcs_numeric BETWEEN 5900 AND 5999 THEN 'Maxillofacial Prosthetics'
-        WHEN hcpcs_numeric BETWEEN 6000 AND 6199 THEN 'Implant Services'
-        WHEN hcpcs_numeric BETWEEN 6200 AND 6999 THEN 'Prosthodontics (fixed)'
-        WHEN hcpcs_numeric BETWEEN 7000 AND 7999 THEN 'Oral and Maxillofacial Surgery'
-        WHEN hcpcs_numeric BETWEEN 8000 AND 8999 THEN 'Orthodontics'
-        WHEN hcpcs_numeric BETWEEN 9000 AND 9999 THEN 'Adjunctive General Services'
-        ELSE 'Uncategorized'
-    END
-"""
-
 
 def build_base(con: duckdb.DuckDBPyConnection, csv_path: Path) -> None:
     """Materialize the row-level categorized + geo-resolved base table (one CSV scan)."""
@@ -109,17 +93,18 @@ def build_base(con: duckdb.DuckDBPyConnection, csv_path: Path) -> None:
                 beneficiaries_served_count                    AS benef,
                 claims_count                                  AS claims,
                 total_amount_paid                             AS paid,
-                CASE
-                    WHEN hcpcs_code ~ '^D[0-9]{{4}}$'
-                    THEN CAST(SUBSTRING(hcpcs_code FROM 2 FOR 4) AS INTEGER)
-                    ELSE NULL
-                END                                           AS hcpcs_numeric
+                UPPER(TRIM(hcpcs_code))                       AS hcpcs_code,
+                UPPER(TRIM(billing_taxonomy_code))            AS billing_tax,
+                UPPER(TRIM(primary_taxonomy_code))            AS servicing_tax
             FROM read_csv(
                 '{csv_path.as_posix()}',
                 header = true,
                 types = {{
                     'county_fips': 'VARCHAR',
                     'practice_zip5': 'VARCHAR',
+                    'hcpcs_code': 'VARCHAR',
+                    'primary_taxonomy_code': 'VARCHAR',
+                    'billing_taxonomy_code': 'VARCHAR',
                     'total_amount_paid': 'DECIMAL(18,2)'
                 }}
             )
@@ -130,30 +115,35 @@ def build_base(con: duckdb.DuckDBPyConnection, csv_path: Path) -> None:
             zip3,
             year_month,
             year,
-            {CATEGORY_CASE}         AS category,
+            {category_case_sql()}   AS category,
+            {setting_case_sql()}    AS setting,
             benef,
             claims,
             paid
         FROM raw
         LEFT JOIN fips_map m
-            ON LEFT(raw.county_fips, 2) = m.state_fips;
+            ON LEFT(raw.county_fips, 2) = m.state_fips
+        -- The merge already filtered to psych codes; this guards against a
+        -- stale merged CSV built with a different code list.
+        WHERE {category_case_sql()} IS NOT NULL;
         """
     )
 
 
 def aggregate_sql(key_col: str, period_col: str) -> str:
-    """Return an aggregate query producing (key, period, category, sums) rows."""
+    """Return an aggregate query producing (key, period, category, setting, sums) rows."""
     return f"""
         SELECT
             {key_col}                                   AS key,
             {period_col}                                AS period,
             category,
+            setting,
             SUM(benef)                                  AS total_beneficiaries_served,
             SUM(claims)                                 AS total_claims,
             SUM(paid)                                   AS total_amount_paid
         FROM base
         WHERE {key_col} IS NOT NULL
-        GROUP BY key, period, category
+        GROUP BY key, period, category, setting
     """
 
 
@@ -164,7 +154,7 @@ def write_ndjson(
     period_field: str,
     out_path: Path,
 ) -> tuple[int, int]:
-    """Write one NDJSON file: one line per key -> [records ordered by period, category]."""
+    """Write one NDJSON file: one line per key -> [records ordered by period, category, setting]."""
     agg = aggregate_sql(key_col, period_col)
     # json_group_array is a macro and can't take ORDER BY, so build the array body
     # with string_agg over the per-record json_object text (a true aggregate that
@@ -178,6 +168,7 @@ def write_ndjson(
                     json_object(
                         '{period_field}',             period,
                         'category',                   category,
+                        'setting',                    setting,
                         'total_beneficiaries_served', total_beneficiaries_served,
                         'total_claims',               total_claims,
                         'total_amount_paid',          total_amount_paid
@@ -191,7 +182,7 @@ def write_ndjson(
                         -- scripts/build_medicaid_enrollment.py). See docs/LIMITATIONS.md L35.
                     ) AS VARCHAR
                 ),
-                ',' ORDER BY period, category
+                ',' ORDER BY period, category, setting
             ) || ']' AS arr
         FROM ({agg}) t
         GROUP BY key

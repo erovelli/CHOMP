@@ -5,7 +5,7 @@ practice address. This is the input file for the geocoding collaborator —
 they geocode this short file (~tens of thousands of rows) instead of the
 full claims table, dropping the query count by ~100-1000x.
 
-Output: data/MergedHHS-NPI/unique_addresses.csv with columns:
+Output: data/MergedHHS-NPI-Psych/unique_addresses.csv with columns:
     address_id              stable md5 hash of the normalized address
     address_full            single-line "LINE1, LINE2, CITY, STATE ZIP5"
                             ready to paste into any geocoder
@@ -80,7 +80,7 @@ def _address_full(row_raw: pd.DataFrame) -> pd.Series:
 
 def main() -> int:
     data_root = Path("../data")
-    default_output = data_root / "MergedHHS-NPI"
+    default_output = data_root / "MergedHHS-NPI-Psych"
 
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--output-dir", type=Path, default=default_output)
